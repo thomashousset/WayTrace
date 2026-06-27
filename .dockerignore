@@ -1,0 +1,40 @@
+# Virtualenvs and Python caches shouldn't land in the build context.
+# backend/.venv alone is ~125 MB — shipping it defeats the slim image.
+**/.venv
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+
+# Local state / dev artefacts
+backend/data/
+!backend/data/extensions.txt
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Secrets — never bake into an image
+.env
+backend/.env
+*.env.local
+
+# VCS and editor
+.git
+.gitignore
+.gitattributes
+.vscode
+.idea
+*.swp
+
+# Docs + tests (tests needed only during CI, not in the runtime image)
+docs/
+*.md
+!README.md
+backend/tests/
+.superpowers/
+
+# Dockerfile itself doesn't need to be in the context root
+Dockerfile
+docker-compose*.yml

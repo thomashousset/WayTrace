@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment variables (never commit real secrets / prod env)
+.env
+.env.prod
+*.env.local
+
+# Production deployment config (kept private, never published)
+/deploy/
+/docs/DEPLOYMENT.md
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml
+
+# Logs
+*.log
+
+# Runtime data (SQLite, CDX cache, reference datasets fetched on demand)
+backend/data/*
+!backend/data/extensions.txt
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Distribution
+*.tar.gz
+*.whl
+
+# Internal planning briefs (French specs kept locally)
+
+# Local scan samples
+WayTrace_scan_exemple.html

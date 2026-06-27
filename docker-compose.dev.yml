@@ -1,0 +1,16 @@
+services:
+  waytrace:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - waytrace-data:/data
+      - ./backend:/app/backend
+      - ./frontend:/app/frontend
+    environment:
+      - LOG_LEVEL=DEBUG
+      - DATABASE_URL=/data/waytrace.db
+    command: uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+
+volumes:
+  waytrace-data:

@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /$
+Allow: /s/
+Allow: /icons/
+Allow: /manifest.webmanifest
+Disallow: /api/
+
+Sitemap: https://waytrace.org/sitemap.xml

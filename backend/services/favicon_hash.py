@@ -1,0 +1,134 @@
+"""Best-effort favicon hashing.
+
+Boris feedback: surface an MD5/SHA-256 per favicon so identical brand icons can
+be pivoted across sites (same operator). The favicon bytes are NOT part of the
+scraped pages, so the server fetches each archived favicon once from
+archive.org. This adds a tiny amount of load (a handful of small files per
+scan), so it is hard-gated:
+
+  * the circuit breaker (services.archive_health) short-circuits the whole pass
+    when archive.org is already struggling - we never pile on,
+  * a strict per-scan cap on the number of favicons hashed,
+  * the process-wide archive.org concurrency semaphore is reused so this never
+    raises the aggregate request rate,
+  * every fetch is best-effort: any error just leaves that favicon un-hashed.
+
+It must never block or fail a scan.
+"""
+from __future__ import annotations
+
+import asyncio
+import hashlib
+import re
+
+import aiohttp
+from loguru import logger
+
+from config import settings
+from services import archive_health
+from services.collector import USER_AGENT
+from services.scraper import _get_global_sem
+
+# A favicon is tiny; cap the read so a mislabelled large asset can't hurt us.
+_MAX_FAVICON_BYTES = 512 * 1024
+# Hash at most this many distinct favicons per scan (keeps added archive.org
+# load negligible even on huge domains).
+_MAX_FAVICONS = 16
+_FETCH_TIMEOUT = 15
+
+_TS_RE = re.compile(r"/web/(\d+)")
+
+
+def _abs_favicon(url: str, domain: str) -> str | None:
+    if not url:
+        return None
+    if re.match(r"^https?://", url, re.IGNORECASE):
+        return url
+    if url.startswith("//"):
+        return "https:" + url
+    if url.startswith("/") and domain:
+        return f"https://{domain}{url}"
+    return None
+
+
+def _wayback_raw_url(item: dict, domain: str) -> str | None:
+    """Build the archive.org raw-bytes URL (``im_`` modifier) for a favicon."""
+    abs_url = _abs_favicon(item.get("url") or "", domain)
+    if not abs_url:
+        return None
+    ts = None
+    m = _TS_RE.search(item.get("source_url") or "")
+    if m:
+        ts = m.group(1)
+    if not ts:
+        digits = re.sub(r"\D", "", item.get("first_seen") or "")
+        if len(digits) >= 6:
+            ts = (digits + "01000000")[:14]
+    if not ts:
+        return None
+    return f"https://web.archive.org/web/{ts}im_/{abs_url}"
+
+
+async def hash_favicons(favicons: list[dict], domain: str) -> int:
+    """Attach md5 + sha256 to favicon items in place. Returns count hashed.
+
+    Best-effort and breaker-gated: returns 0 immediately when the archive.org
+    breaker is open, and silently skips any favicon that errors."""
+    if not favicons:
+        return 0
+    if archive_health.is_open():
+        logger.info("favicon hashing skipped: archive breaker open")
+        return 0
+
+    # Distinct by URL, most recent first, capped.
+    seen: set[str] = set()
+    targets: list[tuple[dict, str]] = []
+    for f in sorted(favicons, key=lambda x: x.get("first_seen") or "", reverse=True):
+        key = (f.get("url") or "").strip()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        raw = _wayback_raw_url(f, domain)
+        if raw:
+            targets.append((f, raw))
+        if len(targets) >= _MAX_FAVICONS:
+            break
+    if not targets:
+        return 0
+
+    timeout = aiohttp.ClientTimeout(total=_FETCH_TIMEOUT)
+    headers = {"User-Agent": USER_AGENT}
+    hashed = 0
+
+    async def _one(session: aiohttp.ClientSession, item: dict, url: str) -> None:
+        nonlocal hashed
+        if archive_health.is_open():
+            return
+        try:
+            async with _get_global_sem():
+                async with session.get(url) as resp:
+                    if resp.status != 200:
+                        if resp.status in (429, 503):
+                            archive_health.record_failure()
+                        return
+                    data = await resp.content.read(_MAX_FAVICON_BYTES + 1)
+            if not data or len(data) > _MAX_FAVICON_BYTES or len(data) < 16:
+                # too big (not a real favicon) or a sub-16-byte sentinel: skip.
+                archive_health.record_success()
+                return
+            item["md5"] = hashlib.md5(data).hexdigest()
+            item["sha256"] = hashlib.sha256(data).hexdigest()
+            archive_health.record_success()
+            hashed += 1
+        except (aiohttp.ClientError, asyncio.TimeoutError):
+            archive_health.record_failure()
+        except Exception as exc:  # never let favicon hashing break a scan
+            logger.debug("favicon hash error for {}: {}", url, exc)
+
+    connector = aiohttp.TCPConnector(limit=settings.archive_global_concurrency)
+    async with aiohttp.ClientSession(timeout=timeout, connector=connector, headers=headers) as session:
+        await asyncio.gather(*[_one(session, it, u) for it, u in targets])
+
+    if hashed:
+        logger.info("Hashed {}/{} favicons for {}", hashed, len(targets), domain)
+    return hashed

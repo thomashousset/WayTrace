@@ -1,0 +1,29 @@
+services:
+  waytrace:
+    build: .
+    # Bind to loopback by default, anyone wanting to expose the tool to
+    # a LAN should front it with a reverse proxy (nginx/caddy) that adds
+    # auth. Exposing the scan endpoints publicly with no auth lets anyone
+    # queue scans against archive.org under this host's IP (ban vector).
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - waytrace-data:/data
+    environment:
+      - LOG_LEVEL=INFO
+      - DATABASE_URL=/data/waytrace.db
+    restart: unless-stopped
+    # Handle SIGTERM cleanly so uvicorn can drain in-flight requests
+    # before Docker SIGKILLs the PID-1 process on shutdown.
+    init: true
+    # OOM guard: the page cache + concurrent scans can grow; cap at 2GB.
+    mem_limit: 2g
+    cpus: 2.0
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  waytrace-data:

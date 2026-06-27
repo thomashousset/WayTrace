@@ -1,0 +1,55 @@
+# Archives
+.zip
+.tar
+.tar.gz
+.tgz
+.gz
+.rar
+.7z
+.bz2
+# Database dumps
+.sql
+.sql.gz
+.sql.zip
+.dump
+.db
+.sqlite
+.sqlite3
+.mdb
+# Config files
+.conf
+.config
+.cfg
+.ini
+.env
+.yml
+.yaml
+.toml
+.htaccess
+.htpasswd
+# Backup variants
+.bak
+.backup
+.bkp
+.old
+.orig
+.save
+.swp
+.tmp
+# Logs
+.log
+# Security
+.key
+.pem
+.crt
+.p12
+.pfx
+.pub
+# Source code
+.php
+.asp
+.jsp
+.sh
+# Other
+.csv
+.DS_Store
