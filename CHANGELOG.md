@@ -1,8 +1,8 @@
 # Changelog
 
-## v1.0.4
+## v1.1.0
 
-Feedback round 2 (hosted beta).
+Public release folding in the RETEX round 2 work (shipped to the hosted beta first).
 
 ### Behaviour
 - Scans are now private by default. The "Publish to the public feed" box is unchecked; a scan stays private unless the user explicitly ticks it.

@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Single source of truth for the tool version, surfaced in the API (/api/health,
 # OpenAPI) and injected into the frontend footer.
-APP_VERSION = "1.0.2"
+APP_VERSION = "1.1.0"
 
 
 class Settings(BaseSettings):

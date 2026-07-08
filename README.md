@@ -24,6 +24,19 @@ The interface is fully bilingual (English / French), switchable from the navbar.
 
 ---
 
+## What's new in v1.1.0
+
+- **Private by default.** New scans are private; publishing to the public feed is an explicit opt-in.
+- **Delete a scan.** Remove a scan entirely, from your list and from the public feed.
+- **Favicon hashes for pivoting.** Every favicon now carries an **MD5**, a **SHA-256**, and the **Shodan `http.favicon.hash`** value (MurmurHash3 of the base64-encoded icon), so identical icons can be pivoted across hosts on Shodan and Censys.
+- **Sharper classification.** `fb.com` and social-profile URLs are routed to Social profiles (never mistaken for named persons); social links found among outgoing links surface under Social profiles and are de-duplicated. A round of extractor QA removed many false positives (look-alike domains, documentation-placeholder tracker IDs, prose brand mentions, template-literal URLs, date-format strings) while closing recall gaps.
+- **Precise advertising / tracker ids.** Findings keep their exact prefix and show a platform chip: AdSense (`ca-pub-`), AdMob (`ca-app-pub-`), Google Analytics (`UA-`/`G-`), GTM, Meta Pixel, and more.
+- **More reliable scans.** The scraper now recognises archive.org's connection-level throttling (not only HTTP 429), backs off, and reports a per-outcome breakdown, so large scans no longer fail silently.
+
+See [CHANGELOG.md](CHANGELOG.md) for the full list.
+
+---
+
 ## Contents
 
 - [How it works](#how-it-works)
@@ -197,7 +210,7 @@ Across every tab: a **global search** (filters all tabs at once), **sortable col
 
 ## Sharing & the public feed
 
-A finished scan is addressed by a 24-character `url_id` (a capability token). You can keep it private or publish it to the public feed. Shared scans are viewable by anyone with the link and exportable as JSON, CSV, or a standalone HTML report. The hosted instance at [waytrace.org](https://waytrace.org) runs in account-gated mode for launching scans; a self-hosted install can run fully open.
+A finished scan is addressed by a 24-character `url_id` (a capability token). Scans are **private by default**; publishing to the public feed is an explicit opt-in, and a published scan can be unpublished or **deleted** at any time (which also removes it from the feed). Shared scans are viewable by anyone with the link and exportable as JSON, CSV, or a standalone HTML report. A self-hosted install runs fully open (no accounts).
 
 ---
 

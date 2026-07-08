@@ -24,6 +24,19 @@ L'interface est entièrement bilingue (anglais / français), basculable depuis l
 
 ---
 
+## Nouveautés de la v1.1.0
+
+- **Privé par défaut.** Un nouveau scan est privé ; la publication dans le flux public est une action explicite.
+- **Suppression d'un scan.** Retirez complètement un scan, de votre liste et du flux public.
+- **Hash de favicons pour le pivot.** Chaque favicon porte désormais un **MD5**, un **SHA-256** et la valeur **Shodan `http.favicon.hash`** (MurmurHash3 du favicon encodé en base64), pour pivoter des icônes identiques entre hôtes sur Shodan et Censys.
+- **Classification affinée.** Les URL `fb.com` et les profils sociaux sont routés vers Social profiles (jamais confondus avec des personnes) ; les liens sociaux trouvés dans les liens sortants apparaissent dans Social profiles, dédupliqués. Une passe de QA a supprimé de nombreux faux positifs (domaines sosies, identifiants de tracker factices de documentation, mentions de marque dans la prose, URL en template literal, chaînes de format de date) tout en comblant des lacunes de détection.
+- **Identifiants pub / trackers précis.** Les résultats conservent leur préfixe exact avec une étiquette de plateforme : AdSense (`ca-pub-`), AdMob (`ca-app-pub-`), Google Analytics (`UA-`/`G-`), GTM, Meta Pixel, etc.
+- **Scans plus fiables.** Le scraper reconnaît le throttling au niveau connexion d'archive.org (pas seulement le HTTP 429), lève le pied et journalise le détail par cause, pour que les gros scans n'échouent plus silencieusement.
+
+Voir [CHANGELOG.md](CHANGELOG.md) pour la liste complète.
+
+---
+
 ## Sommaire
 
 - [Fonctionnement](#fonctionnement)
