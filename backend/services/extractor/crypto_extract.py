@@ -346,6 +346,12 @@ _CONTEXT_BLOCKLIST = (
 # Solana / SPL hints that must occur near a candidate to accept it
 _SOL_HINTS = ("solana", "sol ", "spl ", "spl-", "phantom", "solscan", "@solana")
 
+# Monero has no cheap on-chain checksum (full validation needs Keccak), and the
+# regex alone (95-char base58 starting 4/8) also matches unrelated base58 blobs.
+# Require a nearby keyword, exactly like Solana, so a random base58 string is
+# not emitted as a fake XMR address.
+_XMR_HINTS = ("monero", "xmr", "wownero", "getmonero")
+
 
 def _has_blocklisted_context(text: str, idx: int, length: int, window: int = 60) -> bool:
     lo = max(0, idx - window)
@@ -452,7 +458,7 @@ _PIPELINE: list[tuple[re.Pattern, str, callable, tuple[str, ...] | None]] = [
     (LTC_BECH32_RE, "ltc", _validate_ltc_bech32, None),
     (DOGE_RE, "doge", _validate_doge, None),
     (TRX_RE, "trx", _validate_trx, None),
-    (XMR_RE, "xmr", _validate_xmr, None),
+    (XMR_RE, "xmr", _validate_xmr, _XMR_HINTS),
     (XRP_RE, "xrp", _validate_xrp, None),
     # Solana has no on-chain checksum: require contextual keyword
     (SOL_RE, "sol", lambda _addr: (True, "length+context"), _SOL_HINTS),

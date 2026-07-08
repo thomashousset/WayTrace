@@ -60,6 +60,7 @@ from .technologies_extract import extract_technologies
 from .verification_extract import extract_verification_tags
 from .assets_extract import extract_assets
 from .analytics_ids_extract import extract_analytics_ids
+from .analytics_ids_extract import _ID_DENYLIST as _TRACKER_ID_DENYLIST
 from .cookie_consent_extract import extract_cookie_consent
 from .rss_feeds_extract import extract_rss_feeds
 from .github_repos_extract import extract_github_repos
@@ -182,6 +183,10 @@ _INLINE_URL_RE = re.compile(
     r"""["'`](/[A-Za-z0-9_\-./]{1,200}(?:\?[^"'`\s]{0,200})?)["'`]"""
 )
 
+# A path segment made only of date/time format tokens (YYYY, MM, DD, hh:mm...).
+# Used to drop moment.js/dayjs format strings mistaken for endpoints.
+_DATE_FORMAT_SEG_RE = re.compile(r"[YMDHhmsSAaZz][YMDHhmsSAaZz:.\-\s]*")
+
 
 def _record_endpoint(ctx: ExtractionContext, raw: str) -> None:
     """Canonicalise and store a path endpoint, diverting assets into the
@@ -287,7 +292,15 @@ def _cat_endpoints(ctx: ExtractionContext) -> None:
         if len(body) > 200_000:
             continue
         for m in _INLINE_URL_RE.finditer(body):
-            _record_endpoint(ctx, m.group(1))
+            cand = m.group(1)
+            # Date/time format strings ("/YYYY/MM/DD", "/DD/MM/YYYY hh:mm") are a
+            # classic false positive from moment.js/dayjs config in inline JS.
+            # Skip when every path segment is only date-format tokens.
+            path_part = cand.split("?", 1)[0]
+            segs = [s for s in path_part.split("/") if s]
+            if segs and all(_DATE_FORMAT_SEG_RE.fullmatch(s) for s in segs):
+                continue
+            _record_endpoint(ctx, cand)
 
 
 # A narrow TLD whitelist applied only to the bracketed-obfuscation branch;
@@ -806,10 +819,25 @@ def _walk_jsonld_for_subdomains(ctx: ExtractionContext, obj) -> None:
             _walk_jsonld_for_subdomains(ctx, item)
 
 
+def _is_placeholder_id(tid: str) -> bool:
+    """True for documentation/boilerplate IDs (GTM-XXXXXX, G-XXXXXXXXXX, ...).
+
+    The sibling analytics_ids extractor denies these via _ID_DENYLIST; the
+    tracker extractor covers the same identifiers and must agree, otherwise the
+    same placeholder is dropped in one module and leaks into the other.
+    """
+    if tid in _TRACKER_ID_DENYLIST:
+        return True
+    body = tid.split("-", 1)[-1].replace("-", "")
+    return bool(body) and set(body.upper()) == {"X"}
+
+
 def _cat_analytics_trackers(ctx: ExtractionContext) -> None:
     for tracker_type, pattern in TRACKER_PATTERNS.items():
         for match in pattern.finditer(ctx.raw_text):
             tid = match.group(1) if match.lastindex else match.group()
+            if _is_placeholder_id(tid):
+                continue
             key = f"{tracker_type}:{tid}"
             update_entity(
                 ctx.accum["analytics_trackers"], key, ctx.month,
@@ -844,6 +872,7 @@ _SOCIAL_RESERVED_BY_PLATFORM = {
     },
     "twitter": {"home", "hashtag", "messages", "compose", "tos", "privacy"},
     "x": {"home", "hashtag", "messages", "compose"},
+    "pinterest": {"pin", "search", "categories", "ideas", "today", "business"},
 }
 
 
@@ -879,6 +908,7 @@ def _cat_social_profiles(ctx: ExtractionContext) -> None:
                 "tiktok": f"https://tiktok.com/@{handle}",
                 "snapchat": f"https://snapchat.com/add/{handle}",
                 "discord": f"https://discord.gg/{handle}",
+                "pinterest": f"https://pinterest.com/{handle}",
             }
             if platform == "linkedin":
                 segment = "company" if "/company/" in match.group(0) else "in"
@@ -958,7 +988,7 @@ def _cat_api_keys(ctx: ExtractionContext) -> None:
 
 
 _DOC_EXTENSIONS = re.compile(
-    r'\.(?:pdf|doc|docx|xls|xlsx|csv|ppt|pptx|txt|rtf|odt|ods)(?:\?[^"]*)?$',
+    r'\.(?:pdf|doc|docx|xls|xlsx|csv|ppt|pptx|txt|rtf|odt|ods|epub)$',
     re.IGNORECASE,
 )
 
@@ -971,15 +1001,19 @@ def _cat_linked_documents(ctx: ExtractionContext) -> None:
         href = (node.attributes.get("href") or "").strip()
         if not href or href.startswith("#"):
             continue
-        if _DOC_EXTENSIONS.search(href):
-            clean = re.sub(r'\?.*$', '', href)
-            if clean in seen:
+        # Test the PATH only. A doc extension living in a query value
+        # (/download?file=report.docx) or before a fragment
+        # (/report.pdf#page=3) must be judged on the real path, not the whole
+        # href, otherwise viewers/proxies produce false positives.
+        path_only = href.split("#", 1)[0].split("?", 1)[0]
+        if _DOC_EXTENSIONS.search(path_only):
+            if path_only in seen:
                 continue
-            seen.add(clean)
-            ext = re.search(r'\.(\w+)(?:\?|$)', clean)
+            seen.add(path_only)
+            ext = re.search(r'\.(\w+)$', path_only)
             ext_str = ext.group(1).lower() if ext else "unknown"
             update_entity(
-                ctx.accum["linked_documents"], clean, ctx.month,
+                ctx.accum["linked_documents"], path_only, ctx.month,
                 {"url": href, "extension": ext_str},
             )
 

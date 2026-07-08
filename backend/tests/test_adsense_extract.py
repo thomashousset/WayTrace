@@ -20,7 +20,7 @@ def test_pub_id_in_script_tag():
             crossorigin="anonymous"></script>"""
     results = extract_adsense_ids(html)
     assert len(results) == 1
-    assert results[0] == {"type": "adsense_publisher", "id": "1234567890"}
+    assert results[0] == {"type": "adsense_publisher", "id": "ca-pub-1234567890"}
 
 
 def test_pub_id_in_data_ad_client_attribute():
@@ -29,7 +29,16 @@ def test_pub_id_in_data_ad_client_attribute():
     results = extract_adsense_ids(html)
     pub_ids = [r for r in results if r["type"] == "adsense_publisher"]
     assert len(pub_ids) == 1
-    assert pub_ids[0]["id"] == "9876543210"
+    assert pub_ids[0]["id"] == "ca-pub-9876543210"
+
+
+def test_admob_app_publisher_extracted():
+    """AdMob ca-app-pub- ids are captured with their full prefix."""
+    html = '<meta name="google-admob-app-id" content="ca-app-pub-1234567890123456~9876543210">'
+    results = extract_adsense_ids(html)
+    admob = [r for r in results if r["type"] == "admob"]
+    assert len(admob) == 1
+    assert admob[0]["id"] == "ca-app-pub-1234567890123456"
 
 
 def test_data_ad_slot_extracted():

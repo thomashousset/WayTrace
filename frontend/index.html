@@ -375,7 +375,7 @@
       border: 0; border-radius: 10px;
       background: var(--accent); color: var(--accent-text);
       font-family: var(--font); font-weight: 600;
-      font-size: 13.5px; letter-spacing: 0.01em;
+      font-size: 14px; letter-spacing: 0.01em;
       cursor: pointer; flex-shrink: 0;
       box-shadow: inset 0 1px 0 rgba(255,255,255,.16),
                   0 1px 2px rgba(0, 0, 0, .25);
@@ -421,31 +421,6 @@
       font-family: var(--mono); color: var(--text);
       box-shadow: inset 0 -1px 0 var(--border);
     }
-    /* Upfront publish-on-complete checkbox under the home scan form.
-       Default is unchecked (private); ticking it tells the backend to
-       auto-publish to the home feed once the scan finishes. */
-    .home-publish-toggle {
-      display: inline-flex; align-items: center; gap: 8px;
-      margin: -8px 0 0;
-      padding: 8px 14px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 999px;
-      font-size: 12px; color: var(--text-dim);
-      cursor: pointer;
-      transition: border-color .15s var(--ease-out), color .15s var(--ease-out);
-      user-select: none;
-    }
-    .home-publish-toggle:hover { border-color: var(--border-hover); color: var(--text); }
-    .home-publish-toggle input[type="checkbox"] {
-      width: 14px; height: 14px;
-      accent-color: var(--accent);
-      cursor: pointer; margin: 0;
-    }
-    .home-publish-toggle:has(input:checked) {
-      border-color: var(--accent); color: var(--text-bright);
-      background: var(--accent-glow);
-    }
     .home-adv {
       width: 100%; max-width: 460px; margin: 4px auto 0;
       text-align: left; border: 1px solid var(--border); border-radius: 12px;
@@ -462,11 +437,11 @@
     .home-adv > summary:hover { color: var(--text); }
     .home-adv-body { padding: 4px 14px 14px; display: flex; flex-direction: column; gap: 10px; }
     .home-adv-field { display: flex; flex-direction: column; gap: 4px; }
-    .home-adv-k { font-size: 10.5px; letter-spacing: .03em; color: var(--text-faint); text-transform: uppercase; }
+    .home-adv-k { font-size: 11px; letter-spacing: .03em; color: var(--text-faint); text-transform: uppercase; }
     .home-adv-input {
       width: 100%; box-sizing: border-box; padding: 7px 10px;
       background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
-      color: var(--text); font-size: 12.5px; font-family: inherit;
+      color: var(--text); font-size: 13px; font-family: inherit;
     }
     .home-adv-input:focus { outline: none; border-color: var(--accent); }
     .home-adv-dates { display: flex; align-items: center; gap: 8px; }
@@ -480,7 +455,7 @@
     .mrp-field {
       width: 100%; box-sizing: border-box; display: flex; align-items: center; justify-content: space-between;
       padding: 7px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
-      color: var(--text); font-size: 12.5px; font-family: inherit; cursor: pointer; text-align: left;
+      color: var(--text); font-size: 13px; font-family: inherit; cursor: pointer; text-align: left;
     }
     .mrp-field:hover { border-color: var(--border-hover); }
     .mrp-caret { color: var(--text-faint); font-size: 10px; }
@@ -503,10 +478,10 @@
     }
     .mrp-cal-head button:hover { color: var(--text-bright); border-color: var(--border-hover); }
     .mrp-cal-head button:disabled { opacity: .35; cursor: default; }
-    .mrp-cal-year { font-size: 12.5px; color: var(--text); font-family: var(--mono); }
+    .mrp-cal-year { font-size: 13px; color: var(--text); font-family: var(--mono); }
     .mrp-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
     .mrp-m {
-      font-size: 11.5px; color: var(--text-dim); background: var(--bg); border: 1px solid transparent;
+      font-size: 12px; color: var(--text-dim); background: var(--bg); border: 1px solid transparent;
       border-radius: 7px; padding: 7px 0; cursor: pointer; text-align: center;
     }
     .mrp-m:hover { color: var(--text-bright); border-color: var(--border-hover); }
@@ -517,7 +492,7 @@
     .mrp-manual { display: flex; align-items: center; gap: 6px; margin-top: 10px; }
     .mrp-manual-input {
       width: 76px; box-sizing: border-box; padding: 5px 7px; background: var(--bg);
-      border: 1px solid var(--border); border-radius: 7px; color: var(--text); font-size: 11.5px;
+      border: 1px solid var(--border); border-radius: 7px; color: var(--text); font-size: 12px;
       font-family: var(--mono);
     }
     .mrp-manual-input:focus { outline: none; border-color: var(--accent); }
@@ -527,7 +502,7 @@
       border: 1px solid var(--border); border-radius: 7px; padding: 5px 10px; cursor: pointer;
     }
     .mrp-set:hover { color: var(--text-bright); border-color: var(--accent); }
-    .mrp-live { font-size: 10.5px; color: var(--text-faint); margin-top: 8px; min-height: 13px; }
+    .mrp-live { font-size: 11px; color: var(--text-faint); margin-top: 8px; min-height: 13px; }
     @media (max-width: 560px) {
       .mrp-pop { position: fixed; left: 50%; top: auto; bottom: 12px; transform: translateX(-50%); width: 340px; }
     }
@@ -568,7 +543,7 @@
       letter-spacing: .08em;
     }
     .home-cap-desc {
-      font-size: 12.5px; color: var(--text-dim);
+      font-size: 13px; color: var(--text-dim);
       line-height: 1.5;
     }
     .home-caption {
@@ -578,6 +553,22 @@
       letter-spacing: .08em;
       text-transform: uppercase;
       font-weight: 500;
+    }
+    .home-version {
+      margin: 8px 0 0;
+      color: var(--text-faint);
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: .04em;
+    }
+    .home-version a { color: var(--text-dim); }
+    .home-version a:hover { color: var(--accent); }
+    .home-provenance {
+      margin: 4px auto 0;
+      max-width: 52ch;
+      color: var(--text-faint);
+      font-size: 11px;
+      line-height: 1.5;
     }
     .home-caption a {
       color: var(--text-faint);
@@ -590,7 +581,7 @@
       max-width: 540px;
       margin: 28px auto 0;
       color: var(--text-dim);
-      font-size: 12.5px;
+      font-size: 13px;
       line-height: 1.55;
       text-align: center;
       padding: 14px 18px;
@@ -840,7 +831,7 @@
       margin-left: auto; align-self: center;
     }
     .results-meta .rm-explain {
-      font-family: var(--font); font-size: 12.5px; color: var(--text-faint);
+      font-family: var(--font); font-size: 13px; color: var(--text-faint);
       line-height: 1.55; margin-top: 8px; max-width: 760px;
     }
     .results-meta .rm-explain b { color: var(--text-dim); font-weight: 600; }
@@ -966,7 +957,7 @@
     }
     .highlight.leak .highlight-title { font-size: 15px; }
     .highlight-detail {
-      font-size: 11.5px; color: var(--text-dim); font-family: var(--mono);
+      font-size: 12px; color: var(--text-dim); font-family: var(--mono);
       word-break: break-all; line-height: 1.45;
     }
     .highlight.leak .highlight-detail { color: var(--text); }
@@ -997,6 +988,18 @@
     .cat-empty-state .ces-title { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
     .cat-empty-state .ces-sub { font-size: 12px; color: var(--text-dim); line-height: 1.5; }
     .cat-grid-empty { margin-top: 10px; }
+    .cat-groups { display: flex; flex-direction: column; gap: 4px; }
+    .cat-grid-head {
+      font-size: 10px; text-transform: uppercase; letter-spacing: .1em;
+      color: var(--text-faint); font-weight: 600;
+      margin: 12px 0 4px; padding-left: 8px;
+      border-left: 3px solid var(--text-faint);
+    }
+    .cat-groups > .cat-grid-head:first-child { margin-top: 0; }
+    .cat-grid-head--leak { border-left-color: var(--red); }
+    .cat-grid-head--pivot { border-left-color: var(--orange); }
+    .cat-grid-head--context { border-left-color: var(--pivot); }
+    .cat-grid-head--background, .cat-grid-head--all { border-left-color: var(--text-faint); }
     /* display:grid above otherwise defeats the [hidden] attribute. */
     .cat-grid[hidden] { display: none; }
     .cat-tile {
@@ -1097,7 +1100,7 @@
     .scope-card-tools { display: flex; gap: 8px; align-items: center; }
     .scope-filter {
       background: var(--bg); border: 1px solid var(--border); border-radius: 7px;
-      padding: 6px 10px; font: inherit; font-size: 12.5px; color: var(--text-bright);
+      padding: 6px 10px; font: inherit; font-size: 13px; color: var(--text-bright);
       min-width: 0;
     }
     .scope-filter:focus { outline: none; border-color: var(--accent); }
@@ -1119,11 +1122,11 @@
       padding: 3px 6px 3px 11px; font-size: 12px; font-family: var(--mono);
     }
     .scope-chip button { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 15px; line-height: 1; padding: 0 2px; }
-    .scope-chip button:hover { color: var(--red, #e87060); }
-    .scope-excl-presets { margin-top: 10px; font-size: 11.5px; color: var(--text-faint); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .scope-chip button:hover { color: var(--red, var(--accent)); }
+    .scope-excl-presets { margin-top: 10px; font-size: 12px; color: var(--text-faint); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
     .scope-excl-presets button {
       background: none; border: 1px dashed var(--border); color: var(--text-dim);
-      font: inherit; font-size: 11.5px; padding: 2px 8px; border-radius: 999px; cursor: pointer; font-family: var(--mono);
+      font: inherit; font-size: 12px; padding: 2px 8px; border-radius: 999px; cursor: pointer; font-family: var(--mono);
     }
     .scope-excl-presets button:hover { border-color: var(--accent); color: var(--accent); border-style: solid; }
     /* Output checkbox */
@@ -1134,7 +1137,7 @@
     .scope-density-hint { font-size: 11px; color: var(--text-faint); }
     /* Cap note + launch */
     .scope-cap-note {
-      font-size: 12.5px; color: var(--text-dim); line-height: 1.5;
+      font-size: 13px; color: var(--text-dim); line-height: 1.5;
       padding: 11px 13px; border: 1px solid var(--border); border-radius: 9px;
       background: var(--surface);
     }
@@ -1143,7 +1146,7 @@
 
     /* Guided intro at the top of the scope step */
     .scope-intro {
-      font-size: 12.5px; line-height: 1.6; color: var(--text-dim);
+      font-size: 13px; line-height: 1.6; color: var(--text-dim);
       border: 1px solid var(--border); border-left: 3px solid var(--accent);
       border-radius: 10px; background: var(--surface2); padding: 12px 15px; margin: 4px 0 18px;
     }
@@ -1189,7 +1192,7 @@
     }
     .scal-trigger:hover { color: var(--text-bright); border-color: var(--accent); }
     .scal-pop { right: 0; left: auto; width: 320px; }
-    .scal-legend { font-size: 10.5px; color: var(--text-faint); margin-top: 8px; display: flex; align-items: center; gap: 6px; }
+    .scal-legend { font-size: 11px; color: var(--text-faint); margin-top: 8px; display: flex; align-items: center; gap: 6px; }
     .scal-legend i { display: inline-block; width: 22px; height: 5px; border-radius: 2px;
       background: linear-gradient(90deg, var(--accent-glow), var(--accent)); }
     .mrp-m .scal-bar { display: block; height: 3px; border-radius: 2px; margin-top: 4px; background: var(--accent); }
@@ -1516,7 +1519,7 @@
     }
     .subs-row:hover { background: var(--surface2); border-color: var(--border); }
     .subs-host {
-      font-family: var(--mono); font-size: 12.5px; color: var(--text-bright);
+      font-family: var(--mono); font-size: 13px; color: var(--text-bright);
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     .subs-occ {
@@ -1918,6 +1921,15 @@
     .data-table .col-date { width: 80px; }
     .data-table td.val {
       color: var(--text-bright); word-break: break-all;
+    }
+    /* Platform/prefix chip shown before ad + tracker id values. */
+    .ad-chip {
+      display: inline-block; vertical-align: baseline;
+      padding: 1px 6px; margin-right: 6px;
+      border: 1px solid var(--border); border-radius: var(--radius);
+      background: var(--accent-glow); color: var(--accent);
+      font-family: var(--mono); font-size: 10px; letter-spacing: .02em;
+      white-space: nowrap;
     }
 
     /* OSINT-value dots (was 'severity') */
@@ -2615,9 +2627,17 @@
     }
     .favicon-item .favicon-fallback em {
       font-style: normal;
-      font-size: 7.5px;
+      font-size: 8px;
       opacity: .7;
     }
+    /* Hash-bearing fallback reads as signal (a real pivot), not dead noise:
+       keep it a touch more present than the plain "not archived" marker. */
+    .favicon-item:has(.favicon-fallback--hash) {
+      border-style: solid;
+      border-color: var(--border);
+    }
+    .favicon-item .favicon-fallback--hash { opacity: .85; color: var(--text-dim); }
+    .favicon-item .favicon-fallback-hash { user-select: all; font-size: 8px; opacity: .85; }
     .favicon-item.broken {
       color: var(--text-dim);
       font-size: 10px;
@@ -2635,6 +2655,22 @@
       transition: opacity .15s;
     }
     .favicon-item:hover .favicon-item-label { opacity: 1; }
+    /* MD5 / SHA-256 revealed on hover, below the tile, copyable for pivoting. */
+    .favicon-item-hash {
+      position: absolute;
+      top: 100%; left: 50%; transform: translateX(-50%);
+      margin-top: 3px; z-index: 6;
+      display: none; flex-direction: column; gap: 2px;
+      background: var(--surface2, var(--surface));
+      border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 4px 6px;
+      font-family: var(--mono); font-size: 9px; color: var(--text-dim);
+      white-space: nowrap;
+    }
+    .favicon-item:hover { overflow: visible; z-index: 6; }
+    .favicon-item:hover .favicon-item-hash { display: flex; }
+    .favicon-item-hash .fh { user-select: all; cursor: text; }
+    .favicon-item-hash .fh:hover { color: var(--accent); }
 
     /* ===== EXPORT DRAWER ===== */
     .exp-drawer {
@@ -3027,6 +3063,8 @@
     .fd-hash-row { display: flex; align-items: center; gap: 8px; margin: 3px 0; }
     .fd-hash-k { font-size: 10px; letter-spacing: .04em; color: var(--text-faint); min-width: 52px; }
     .fd-hash-v { font-family: var(--mono); font-size: 11px; color: var(--text); word-break: break-all; background: var(--surface2); padding: 3px 6px; border-radius: var(--radius); user-select: all; }
+    .fd-hash-pivot { font-size: 10px; color: var(--accent); text-decoration: none; white-space: nowrap; }
+    .fd-hash-pivot:hover { text-decoration: underline; }
     .fd-empty-note {
       font-size: 11px; color: var(--text-dim);
       padding: 12px; text-align: center;
@@ -3129,7 +3167,7 @@
       border-bottom: 1px solid var(--border);
     }
     .archive-banner.slow { background: rgba(216,166,87,.16); color: #d8a657; border-bottom-color: rgba(216,166,87,.4); }
-    .archive-banner.paused { background: rgba(232,112,96,.18); color: var(--red, #e87060); border-bottom-color: var(--red, #e87060); }
+    .archive-banner.paused { background: rgba(232,112,96,.18); color: var(--red, var(--accent)); border-bottom-color: var(--red, var(--accent)); }
 
     .notfound-page { max-width: 480px; margin: 0 auto; padding: 100px 24px; text-align: center; }
     .notfound-code { font-family: var(--mono); font-size: 64px; font-weight: 700; color: var(--accent); letter-spacing: -.02em; }
@@ -3140,12 +3178,12 @@
     .legal-page h1 { font-size: 26px; color: var(--text-bright); letter-spacing: -.01em; margin-bottom: 6px; }
     .legal-updated { font-family: var(--mono); font-size: 11px; color: var(--text-faint); margin-bottom: 28px; }
     .legal-page h2 { font-size: 15px; color: var(--accent); margin: 30px 0 8px; letter-spacing: .01em; }
-    .legal-page p, .legal-page li { font-size: 13.5px; line-height: 1.65; color: var(--text-dim); }
+    .legal-page p, .legal-page li { font-size: 14px; line-height: 1.65; color: var(--text-dim); }
     .legal-page ul { margin: 6px 0 6px 18px; }
     .legal-page li { margin: 3px 0; }
     .legal-page strong { color: var(--text); font-weight: 600; }
     .legal-page a { color: var(--accent); }
-    .legal-note { border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 10px; background: var(--surface2); padding: 14px 16px; margin: 14px 0; font-size: 12.5px; color: var(--text-dim); }
+    .legal-note { border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 10px; background: var(--surface2); padding: 14px 16px; margin: 14px 0; font-size: 13px; color: var(--text-dim); }
     .legal-back { display: inline-block; margin-top: 32px; }
 
 
@@ -3154,14 +3192,23 @@
     .myscans-note > div { margin-top: 14px; }
     .myscans-list { display: flex; flex-direction: column; gap: 6px; }
     .myscans-row {
-      display: grid; grid-template-columns: 1fr 104px 84px 104px; align-items: center; gap: 12px;
+      display: grid; grid-template-columns: 1fr 104px 84px 104px 28px; align-items: center; gap: 12px;
       padding: 12px 14px; background: var(--surface); border: 1px solid var(--border);
       border-radius: var(--radius-lg); cursor: pointer;
       transition: border-color .12s var(--ease-out), background .12s var(--ease-out);
     }
     .myscans-row:hover { border-color: var(--border-hover); background: var(--surface2, var(--surface)); }
+    .myscans-del {
+      justify-self: end; width: 24px; height: 24px; padding: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: transparent; border: 1px solid transparent; border-radius: var(--radius);
+      color: var(--text-faint); font-size: 16px; line-height: 1; cursor: pointer;
+      transition: color .12s var(--ease-out), border-color .12s var(--ease-out), background .12s var(--ease-out);
+    }
+    .myscans-del:hover { color: var(--red); border-color: var(--border-hover); background: var(--surface2, var(--surface)); }
+    .myscans-del:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
     .myscans-domain {
-      font-family: var(--mono); font-size: 13.5px; color: var(--text-bright);
+      font-family: var(--mono); font-size: 14px; color: var(--text-bright);
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     .myscans-status { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-dim); }
@@ -3219,7 +3266,7 @@
     }
     .atl-lane:hover, .atl-lane:focus-visible { background: var(--surface2, var(--surface)); outline: none; }
     .atl-lane-label {
-      font-size: 11.5px; color: var(--text-dim); white-space: nowrap; overflow: hidden;
+      font-size: 12px; color: var(--text-dim); white-space: nowrap; overflow: hidden;
       text-overflow: ellipsis; padding: 0 10px 0 4px; display: flex; align-items: center; gap: 6px;
     }
     .atl-lane:hover .atl-lane-label, .atl-lane:focus-visible .atl-lane-label { color: var(--text-bright); }
@@ -3251,7 +3298,7 @@
       font-size: 11px; color: var(--text-dim); padding: 0 10px 6px var(--atl-gutter);
     }
     .atl-gantt-filter {
-      font-size: 10.5px; color: var(--text-dim); background: var(--surface2); border: 1px solid var(--border);
+      font-size: 11px; color: var(--text-dim); background: var(--surface2); border: 1px solid var(--border);
       border-radius: 6px; padding: 3px 8px; cursor: pointer; white-space: nowrap;
     }
     .atl-gantt-filter:hover { color: var(--text-bright); border-color: var(--border-hover); }
@@ -3262,7 +3309,7 @@
     }
     .atl-gantt-row:hover { background: var(--surface2); }
     .atl-gantt-label {
-      font-family: var(--mono); font-size: 10.5px; color: var(--text-dim);
+      font-family: var(--mono); font-size: 11px; color: var(--text-dim);
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 8px 0 4px;
     }
     .atl-gantt-row:hover .atl-gantt-label { color: var(--text-bright); }
@@ -3295,7 +3342,7 @@
       white-space: pre-line; box-shadow: var(--shadow-md); line-height: 1.5;
     }
     .atl-tooltip[hidden] { display: none; }
-    @media (max-width: 640px) { .atl { --atl-gutter: 104px; } .atl-lane-label { font-size: 10.5px; } }
+    @media (max-width: 640px) { .atl { --atl-gutter: 104px; } .atl-lane-label { font-size: 11px; } }
 
     /* ===== v2 PUBLIC SCAN VIEW ===== */
     .pub-page { max-width: 1100px; margin: 0 auto; padding: 32px 24px 80px; }
@@ -3364,7 +3411,7 @@
     }
     .pub-item-value {
       color: var(--text); word-break: break-all;
-      font-family: var(--mono); font-size: 12.5px;
+      font-family: var(--mono); font-size: 13px;
     }
     .pub-item-sub {
       font-size: 11px; color: var(--text-faint);
@@ -3374,7 +3421,7 @@
       display: inline-flex; align-items: center; gap: 4px;
       background: var(--surface2); border: 1px solid var(--border);
       padding: 1px 7px; border-radius: 999px;
-      font-size: 10.5px; color: var(--text-dim);
+      font-size: 11px; color: var(--text-dim);
       font-family: var(--font); letter-spacing: .02em;
     }
     .pub-chip.type { background: var(--accent-glow); border-color: var(--accent-glow2); color: var(--accent); }
@@ -3441,7 +3488,7 @@
       will-change: transform;
     }
     @media (prefers-reduced-motion: reduce) { .pub-run-spinner { animation-duration: 4s; } }
-    .pub-run-eta { font-size: 12.5px; color: var(--text-faint); margin-top: 10px; font-variant-numeric: tabular-nums; }
+    .pub-run-eta { font-size: 13px; color: var(--text-faint); margin-top: 10px; font-variant-numeric: tabular-nums; }
 
     /* Homepage feed */
     .home-feed { max-width: 1100px; margin: 32px auto 80px; padding: 0 24px; }
@@ -3600,8 +3647,8 @@
       .pub-cat-name { font-size: 13px; }
       .pub-cat-body { padding: 4px 12px 12px; }
       .pub-item-value { font-size: 12px; }
-      .pub-item-sub { font-size: 10.5px; }
-      .pub-chip { font-size: 9.5px; padding: 1px 6px; }
+      .pub-item-sub { font-size: 11px; }
+      .pub-chip { font-size: 10px; padding: 1px 6px; }
 
       .pub-state-card { padding: 28px 20px; }
       .pub-state-num { font-size: 44px; }
@@ -3734,14 +3781,16 @@
       <li><span class="home-cap-label" data-i18n="home.cap.timeline">Timeline</span><span class="home-cap-desc" data-i18n="home.cap.timeline.d">When each fact appeared, and when it disappeared.</span></li>
     </ul>
     <p class="home-caption" data-i18n-html="home.caption">Public data only &middot; Wayback Machine &middot; <a href="https://web.archive.org" target="_blank" rel="noopener">archive.org</a> &middot; <a href="#/legal">Legal &amp; licence</a></p>
+    <p class="home-version" data-i18n-html="home.version">WayTrace v1.0.4 &middot; hosted beta &middot; <a href="https://github.com/HXLLO/WayTrace" target="_blank" rel="noopener">source</a></p>
+    <p class="home-provenance" data-i18n="home.provenance">You are on the hosted test build, the most up to date version. The public source on GitHub can be behind it, and a separate beta gathers user feedback.</p>
   </div>
 
   <div class="home-feed" id="home-feed">
     <h2 data-i18n="home.feed.title">Recently published scans</h2>
     <div id="home-feed-list" class="home-feed-grid">
-      <div class="pub-empty" style="padding: 24px;">Chargement...</div>
+      <div class="pub-empty" style="padding: 24px;" data-i18n="Loading…">Loading…</div>
     </div>
-    <div id="home-feed-empty" class="pub-empty" style="display:none;">No published scans yet. Run the first one above.</div>
+    <div id="home-feed-empty" class="pub-empty" style="display:none;" data-i18n="No published scans yet. Run the first one above.">No published scans yet. Run the first one above.</div>
   </div>
 </div>
 
@@ -3814,7 +3863,7 @@
         <div class="scope-tl-bars" id="scope-histogram" role="group" aria-label="Snapshot distribution by year"></div>
         <div class="scope-tl-controls">
           <span class="scope-tl-density-label" data-i18n="Density">Density</span>
-          <input type="range" id="scope-density" min="0" max="5" step="1" value="2"
+          <input type="range" id="scope-density" min="0" max="5" step="1" value="5"
                  aria-label="Snapshot density" oninput="onScopeDensity()">
           <span class="scope-tl-density-val" id="scope-density-val">Balanced</span>
           <span class="scope-density-hint" id="scope-density-hint"></span>
@@ -3839,10 +3888,10 @@
       <!-- Output -->
       <section class="scope-card scope-output">
         <label class="scope-check">
-          <input type="checkbox" id="scope-publish-on-complete" checked>
+          <input type="checkbox" id="scope-publish-on-complete">
           <span class="scope-check-txt">
             <b data-i18n="Publish to the public feed when done">Publish to the public feed when done</b>
-            <small data-i18n="On by default so others can learn from your scan. Untick to keep it private, only people with the link will see it.">On by default so others can learn from your scan. Untick to keep it private, only people with the link will see it.</small>
+            <small data-i18n="Off by default. Your scan stays private, only people with the link can see it. Tick to publish it to the public feed.">Off by default. Your scan stays private, only people with the link can see it. Tick to publish it to the public feed.</small>
           </span>
         </label>
 
@@ -4407,6 +4456,8 @@ const I18N = {
     'home.cap.timeline': 'Chronologie',
     'home.cap.timeline.d': 'Quand chaque élément est apparu, et quand il a disparu.',
     'home.caption': 'Données publiques uniquement &middot; Wayback Machine &middot; <a href="https://web.archive.org" target="_blank" rel="noopener">archive.org</a> &middot; <a href="#/legal">Mentions légales</a>',
+    'home.version': 'WayTrace v1.0.4 &middot; beta hébergée &middot; <a href="https://github.com/HXLLO/WayTrace" target="_blank" rel="noopener">source</a>',
+    'home.provenance': "Vous utilisez la version de test hébergée, la plus à jour. Le code public sur GitHub peut être en retard, et une version beta séparée recueille les retours des utilisateurs.",
     'home.ethic': "Conçu pour les chercheurs en sécurité, les équipes, les journalistes et les professionnels curieux. Utilisez ce que vous trouvez de façon responsable : signalez les risques aux personnes qui possèdent les données, jamais contre elles.",
     'home.feed.title': 'Scans publiés récemment',
     'home.mrp.all': 'Toutes les dates',
@@ -4495,6 +4546,18 @@ const I18N = {
     'findings': 'résultats', 'snapshots analysed': 'snapshots analysés', 'pages scraped': 'pages récupérées',
     'distinct': 'distincts', 'archived': 'archivés', 'of': 'sur',
     'Download HTML': 'Télécharger HTML', 'Copy link': 'Copier le lien',
+    'Scan more': 'Scanner plus',
+    'pivot': 'pivot',
+    'Search this favicon on Shodan': 'Chercher ce favicon sur Shodan',
+    'Leaks & secrets': 'Fuites et secrets',
+    'Pivots': 'Pivots',
+    'Context': 'Contexte',
+    'Other signals': 'Autres signaux',
+    'All & searched': 'Tout et recherché',
+    'categories searched, nothing found (greyed above)': 'catégories recherchées, sans résultat (grisées ci-dessus)',
+    'Loading…': 'Chargement…',
+    'No published scans yet. Run the first one above.': "Aucun scan publié pour l'instant. Lancez le premier ci-dessus.",
+    'Run a denser scan of this domain, reusing what was already found': 'Relancer un scan plus dense de ce domaine, en réutilisant ce qui a déjà été trouvé',
     'Something went wrong. Please try again.': 'Une erreur est survenue. Réessayez.',
     'Filter the table to': 'Filtrer la table sur', 'more': 'autres',
     'Publish to feed': 'Publier dans le flux', 'public': 'public', 'expires': 'expire',
@@ -4510,7 +4573,9 @@ const I18N = {
     'Querying archive.org for subdomains...': 'Interrogation d’archive.org pour les sous-domaines...',
     // Publish / email checkboxes (split into bold + small)
     'Publish to the public feed when done': 'Publier dans le flux public à la fin',
-    'On by default so others can learn from your scan. Untick to keep it private, only people with the link will see it.': 'Activé par défaut pour que d’autres apprennent de votre scan. Décochez pour le garder privé : seules les personnes avec le lien le verront.',
+    'Off by default. Your scan stays private, only people with the link can see it. Tick to publish it to the public feed.': 'Désactivé par défaut. Votre scan reste privé, seules les personnes avec le lien peuvent le voir. Cochez pour le publier dans le flux public.',
+    'Delete scan': 'Supprimer le scan',
+    'Delete this scan permanently? This cannot be undone.': 'Supprimer définitivement ce scan ? Cette action est irréversible.',
     "Email me when it's done": 'Me prévenir par e-mail à la fin',
     'Off by default. We send a link to your account email once the scan finishes, handy for long scans.': 'Désactivé par défaut. Nous envoyons un lien à l’adresse de votre compte une fois le scan terminé, pratique pour les longs scans.',
     // --- Scope dynamic (density labels/hints) ---
@@ -4953,62 +5018,6 @@ document.addEventListener('keydown', (e) => {
 });
 
 /* ===== v2 PUBLIC FLOW ===== */
-async function startPublicScan() {
-  const domain = $('domain-input').value.trim().toLowerCase()
-    .replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/+$/, '');
-  if (!domain) return;
-  const btn = $('scan-btn');
-  if (btn) btn.disabled = true;
-  const publish = !!document.getElementById('home-publish-on-complete')?.checked;
-  // Stash the home-form choice so the privacy card can display it even
-  // after the user has navigated to /s/{url_id} (input no longer in DOM).
-  publicScanAutoPublish = publish;
-  // Inline advanced options (Boris: surface scan options on the homepage so a
-  // domain isn't launched blind). Only sent when set; otherwise the backend
-  // keeps its defaults and behaviour is unchanged.
-  const body = {domain, publish_on_complete: publish};
-  const config = {};
-  const depth = document.getElementById('home-adv-depth')?.value;
-  if (depth && depth !== 'standard') config.depth = depth;
-  const exRaw = (document.getElementById('home-adv-exclude')?.value || '').trim();
-  if (exRaw) {
-    const kws = exRaw.split(/[,\s]+/).map(s => s.trim().toLowerCase()).filter(Boolean).slice(0, 50);
-    if (kws.length) config.exclude_keywords = kws;
-  }
-  const df = (document.getElementById('home-adv-from')?.value || '').trim();
-  const dt = (document.getElementById('home-adv-to')?.value || '').trim();
-  if (/^\d{4}-\d{2}$/.test(df)) config.date_from = df;
-  if (/^\d{4}-\d{2}$/.test(dt)) config.date_to = dt;
-  if (Object.keys(config).length) body.config = config;
-  try {
-    const resp = await fetch(API + '/api/scan', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(body),
-    });
-    if (resp.status === 429) {
-      const d = await resp.json().catch(() => ({}));
-      showToast(d.detail?.message || 'You already have scans in flight from this connection.');
-      return;
-    }
-    if (resp.status === 503) {
-      const d = await resp.json().catch(() => ({}));
-      showToast(d.detail?.message || 'Service is full, try again in a few minutes.');
-      return;
-    }
-    if (!resp.ok) {
-      const d = await resp.json().catch(() => ({}));
-      showToast('Error: ' + (d.detail || resp.statusText));
-      return;
-    }
-    const data = await resp.json();
-    location.hash = '#/s/' + encodeURIComponent(data.url_id);
-  } catch (e) {
-    showToast('Network error: ' + e.message);
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-}
 
 function stopPublicScanPolling() {
   if (publicScanPollTimer) {
@@ -5627,7 +5636,7 @@ let scopeMonthTo = null;
 // histogram + estimate text.
 let scopeDayFrom = null;
 let scopeDayTo = null;
-let scopeDensityIdx = 2;
+let scopeDensityIdx = 5;   // default to Max density; user can dial it down
 
 async function loadScope(domain) {
   scopeDomain = domain;
@@ -5636,10 +5645,15 @@ async function loadScope(domain) {
   scopeExcludedPaths = new Set();
   scopeExcludeKeywords = [];
   scopeFallback = false;
-  scopeRangeFrom = null; scopeRangeTo = null; scopeRangeAnchor = null; scopeDensityIdx = 2;
+  scopeRangeFrom = null; scopeRangeTo = null; scopeRangeAnchor = null; scopeDensityIdx = 5;
+  { const _d = $('scope-density'); if (_d) _d.value = 5; }  // every scan starts at Max density
   scopeMonthFrom = null; scopeMonthTo = null;
   scopeDayFrom = null; scopeDayTo = null;
   $('scope-domain').textContent = domain;
+  // Always re-enable the launch button when entering the scope view. It is a
+  // static element, so a disabled state left over from a previous successful
+  // launch would otherwise persist and make the button inert on the next scan.
+  $('scope-launch-btn').disabled = false;
   $('scope-sub').textContent = 'Tune the scan before launching it.';
   { const c = $('scope-intro-cap'); if (c) c.textContent = SCOPE_CAP.toLocaleString(); }
   { const intro = document.querySelector('.scope-intro'); if (intro) intro.style.display = ''; }
@@ -5678,9 +5692,13 @@ async function loadScope(domain) {
       .replace('{n}', data.html_snapshots).replace('{k}', subs.length);
     $('scope-loading').style.display = 'none';
     $('scope-adv').style.display = '';
-    if ($('scope-density')) { $('scope-density').value = 2; $('scope-density').style.setProperty('--fill', (2 / (SCOPE_DENSITY.length - 1) * 100) + '%'); }
-    if ($('scope-density-val')) $('scope-density-val').textContent = t(SCOPE_DENSITY[2].label);
-    if ($('scope-density-hint')) $('scope-density-hint').textContent = t(SCOPE_DENSITY[2].hint);
+    // Default every scan to Max density (index 5). The user can dial it down;
+    // if the selection exceeds the 5000 cap the cap-note guides them to narrow
+    // the date range or lower the density.
+    scopeDensityIdx = 5;
+    if ($('scope-density')) { $('scope-density').value = 5; $('scope-density').style.setProperty('--fill', (5 / (SCOPE_DENSITY.length - 1) * 100) + '%'); }
+    if ($('scope-density-val')) $('scope-density-val').textContent = t(SCOPE_DENSITY[5].label);
+    if ($('scope-density-hint')) $('scope-density-hint').textContent = t(SCOPE_DENSITY[5].hint);
 
     const capEl = $('scope-intro-cap');
     if (capEl) capEl.textContent = SCOPE_CAP.toLocaleString();
@@ -6211,7 +6229,7 @@ function updateScopeEstimate() {
   // (~10 in prod) with a polite delay, so wall-clock is roughly per-page / fan-out.
   // ~0.36s per snapshot at 10-way concurrency + fixed CDX/extract overhead.
   const secs = Math.round(n * 0.36 + 15);
-  const t = secs < 90 ? `~${secs}s` : `~${Math.round(secs / 60)} min`;
+  const etaTxt = secs < 90 ? `~${secs}s` : `~${Math.round(secs / 60)} min`;
   const rangeTxt = (scopeDayFrom || scopeDayTo)
     ? `${_fmtDay(scopeDayFrom)} → ${_fmtDay(scopeDayTo || scopeDayFrom)}`
     : (t('all dates') || 'all dates');
@@ -6223,7 +6241,7 @@ function updateScopeEstimate() {
   const word = t('snapshots'), estW = t('est.'), densW = t('density');
   el.style.display = '';
   el.innerHTML = `<span class="scope-est-line"><span class="scope-est-dot ${lvl}"></span><strong class="scope-est-n ${lvl}">${n.toLocaleString()}</strong> ${word}`
-    + ` <span class="scope-est-sep">·</span> ${estW} <strong class="scope-est-t">${t}</strong></span>`
+    + ` <span class="scope-est-sep">·</span> ${estW} <strong class="scope-est-t">${etaTxt}</strong></span>`
     + `<span class="scope-est-sub">${dens} ${densW}, ${rangeTxt}. ${lvlLabel}. ${t('More density = more snapshots = longer scan.')}</span>`;
   // Cap note: explain the 5000 ceiling, more strongly when it actually bites.
   const note = $('scope-cap-note');
@@ -6233,8 +6251,8 @@ function updateScopeEstimate() {
     const repo = '<a href="https://github.com/HXLLO/WayTrace" target="_blank" rel="noopener">github.com/HXLLO/WayTrace</a>';
     if (capped) {
       note.innerHTML = LANG === 'fr'
-        ? `Ce domaine compte <strong>${available.toLocaleString()}</strong> snapshots correspondants, mais le service hébergé en analyse au plus <strong>${SCOPE_CAP.toLocaleString()}</strong>, répartis proportionnellement sur toutes les années archivées (sans biais de récence). Pour analyser un très gros domaine en entier, lancez WayTrace en local : ${repo}.`
-        : `This domain has <strong>${available.toLocaleString()}</strong> matching snapshots but the hosted service scans at most <strong>${SCOPE_CAP.toLocaleString()}</strong>, spread proportionally across all archived years (no recency bias). To scan a very large domain in full, run WayTrace locally: ${repo}.`;
+        ? `Ce domaine compte <strong>${available.toLocaleString()}</strong> snapshots, plus que les <strong>${SCOPE_CAP.toLocaleString()}</strong> que le service hébergé analyse par scan. WayTrace va donc échantillonner proportionnellement sur toutes les années. Pour un scan complet sans échantillonnage, <strong>resserrez la plage de dates</strong> ci-dessus (calendrier) ou <strong>baissez la densité</strong> pour tomber sous ${SCOPE_CAP.toLocaleString()} ; pour analyser tout le domaine en pleine profondeur, lancez WayTrace en local : ${repo}.`
+        : `This domain has <strong>${available.toLocaleString()}</strong> snapshots, more than the <strong>${SCOPE_CAP.toLocaleString()}</strong> the hosted service scans per run, so WayTrace will sample proportionally across all years. For a complete, un-sampled scan, <strong>narrow the date range</strong> above (calendar) or <strong>lower the density</strong> to get under ${SCOPE_CAP.toLocaleString()}; to scan the whole domain at full depth, run WayTrace locally: ${repo}.`;
     } else {
       note.innerHTML = LANG === 'fr'
         ? `Le service hébergé analyse jusqu'à ${SCOPE_CAP.toLocaleString()} snapshots par scan, répartis sur toutes les années archivées. Pour de plus gros travaux, lancez WayTrace en local : ${repo}.`
@@ -6286,6 +6304,9 @@ async function launchScopedScan() {
     location.hash = '#/s/' + encodeURIComponent(data.url_id);
   } catch (e) {
     showError('error-scope', e.message);
+  } finally {
+    // Guarantee the button is usable again on every exit path (success
+    // navigates away, errors stay on the scope view for a retry).
     $('scope-launch-btn').disabled = false;
   }
 }
@@ -7966,15 +7987,21 @@ function renderResultsHeader(info) {
           fnd = info.total_findings || 0;
     const range = (m.date_first_seen && m.date_last_seen)
       ? `${m.date_first_seen} → ${m.date_last_seen}` : '';
+    // Calm, non-redundant sentence: the headline counts already live in the
+    // stat row above. "Not available from the archive" is what a failed fetch
+    // actually means (a capture archive.org can no longer serve), not a tool
+    // error, so it should not read like one.
     const explain = (LANG === 'fr')
-      ? (found ? `${n(found)} snapshots HTML archivés trouvés, ` : 'Échantillonné, ')
-        + `<b>${n(ana)}</b> analysés sur la période, <b>${n(scr)}</b> pages récupérées`
-        + ((failed || dedup) ? ` (<b>${n(failed)}</b> échecs, <b>${n(dedup)}</b> doublons ignorés)` : '')
-        + `, puis <b>${n(fnd)}</b> résultats extraits${range ? ` couvrant ${esc(range)}` : ''}.`
-      : (found ? `Found <b>${n(found)}</b> archived HTML snapshots, ` : 'Sampled ')
-        + `analysed <b>${n(ana)}</b> across the timeline, scraped <b>${n(scr)}</b> pages`
-        + ((failed || dedup) ? ` (<b>${n(failed)}</b> failed, <b>${n(dedup)}</b> duplicates skipped)` : '')
-        + `, then extracted <b>${n(fnd)}</b> findings${range ? ` spanning ${esc(range)}` : ''}.`;
+      ? `Sur ${found ? `<b>${n(found)}</b> snapshots archivés` : 'les snapshots archivés'}, `
+        + `<b>${n(scr)}</b> pages ont été récupérées et analysées`
+        + (failed ? `, <b>${n(failed)}</b> n'étaient plus disponibles côté archive (lacunes d'archive)` : '')
+        + (dedup ? `, <b>${n(dedup)}</b> doublons ignorés` : '')
+        + `${range ? `, couvrant ${esc(range)}` : ''}.`
+      : `Of ${found ? `<b>${n(found)}</b> archived snapshots` : 'the archived snapshots'}, `
+        + `<b>${n(scr)}</b> pages were retrieved and analysed`
+        + (failed ? `, <b>${n(failed)}</b> were no longer available from the archive (archive gaps)` : '')
+        + (dedup ? `, <b>${n(dedup)}</b> duplicates skipped` : '')
+        + `${range ? `, spanning ${esc(range)}` : ''}.`;
     el.innerHTML =
       `<div class="rm-line">`
       + `<span class="rm-stat"><span class="rm-num">${n(fnd)}</span> ${t('findings')}</span>`
@@ -8175,12 +8202,26 @@ function renderCategoryGrid(info, activeKey) {
       <div class="cat-tile-count">${total}</div>
       <div class="cat-tile-name">All</div>
     </div>`;
-  // Show every searched category, even the empty ones (the investigator must
-  // see what was looked for and found nothing). Populated first, then the All
-  // tile, then the 0-count ones (visually recessed via .is-empty), all inline.
-  let html = `<div class="cat-grid">${populated.map(tile).join('')}${allTile}${empty.map(tile).join('')}</div>`;
+  // Group the populated categories by OSINT tier under a small header each, so
+  // the grid reads as meaningful sections (leaks, pivots, context...) instead
+  // of a flat wall. The All tile and the searched-but-empty categories stay
+  // visible at the end so the investigator still sees everything that was looked
+  // for.
+  const TIER_LABELS = [t('Leaks & secrets'), t('Pivots'), t('Context'), t('Other signals')];
+  const TIER_SLUG = ['leak', 'pivot', 'context', 'background'];
+  const byTier = [[], [], [], []];
+  populated.forEach(([k, c]) => { const p = Math.max(0, Math.min(3, CAT_PRIORITY[k] ?? 2)); byTier[p].push([k, c]); });
+  let html = '<div class="cat-groups">';
+  byTier.forEach((grp, i) => {
+    if (!grp.length) return;
+    html += `<div class="cat-grid-head cat-grid-head--${TIER_SLUG[i]}">${esc(TIER_LABELS[i])}</div>`;
+    html += `<div class="cat-grid">${grp.map(tile).join('')}</div>`;
+  });
+  html += `<div class="cat-grid-head cat-grid-head--all">${esc(t('All & searched'))}</div>`;
+  html += `<div class="cat-grid">${allTile}${empty.map(tile).join('')}</div>`;
+  html += '</div>';
   if (empty.length) {
-    html += `<div class="cat-empty-note">${empty.length} categories searched, nothing found (greyed above)</div>`;
+    html += `<div class="cat-empty-note">${empty.length} ${esc(t('categories searched, nothing found (greyed above)'))}</div>`;
   }
   // Explicit empty state: an all-zero grid reads like an error (Boris's
   // feedback: "I first thought it was a bug"). Distinguish "the Wayback
@@ -8385,6 +8426,14 @@ function v2BuildLegacyDomainInfo(job, findings) {
   };
 }
 
+// "Scan more": reopen the scope tuner for the same domain so the user can pick
+// a higher density/cap and relaunch. The recent CDX result is cached (~6h) so
+// preflight is instant and the enumeration is not redone from zero.
+function scanMore(domain) {
+  if (!domain) return;
+  location.hash = '#/scope/' + encodeURIComponent(domain);
+}
+
 function renderV2InLegacyView(job) {
   v2PublicMode = true;
   const findings = v2BuildLegacyFindings(job);
@@ -8419,6 +8468,7 @@ function renderV2InLegacyView(job) {
          href="/api/s/${uid}/export.html" download>${t('Download HTML')}</a>
       <a class="btn" href="/api/s/${uid}/export.json" download>${t('JSON')}</a>
       <a class="btn" href="/api/s/${uid}/export.csv" download>${t('CSV')}</a>
+      <button class="btn" type="button" onclick="scanMore('${esc(job.domain)}')" title="${esc(t('Run a denser scan of this domain, reusing what was already found'))}">${t('Scan more')}</button>
       <button class="btn" id="v2-copy-link-btn" type="button" title="Copy the share URL to your clipboard">${t('Copy link')}</button>
       ${publishCtl}
       ${expires}
@@ -8530,6 +8580,31 @@ function applyFilters() {
   }
 }
 
+// Precise platform/prefix labels for ad and tracker IDs, so a bare id like
+// "ca-pub-123..." or a pixel number reads as "AdSense" / "Meta Pixel" at a
+// glance (RETEX n2: show the exact tag per finding).
+const AD_NETWORK_LABELS = {
+  adsense_publisher: 'AdSense (ca-pub-)',
+  admob: 'AdMob (ca-app-pub-)',
+  ad_slot: 'Ad slot',
+  GA_Universal: 'Universal Analytics (UA-)',
+  GA4: 'GA4 (G-)',
+  GTM: 'GTM',
+  Google_Ads: 'Google Ads (AW-)',
+  Meta_Pixel: 'Meta Pixel',
+  Hotjar: 'Hotjar',
+  Mixpanel: 'Mixpanel',
+  Yandex_Metrica: 'Yandex Metrica',
+};
+
+function _adNetworkChip(f) {
+  if (!f || !f.metadata) return '';
+  if (f.category !== 'adsense_ids' && f.category !== 'analytics_trackers') return '';
+  const t = f.metadata.type || '';
+  const label = AD_NETWORK_LABELS[t] || (t ? t.replace(/_/g, ' ') : '');
+  return label ? `<span class="ad-chip">${esc(label)}</span> ` : '';
+}
+
 function renderFindingsTable() {
   const searchFilter = ($('filter-search').value || '').toLowerCase();
 
@@ -8583,7 +8658,7 @@ function renderFindingsTable() {
         // HTML attribute, JSON) and any one of them will eventually break
         // on a finding value with an odd quote/newline combination.
         const rawVal = String(f.value || '');
-        return `<td class="val">${highlightMatch(rawVal, searchFilter)}<button class="row-copy-btn" data-copy-value="${esc(rawVal)}" title="Copy value" aria-label="Copy value">⎘</button></td>`;
+        return `<td class="val">${_adNetworkChip(f)}${highlightMatch(rawVal, searchFilter)}<button class="row-copy-btn" data-copy-value="${esc(rawVal)}" title="Copy value" aria-label="Copy value">⎘</button></td>`;
       }
       if (c.key === 'occurrences') return `<td class="col-occ">${f.occurrences || 1}</td>`;
       if (c.key === 'category') return `<td class="col-date">${esc((f.category||'').replace(/_/g,' '))}</td>`;
@@ -8931,7 +9006,22 @@ function computeTechStack(findings) {
 // asset was listed in the archived HTML but Wayback never crawled
 // the file itself (very common: HTML pages get archived, but the
 // linked .ico / .png assets are skipped on a best-effort basis).
-function _faviconFallbackHTML() {
+function _faviconFallbackHTML(md5) {
+  // If the icon image can't be rendered but we hashed its bytes, show the MD5
+  // instead of a generic "not archived" box: the hash is the actual pivot the
+  // analyst wants (Shodan/Censys), so a non-renderable favicon becomes signal,
+  // not noise.
+  if (md5) {
+    return (
+      '<span class="favicon-fallback favicon-fallback--hash" '
+      + 'title="Favicon bytes hashed (image not re-servable by archive.org). MD5 ' + esc(md5) + '">'
+      + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" '
+      + 'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+      + '<path d="M4 7h16M4 12h16M4 17h10"/></svg>'
+      + '<em class="favicon-fallback-hash">' + esc(md5.slice(0, 10)) + '</em>'
+      + '</span>'
+    );
+  }
   return (
     '<span class="favicon-fallback" '
     + 'title="Listed in archived HTML but the favicon file itself was never crawled by archive.org">'
@@ -8960,7 +9050,7 @@ function _faviconNextSrc(img) {
   }
   img.onerror = null;
   img.onload = null;
-  img.outerHTML = _faviconFallbackHTML();
+  img.outerHTML = _faviconFallbackHTML(img.getAttribute('data-md5') || '');
 }
 
 // archive.org (and occasionally the fallback) answer 200 with a 1 px sentinel
@@ -9026,15 +9116,20 @@ function renderFaviconGallery(findings, domainName) {
     const fmeta = f.metadata || {};
     const hashLine = fmeta.md5 ? `\nMD5 ${fmeta.md5}` : '';
     const shaLine = fmeta.sha256 ? `\nSHA256 ${fmeta.sha256}` : '';
-    const title = `${rawUrl}\n${f.first_seen || ''} -> ${f.last_seen || ''}${hashLine}${shaLine}`;
+    const shodanLine = (fmeta.shodan !== undefined && fmeta.shodan !== null && fmeta.shodan !== '') ? `\nShodan ${fmeta.shodan}` : '';
+    const title = `${rawUrl}\n${f.first_seen || ''} -> ${f.last_seen || ''}${hashLine}${shaLine}${shodanLine}`;
     // Click opens the live asset the analyst expects to inspect.
     const clickUrl = abs || rawUrl;
     return `
       <div class="favicon-item" title="${esc(title)}" onclick="window.open('${esc(clickUrl)}','_blank','noopener')">
         ${cands.length
-          ? `<img src="${esc(cands[0])}" data-srcs='${esc(JSON.stringify(cands))}' data-i="0" alt="favicon" loading="lazy" referrerpolicy="no-referrer" onerror="_faviconNextSrc(this)" onload="_faviconChk(this)">`
+          ? `<img src="${esc(cands[0])}" data-srcs='${esc(JSON.stringify(cands))}' data-i="0" data-md5="${esc(fmeta.md5 || '')}" alt="favicon" loading="lazy" referrerpolicy="no-referrer" onerror="_faviconNextSrc(this)" onload="_faviconChk(this)">`
           : _faviconFallbackHTML()}
         <span class="favicon-item-label">${esc(label)}</span>
+        ${(fmeta.md5 || fmeta.sha256) ? `<span class="favicon-item-hash" onclick="event.stopPropagation()">
+          ${fmeta.md5 ? `<span class="fh" title="MD5 ${esc(fmeta.md5)}">md5 ${esc(fmeta.md5.slice(0, 12))}…</span>` : ''}
+          ${fmeta.sha256 ? `<span class="fh" title="SHA-256 ${esc(fmeta.sha256)}">sha256 ${esc(fmeta.sha256.slice(0, 12))}…</span>` : ''}
+        </span>` : ''}
       </div>
     `;
   }).join('');
@@ -9159,7 +9254,7 @@ function formatExport(findings, format) {
       'category', 'value', 'severity',
       'first_seen', 'last_seen', 'occurrences',
       'type', 'provider', 'service', 'domain',
-      'source_url', 'source_page_id', 'md5', 'sha256',
+      'source_url', 'source_page_id', 'md5', 'sha256', 'shodan',
     ];
     const flatten = (f) => {
       const m = f.metadata || {};
@@ -9180,6 +9275,7 @@ function formatExport(findings, format) {
         source_page_id: m.source_page_id || '',
         md5: m.md5 || '',
         sha256: m.sha256 || '',
+        shodan: (m.shodan === undefined || m.shodan === null) ? '' : m.shodan,
       };
     };
     const header = cols.join(',');
@@ -9424,14 +9520,19 @@ function renderFindingDrawer(finding) {
     `;
   }
 
-  // Hashes (e.g. favicon MD5/SHA-256) for cross-site pivoting.
+  // Hashes (e.g. favicon MD5/SHA-256 + Shodan mmh3) for cross-site pivoting.
   let hashSection = '';
   const md5 = meta.md5, sha256 = meta.sha256;
-  if (md5 || sha256) {
+  const shodan = (meta.shodan !== undefined && meta.shodan !== null && meta.shodan !== '') ? meta.shodan : null;
+  if (md5 || sha256 || shodan !== null) {
+    const shodanUrl = shodan !== null
+      ? 'https://www.shodan.io/search?query=' + encodeURIComponent('http.favicon.hash:' + shodan)
+      : '';
     hashSection = `
       <div class="fd-section-label">${t('Hashes')}</div>
       ${md5 ? `<div class="fd-hash-row"><span class="fd-hash-k">MD5</span><code class="fd-hash-v">${esc(md5)}</code></div>` : ''}
       ${sha256 ? `<div class="fd-hash-row"><span class="fd-hash-k">SHA256</span><code class="fd-hash-v">${esc(sha256)}</code></div>` : ''}
+      ${shodan !== null ? `<div class="fd-hash-row"><span class="fd-hash-k">Shodan</span><code class="fd-hash-v">${esc(String(shodan))}</code><a class="fd-hash-pivot" href="${esc(shodanUrl)}" target="_blank" rel="noopener" title="${esc(t('Search this favicon on Shodan'))}">${t('pivot')} ↗</a></div>` : ''}
     `;
   }
 
@@ -10340,7 +10441,26 @@ async function renderMyScans() {
     <div class="myscans-row" onclick="location.hash='#/s/${encodeURIComponent(s.url_id)}'">
       <span class="myscans-domain">${esc(s.domain)}</span>
       <span class="myscans-date">${esc((s.created_at || '').slice(0, 10))}</span>
+      <button class="myscans-del" title="${esc(t('Delete scan'))}" aria-label="${esc(t('Delete scan'))}" onclick="deleteMyScan('${esc(s.url_id)}', event)">&times;</button>
     </div>`).join('') + '</div>';
+}
+
+// Delete a scan the current visitor owns (the url_id is the capability). Used
+// from the My scans list; the row itself navigates, so stop propagation.
+async function deleteMyScan(urlId, ev) {
+  if (ev) ev.stopPropagation();
+  if (!confirm(t('Delete this scan permanently? This cannot be undone.'))) return;
+  try {
+    const r = await fetch(API + '/api/s/' + encodeURIComponent(urlId), { method: 'DELETE' });
+    if (!r.ok && r.status !== 404) {
+      const d = await r.json().catch(() => ({}));
+      showToast('Error: ' + (d.detail || r.statusText));
+      return;
+    }
+    renderMyScans();
+  } catch (e) {
+    showToast('Network error: ' + e.message);
+  }
 }
 
 // Debounced wrappers (wired to search inputs).

@@ -18,7 +18,7 @@ from loguru import logger
 from pydantic import BaseModel, Field
 
 from db import (
-    expire_job_now,
+    delete_job,
     get_job_by_url_id,
     list_feed,
     set_published,
@@ -130,7 +130,8 @@ async def publish_scan(url_id: str, body: PublishRequest, request: Request):
 
 @router.delete("/s/{url_id}")
 async def delete_scan(url_id: str, request: Request):
-    """Cancel a queued/running scan and/or force-expire it in the DB."""
+    """Permanently delete a scan: cancel it if still running, hard-delete the
+    persisted row so it disappears from My scans and the public feed."""
     user = None
     live = await store.get_job_by_url_id(url_id)
     persisted = await get_job_by_url_id(url_id)
@@ -139,9 +140,10 @@ async def delete_scan(url_id: str, request: Request):
     if not _owner_ok(live or persisted, user):
         raise HTTPException(status_code=403, detail="This scan belongs to another account.")
     if live is not None:
+        # Marks the live job cancelled; _persist_and_finish then skips re-saving
+        # it, so a running scan cannot resurrect itself after deletion.
         await store.cancel_job(live["id"])
-    if persisted is not None:
-        await expire_job_now(url_id)
+    await delete_job(url_id)
     return {"url_id": url_id, "deleted": True}
 
 

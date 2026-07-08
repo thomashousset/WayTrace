@@ -60,28 +60,36 @@ TRACKER_PATTERNS = {
     "Yandex_Metrica": re.compile(r"ym\((\d{7,10})\s*,"),
 }
 
+# Every host is guarded with (?<![A-Za-z0-9]) so a look-alike domain glued to
+# the left (notlinkedin.com, mytwitter.com, evilgithub.com) can't match, while
+# a real subdomain (www.twitter.com, preceded by '.') still does.
 SOCIAL_PATTERNS = {
-    "twitter": re.compile(r"twitter\.com/(?!share|intent)([A-Za-z0-9_]{1,50})"),
-    "x": re.compile(r"(?<![a-zA-Z])x\.com/(?!share|intent)([A-Za-z0-9_]{1,50})"),
+    "twitter": re.compile(r"(?<![A-Za-z0-9])twitter\.com/(?!share|intent)([A-Za-z0-9_]{1,50})"),
+    "x": re.compile(r"(?<![A-Za-z0-9])x\.com/(?!share|intent)([A-Za-z0-9_]{1,50})"),
     "linkedin": re.compile(
-        r"linkedin\.com/(?:in|company|school|edu|org|pub|profile)/([A-Za-z0-9_\-%.]{1,100})"
+        r"(?<![A-Za-z0-9])linkedin\.com/(?:in|company|school|edu|org|pub|profile)/([A-Za-z0-9_\-%.]{1,100})"
     ),
+    # Accept both facebook.com and the fb.com shortener; the URL is normalised
+    # to facebook.com downstream. Excludes share/dialog/plugin/pixel endpoints.
     "facebook": re.compile(
-        r"facebook\.com/(?!sharer|share|dialog)([A-Za-z0-9_.]{1,100})"
+        r"(?<![A-Za-z0-9])(?:facebook|fb)\.com/(?!sharer|share|dialog|plugins|tr[/?])([A-Za-z0-9_.]{1,100})"
     ),
-    "instagram": re.compile(r"instagram\.com/([A-Za-z0-9_.]{1,100})"),
-    "telegram": re.compile(r"t\.me/([A-Za-z0-9_]{3,50})"),
+    "instagram": re.compile(r"(?<![A-Za-z0-9])instagram\.com/([A-Za-z0-9_.]{1,100})"),
+    "telegram": re.compile(r"(?<![A-Za-z0-9])t\.me/(?!joinchat)([A-Za-z0-9_]{3,50})"),
     "youtube": re.compile(
-        r"youtube\.com/(?:channel/|@|user/)([A-Za-z0-9_\-]{1,100})"
+        r"(?<![A-Za-z0-9])youtube\.com/(?:channel/|@|user/|c/)([A-Za-z0-9_\-]{1,100})"
     ),
-    "github": re.compile(r"github\.com/([A-Za-z0-9_\-]{1,100})"),
-    "tiktok": re.compile(r"tiktok\.com/@([A-Za-z0-9_.]{1,50})"),
-    "snapchat": re.compile(r"snapchat\.com/add/([A-Za-z0-9_.]{1,50})"),
+    "pinterest": re.compile(
+        r"(?<![A-Za-z0-9])pinterest\.com/(?!pin/|search/|categories/|ideas/|today/)([A-Za-z0-9_\-]{2,60})"
+    ),
+    "github": re.compile(r"(?<![A-Za-z0-9])github\.com/([A-Za-z0-9_\-]{1,100})"),
+    "tiktok": re.compile(r"(?<![A-Za-z0-9])tiktok\.com/@([A-Za-z0-9_.]{1,50})"),
+    "snapchat": re.compile(r"(?<![A-Za-z0-9])snapchat\.com/add/([A-Za-z0-9_.]{1,50})"),
     # Discord server invite codes. `discord.gg/<code>` is the short form,
     # `discord.com/invite/<code>` the long form. Both pivot to a server
     # community that often reveals operator team / followers.
     "discord": re.compile(
-        r"discord(?:\.gg|\.com/invite)/([A-Za-z0-9\-]{2,32})"
+        r"(?<![A-Za-z0-9])discord(?:\.gg|\.com/invite)/([A-Za-z0-9\-]{2,32})"
     ),
 }
 
@@ -109,7 +117,7 @@ CLOUD_BUCKET_PATTERNS = (S3_RE, GCS_RE, AZURE_RE, DO_SPACES_RE)
 # AKIA = long-term user, ASIA = temp STS, AIDA/AROA = IAM IDs (lower OSINT
 # value but we want parity), ABIA/ACCA/AGPA/AIPA/ANPA/ANVA/ASCA = misc.
 AWS_KEY_RE = re.compile(r"\b(?:AKIA|ASIA|ABIA|ACCA|AGPA|AIDA|AIPA|ANPA|ANVA|AROA|ASCA)[0-9A-Z]{16}\b")
-GOOGLE_API_RE = re.compile(r"AIza[0-9A-Za-z_\-]{35}")
+GOOGLE_API_RE = re.compile(r"(?<![A-Za-z0-9_\-])AIza[0-9A-Za-z_\-]{35}(?![A-Za-z0-9_\-])")
 # Google OAuth client IDs are high-value: appear in archived web apps.
 GOOGLE_OAUTH_CLIENT_RE = re.compile(r"\b\d{9,}-[a-z0-9]{32}\.apps\.googleusercontent\.com\b")
 # Stripe: sk_/pk_/rk_ (restricted) × test/live. 24+ body chars.
@@ -433,7 +441,7 @@ SCRIPT_TECH_PATTERNS = {
     "jQuery": re.compile(r"jquery[.\-/]", re.IGNORECASE),
     "React": re.compile(r"react(?:\.min)?\.js|react-dom", re.IGNORECASE),
     "Angular": re.compile(r"angular(?:\.min)?\.js|angular\.io", re.IGNORECASE),
-    "Vue.js": re.compile(r"vue(?:\.min)?\.js|vuejs\.org", re.IGNORECASE),
+    "Vue.js": re.compile(r"\bvue(?:\.min)?\.js|vuejs\.org", re.IGNORECASE),
     # "svelte" only as a delimited package/file token (/svelte@, /svelte/,
     # svelte.min.js, svelte.dev) - never glued into a blog/asset slug like
     # "why-we-left-svelte" or "svelte-island-page.js".
@@ -450,7 +458,7 @@ SCRIPT_TECH_PATTERNS = {
     "Font Awesome": re.compile(r"font-awesome|fontawesome", re.IGNORECASE),
     # Utilities
     "Lodash": re.compile(r"lodash(?:\.min)?\.js", re.IGNORECASE),
-    "D3.js": re.compile(r"d3(?:\.min)?\.js|d3js\.org", re.IGNORECASE),
+    "D3.js": re.compile(r"\bd3(?:\.min)?\.js|d3js\.org", re.IGNORECASE),
     "Moment.js": re.compile(r"moment(?:\.min)?\.js", re.IGNORECASE),
     # CDN & fonts
     "Google Fonts": re.compile(r"fonts\.googleapis\.com", re.IGNORECASE),
@@ -539,7 +547,7 @@ INTERNAL_IP_RE = re.compile(
     r"10\.\d{1,3}\.\d{1,3}\.\d{1,3}"
     r"|192\.168\.\d{1,3}\.\d{1,3}"
     r"|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}"
-    r"|127\.0\.0\.\d{1,3}"
+    r"|127\.\d{1,3}\.\d{1,3}\.\d{1,3}"
     r"|169\.254\.\d{1,3}\.\d{1,3}"
     r"|100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3}"
     r")"
@@ -550,6 +558,9 @@ INTERNAL_IP_RE = re.compile(
 
 ADSENSE_PUB_RE = re.compile(r"ca-pub-(\d{10,16})")
 ADSENSE_SLOT_RE = re.compile(r"""data-ad-slot\s*=\s*["'](\d{10,})["']""")
+# Google AdMob app publisher id (mobile ad SDK). Same keyspace as AdSense but a
+# distinct "ca-app-pub-" prefix, so it must be matched before/separately.
+ADMOB_RE = re.compile(r"ca-app-pub-(\d{10,16})")
 
 # --- JS inline URLs ---
 
@@ -565,6 +576,9 @@ JS_API_ASSIGNMENT_RE = re.compile(
 # --- Connection strings ---
 
 CONNSTRING_RE = re.compile(
+    # Left boundary so a scheme name glued to a longer word (custommysql://) or
+    # a db URL embedded inside another URL's path/query is not extracted.
+    r"(?<![A-Za-z0-9+.\-])"
     r"(mysql|mariadb|postgres(?:ql)?|cockroachdb|mongodb(?:\+srv)?|rediss?|"
     r"amqps?|smtps?|ftp|ldaps?|mssql|sqlserver|oracle|cassandra|neo4j(?:\+s)?|"
     r"clickhouse)"

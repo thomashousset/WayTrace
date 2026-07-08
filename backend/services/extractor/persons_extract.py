@@ -20,6 +20,25 @@ _PERSON_EXCLUDE = {
     "staff", "team", "support", "default", "test", "null", "none",
 }
 
+# CMS / SEO plugin and platform names that populate <meta name="author"> or
+# byline slots but are software, not people.
+_PERSON_TOOL_NAMES = {
+    "yoast seo", "yoast", "rank math", "all in one seo", "wordpress",
+    "elementor", "wpbakery", "wp engine", "jetpack", "squarespace", "wix",
+    "shopify", "google", "site admin", "admin user", "wp admin",
+}
+
+# Leading byline connector ("By ", "Par ", "Von ", "By:") to strip before the
+# text is judged as a name, so "By John Smith" yields "John Smith".
+_BYLINE_PREFIX_RE = re.compile(
+    r"^\s*(?:by|par|von|door|av|written by|posted by)\s*[:\-]?\s+",
+    re.IGNORECASE,
+)
+
+
+def _strip_byline(text: str) -> str:
+    return _BYLINE_PREFIX_RE.sub("", text or "").strip()
+
 
 # A token shaped like a name part: letters (with accents), apostrophes,
 # hyphens, periods (for initials). 1-30 chars per token.
@@ -46,7 +65,13 @@ def _looks_like_name(text: str) -> bool:
 def _is_valid_person(name: str, domain: str) -> bool:
     """Filter out generic words, single words, and domain-derived names."""
     lower = name.lower().strip()
-    if lower in _PERSON_EXCLUDE:
+    # A URL or social-profile link is not a person name. These leak in through
+    # <meta name="author"> and JSON-LD author fields (e.g. a Facebook profile
+    # URL) which skip the token-shape check; reject anything URL-shaped so it
+    # cannot land in Named persons (it belongs in Social profiles instead).
+    if "/" in lower or "://" in lower or lower.startswith(("http", "www.")):
+        return False
+    if lower in _PERSON_EXCLUDE or lower in _PERSON_TOOL_NAMES:
         return False
     if " " not in lower and len(lower) < 15:
         return False
@@ -126,6 +151,7 @@ def extract_persons(
             text = node.text(strip=True)
             if not text or len(text) > 60:
                 continue
+            text = _strip_byline(text)  # "By John Smith" -> "John Smith"
             if not _looks_like_name(text):
                 continue
             if not _is_valid_person(text, domain):

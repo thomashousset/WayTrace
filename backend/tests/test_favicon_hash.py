@@ -49,3 +49,23 @@ def test_hash_favicons_skips_when_breaker_open(monkeypatch):
 
 def test_hash_favicons_empty_list():
     assert asyncio.run(hash_favicons([], "s")) == 0
+
+
+# --- Shodan favicon hash (mmh3 of base64 bytes) ---
+
+from services.favicon_hash import _mmh3_x86_32, shodan_favicon_hash
+
+
+def test_mmh3_known_vectors():
+    # Canonical MurmurHash3 x86_32 seed=0 signed values (match the mmh3 lib).
+    assert _mmh3_x86_32(b"") == 0
+    assert _mmh3_x86_32(b"foo") == -156908512
+    assert _mmh3_x86_32(b"hello") == 613153351
+
+
+def test_shodan_hash_is_mmh3_of_base64():
+    import base64
+    data = b"\x89PNG\r\n\x1a\n" + b"WAYTRACE" * 40
+    assert shodan_favicon_hash(data) == _mmh3_x86_32(base64.encodebytes(data))
+    # Stable, deterministic int usable as http.favicon.hash:<value>
+    assert isinstance(shodan_favicon_hash(data), int)

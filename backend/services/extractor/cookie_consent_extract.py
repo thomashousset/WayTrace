@@ -46,11 +46,16 @@ _CMP_PATTERNS: dict[str, list[re.Pattern]] = {
     ],
     "trustarc": [
         re.compile(r"consent\.trustarc\.com", re.IGNORECASE),
-        re.compile(r"class=['\"][^'\"]*truste", re.IGNORECASE),
+        # Real TrustArc hooks are truste_overlay / truste-consent / truste_box;
+        # require a separator so "trusted-reviews-badge" doesn't match.
+        re.compile(r"class=['\"][^'\"]*truste[_\-]", re.IGNORECASE),
     ],
     "usercentrics": [
+        # data-settings-id alone is a generic attribute many widgets use, so it
+        # is not a detection signal on its own (only the usercentrics host is).
+        # It is still used to read the account id once usercentrics is detected
+        # (see _ACCOUNT_ID_PATTERNS).
         re.compile(r"app\.usercentrics\.eu", re.IGNORECASE),
-        re.compile(r"data-settings-id=['\"]([A-Za-z0-9_\-]+)['\"]", re.IGNORECASE),
     ],
     "termly": [
         re.compile(r"app\.termly\.io", re.IGNORECASE),

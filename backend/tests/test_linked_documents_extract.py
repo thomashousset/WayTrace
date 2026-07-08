@@ -119,13 +119,21 @@ def test_ignores_zip_archive_link():
     assert _run('<a href="/bundle.zip">download</a>') == []
 
 
-# NOTE: suspected bug. A href whose path has no document extension but ends in a
-# document extension as the last characters of the string (e.g. a bare query
-# param value with no trailing chars) is still matched by _DOC_EXTENSIONS, and
-# because the query is then stripped the recorded extension is "unknown".
-# Asserting the current (buggy) behaviour to keep the suite green.
-def test_query_value_ending_in_doc_ext_is_captured_as_unknown():
-    items = _run('<a href="/download?file=report.docx">dl</a>')
+def test_query_value_ending_in_doc_ext_is_not_a_document():
+    # A doc extension living in a query value (viewer/download proxy) is not a
+    # linked document: the real path is /download, not a .docx file.
+    assert _run('<a href="/download?file=report.docx">dl</a>') == []
+    assert _run('<a href="/viewer?doc=annual.pdf">v</a>') == []
+
+
+def test_document_with_fragment_anchor_is_captured():
+    # /report.pdf#page=3 is a real PDF link; the fragment must not hide it.
+    items = _run('<a href="/files/report.pdf#page=3">report</a>')
     assert len(items) == 1
-    assert items[0]["url"] == "/download?file=report.docx"
-    assert items[0]["extension"] == "unknown"
+    assert items[0]["extension"] == "pdf"
+
+
+def test_epub_is_a_document():
+    items = _run('<a href="/books/guide.epub">ebook</a>')
+    assert len(items) == 1
+    assert items[0]["extension"] == "epub"

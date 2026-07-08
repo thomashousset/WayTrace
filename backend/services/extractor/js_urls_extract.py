@@ -33,6 +33,12 @@ _SKIP_DOMAINS: frozenset[str] = frozenset(
 
 
 def _strip_trailing(url: str) -> str:
+    # Truncate at a template-literal interpolation (`${id}` or a bare `{`) so a
+    # URL like https://api.host/users/${id}/profile is stored as the stable
+    # prefix .../users, not a broken half-interpolated string.
+    cuts = [i for i in (url.find("${"), url.find("{")) if i != -1]
+    if cuts:
+        url = url[:min(cuts)]
     return url.rstrip(_STRIP_TRAILING)
 
 

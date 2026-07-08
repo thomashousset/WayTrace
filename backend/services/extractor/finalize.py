@@ -11,6 +11,7 @@ from .highlights import compute_highlights
 from .jwt_extract import extract_jwts
 from .dirlist_extract import detect_directory_listing
 from .helpers import ts_to_month, update_entity
+from .patterns import SOCIAL_PATTERNS
 
 ALL_CATEGORIES = [
     "emails", "subdomains", "api_keys", "cloud_buckets",
@@ -49,12 +50,64 @@ def extract_page_safe(
         return False
 
 
+def _handle_from_social_url(url: str) -> str:
+    """First path segment of a social URL, used as the profile handle."""
+    try:
+        after = url.split("://", 1)[-1]
+        path = after.split("/", 1)[1] if "/" in after else ""
+        return path.strip("/").split("/")[0].split("?")[0]
+    except (IndexError, AttributeError):
+        return ""
+
+
+def _reconcile_social_outgoing(accum: dict) -> None:
+    """De-duplicate social links between Outgoing links and Social profiles.
+
+    Social profiles is the single source of truth for social platforms.
+      - A social outgoing link already recognised as a profile (caught by
+        SOCIAL_PATTERNS) is removed from outgoing_links: it is not repeated.
+      - A social outgoing link on a platform SOCIAL_PATTERNS does not cover
+        (e.g. pinterest, reddit) is promoted into social_profiles and removed
+        from outgoing so it still surfaces under Social profiles.
+      - A social-domain link that is a non-profile route (github.com/features,
+        a facebook pixel, ...) is left in outgoing untouched: SOCIAL_PATTERNS
+        deliberately filtered it out of Social profiles, so it is not a profile.
+    """
+    covered = set(SOCIAL_PATTERNS)
+    outgoing = accum.get("outgoing_links") or {}
+    social = accum.setdefault("social_profiles", {})
+    drop: list[str] = []
+    for url_key, entry in outgoing.items():
+        if entry.get("category") != "social":
+            continue
+        service = entry.get("service") or "social"
+        url = entry.get("url", url_key)
+        handle = _handle_from_social_url(url)
+        skey = f"{service}:{handle.lower()}" if handle else f"{service}:{url.lower()}"
+        if skey in social:
+            drop.append(url_key)  # already a known profile, dedup out of outgoing
+        elif service not in covered and handle:
+            social[skey] = {
+                "first_seen": entry.get("first_seen"),
+                "last_seen": entry.get("last_seen"),
+                "occurrences": entry.get("occurrences", 1),
+                "platform": service,
+                "handle": handle,
+                "url": url,
+            }
+            drop.append(url_key)
+        # else: covered platform but not a profile (filtered) -> keep in outgoing
+    for k in drop:
+        outgoing.pop(k, None)
+
+
 def finalize_accum(accum: dict, categories: list[str] | None = None) -> dict:
     """Convert accumulator dicts to sorted result lists.
 
     If *categories* is provided, only included categories are populated;
     excluded categories return empty lists.
     """
+    _reconcile_social_outgoing(accum)
 
     def _sort_list(items: list[dict]) -> list[dict]:
         return sorted(items, key=lambda x: x["occurrences"], reverse=True)

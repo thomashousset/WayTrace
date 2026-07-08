@@ -168,7 +168,7 @@ async def crawl_cdx(
                 await asyncio.sleep(5)
                 continue
 
-            consecutive_429 = 0
+            consecutive_errors = 0
             rate_limiter.on_success()
 
             try:

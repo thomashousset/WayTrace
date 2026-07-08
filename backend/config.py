@@ -1,21 +1,24 @@
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Single source of truth for the tool version, surfaced in the API (/api/health,
+# OpenAPI) and injected into the frontend footer.
+APP_VERSION = "1.0.2"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env")
 
-    # Polite defaults for archive.org. 8 parallel requests with 0.25-0.75 s
-    # jitter avoids the 429 storms we saw at 30 concurrent / 0.02 s delay.
-    # This is the PER-SCAN cap; archive_global_concurrency caps the aggregate
-    # across all running scans so more scans can run without raising the peak
-    # load on archive.org (and thus the ban risk).
-    max_concurrent_scrapes: int = 8
+    # Polite defaults for archive.org. archive.org throttles by DROPPING the TCP
+    # connection well before it returns HTTP 429, so a low concurrency plus the
+    # scraper's connection-error back-off (see services/scraper.py) is what keeps
+    # a scan from cascading into hundreds of connection failures and getting the
+    # server IP blocked. This is the PER-SCAN cap; archive_global_concurrency
+    # caps the aggregate across all running scans.
+    max_concurrent_scrapes: int = 5
     # Process-wide ceiling on simultaneous archive.org requests, shared by every
-    # running scan. Kept below the old worst case (max_active_total * per-scan =
-    # 2 * 8 = 16) on purpose: a lone scan still runs at 8, but four concurrent
-    # scans share 12 instead of demanding 32.
-    archive_global_concurrency: int = 12
+    # running scan, so N parallel scans never exceed this in flight.
+    archive_global_concurrency: int = 6
     job_ttl_seconds: int = 7200
     max_active_jobs: int = 10
 

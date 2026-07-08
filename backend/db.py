@@ -312,6 +312,22 @@ async def set_published(url_id: str, published: bool) -> bool:
         await db.close()
 
 
+async def delete_job(url_id: str) -> bool:
+    """Hard-delete a single job row by url_id. Returns True if a row was removed.
+
+    The jobs table is self-contained (findings live in the row's JSON
+    ``results`` column), so a single DELETE fully removes the scan; the public
+    feed excludes it immediately since list_feed only returns existing rows.
+    """
+    db = await get_db()
+    try:
+        cur = await db.execute("DELETE FROM jobs WHERE url_id = ?", (url_id,))
+        await db.commit()
+        return cur.rowcount > 0
+    finally:
+        await db.close()
+
+
 async def list_feed(limit: int = 20, offset: int = 0) -> list[dict]:
     """Return published, non-expired jobs sorted by published_at DESC."""
     db = await get_db()

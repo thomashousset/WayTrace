@@ -132,9 +132,9 @@ async def test_delete_persisted_scan(client):
     )
     r = await client.delete("/api/s/killme")
     assert r.status_code == 200
-    # Subsequent GET should report expired (410) since expires_at = now
+    # Delete now hard-removes the row, so a subsequent GET is a clean 404.
     r2 = await client.get("/api/s/killme")
-    assert r2.status_code == 410
+    assert r2.status_code == 404
 
 
 @pytest.mark.anyio

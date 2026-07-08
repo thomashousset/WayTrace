@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import random
 import time
+from collections import Counter
 
 import aiohttp
 from loguru import logger
@@ -27,6 +28,22 @@ _BACKOFF_MIN_SECONDS = 2.0
 # does occasionally hold multi-megabyte pages, and selectolax on 50+ MB of HTML
 # burns RAM quickly. 10 MB covers 99.9% of real pages we care about.
 _MAX_HTML_BYTES = 10 * 1024 * 1024
+
+# archive.org throttles aggressive clients by dropping the TCP connection or
+# stalling, NOT only via HTTP 429. These connection-level failures are the real
+# rate-limit signal for the Wayback replay endpoints and must feed the same
+# back-off + circuit breaker as a 429, otherwise the scraper keeps hammering a
+# server that is already refusing it (the cause of the "hundreds of errors, 0
+# 429s" scans and of the IP getting connection-blocked).
+_THROTTLE_ERRORS = (
+    aiohttp.ClientConnectorError,
+    aiohttp.ClientOSError,
+    aiohttp.ServerDisconnectedError,
+    aiohttp.ServerConnectionError,
+    aiohttp.ServerTimeoutError,
+    aiohttp.ClientPayloadError,
+    asyncio.TimeoutError,
+)
 
 # Process-wide budget of simultaneous archive.org requests, shared by every
 # running scan. Each scan still holds its own per-scan semaphore
@@ -101,6 +118,9 @@ async def scrape_snapshots(
     _delay_state = {"min": settings.scrape_delay_min, "max": settings.scrape_delay_max}
     _rate_limit_hits = {"count": 0}
     _pause_until = {"ts": 0.0}
+    # Per-outcome tally so the final log explains exactly why pages failed
+    # (connection-throttled vs 404 vs 5xx vs timeout), instead of a bare count.
+    outcomes: Counter = Counter()
 
     async def _respect_global_pause() -> None:
         loop = asyncio.get_running_loop()
@@ -139,6 +159,15 @@ async def scrape_snapshots(
             # outside the semaphore so blocked workers don't hold their slot.
             await _respect_global_pause()
 
+            # If the breaker is open (archive.org is refusing us), pause this
+            # worker instead of firing doomed requests. Bounded so a stuck-open
+            # breaker can't hang the task forever; the caller's scrape budget
+            # cancels any stragglers.
+            _breaker_waits = 0
+            while archive_health.is_open() and _breaker_waits < 15:
+                await _wait_outside_semaphore(min(archive_health.seconds_remaining() or 10, 20))
+                _breaker_waits += 1
+
             # Per-scan slot first, then the process-wide budget: a single scan
             # is bounded to max_concurrent_scrapes while the aggregate across
             # all scans never exceeds archive_global_concurrency.
@@ -170,7 +199,7 @@ async def scrape_snapshots(
                             _delay_state["min"] = min(_delay_state["min"] * 2, 2.0)
                             _delay_state["max"] = min(_delay_state["max"] * 2, 4.0)
                         elif status in (404, 410):
-                            result = {"timestamp": snap["timestamp"], "url": snap["url"], "html": None}
+                            result = {"timestamp": snap["timestamp"], "url": snap["url"], "html": None, "error": "http_404"}
                             break
                         elif status == 503:
                             if retry_after is not None:
@@ -178,16 +207,18 @@ async def scrape_snapshots(
                                 wait = min(wait, _RETRY_AFTER_CAP_SECONDS)
                             else:
                                 wait = 3 * (attempt + 1)
+                            archive_health.record_failure()
                             if attempt >= settings.scrape_max_retries:
-                                result = {"timestamp": snap["timestamp"], "url": snap["url"], "html": None}
+                                result = {"timestamp": snap["timestamp"], "url": snap["url"], "html": None, "error": "http_503"}
                                 break
                         elif status >= 500:
+                            archive_health.record_failure()
                             if attempt >= settings.scrape_max_retries:
-                                result = {"timestamp": snap["timestamp"], "url": snap["url"], "html": None}
+                                result = {"timestamp": snap["timestamp"], "url": snap["url"], "html": None, "error": "http_5xx"}
                                 break
                             wait = 3 * (attempt + 1)
                         elif status >= 400:
-                            result = {"timestamp": snap["timestamp"], "url": snap["url"], "html": None}
+                            result = {"timestamp": snap["timestamp"], "url": snap["url"], "html": None, "error": "http_4xx"}
                             break
                         else:
                             # Read with a cap so a pathological multi-MB page
@@ -207,6 +238,9 @@ async def scrape_snapshots(
                                 "html": html,
                                 "response_headers": _orig_response_headers(resp.headers),
                             }
+                            # A clean response clears the failure streak so the
+                            # breaker closes once archive.org is healthy again.
+                            archive_health.record_success()
                             # Gradually recover delays on success
                             if _delay_state["min"] > settings.scrape_delay_min:
                                 _delay_state["min"] = max(
@@ -219,14 +253,26 @@ async def scrape_snapshots(
                                 )
                             break
                 except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+                    is_throttle = isinstance(exc, _THROTTLE_ERRORS)
                     logger.debug(
                         "Scrape failed for {} (attempt {}/{}): {}",
                         url, attempt + 1, 1 + settings.scrape_max_retries, exc,
                     )
+                    if is_throttle:
+                        # Connection drop / stall = archive.org throttling us.
+                        # Feed the breaker and back off hard + globally so every
+                        # worker slows down together, exactly like a 429.
+                        archive_health.record_failure()
+                        _rate_limit_hits["count"] += 1
+                        _delay_state["min"] = min(_delay_state["min"] * 2, 2.0)
+                        _delay_state["max"] = min(_delay_state["max"] * 2, 4.0)
                     if attempt >= settings.scrape_max_retries:
-                        result = {"timestamp": snap["timestamp"], "url": snap["url"], "html": None}
+                        result = {
+                            "timestamp": snap["timestamp"], "url": snap["url"],
+                            "html": None, "error": "conn" if is_throttle else "client",
+                        }
                         break
-                    wait = 3 * (attempt + 1)
+                    wait = (8 * (attempt + 1)) if is_throttle else (3 * (attempt + 1))
 
             # Slot released. do the back-off outside so others can progress.
             if result is not None:
@@ -234,7 +280,9 @@ async def scrape_snapshots(
             await _wait_outside_semaphore(wait)
 
         if result is None:
-            result = {"timestamp": snap["timestamp"], "url": snap["url"], "html": None}
+            result = {"timestamp": snap["timestamp"], "url": snap["url"], "html": None, "error": "exhausted"}
+
+        outcomes["ok" if result.get("html") is not None else result.get("error", "failed")] += 1
 
         # Progress + delay after the slot is free.
         completed += 1
@@ -291,8 +339,15 @@ async def scrape_snapshots(
                 )
 
     success = sum(1 for r in results if r["html"] is not None)
+    dropped = total - sum(outcomes.values())
+    if dropped > 0:
+        outcomes["budget_dropped"] += dropped
+    # INFO-level breakdown so failing scans are diagnosable without DEBUG:
+    # e.g. "conn=812 http_404=90 ok=298" points straight at connection
+    # throttling vs missing captures.
+    breakdown = " ".join(f"{k}={v}" for k, v in outcomes.most_common())
     logger.info(
-        "Scraped {}/{} pages successfully (429 hits: {})",
-        success, total, _rate_limit_hits["count"],
+        "Scraped {}/{} pages successfully (429 hits: {}) [{}]",
+        success, total, _rate_limit_hits["count"], breakdown,
     )
     return list(results)

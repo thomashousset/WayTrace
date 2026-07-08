@@ -14,7 +14,6 @@ from db import save_job as _save_job_to_db
 from models import (
     DateRange,
     JobCreate,
-    JobResponse,
     JobStatus,
     PathGroup,
     PreflightResponse,
@@ -116,6 +115,12 @@ async def _persist_and_finish(job_id: str, start: float) -> None:
     """Persist the final job state to the jobs table and free the queue slot."""
     live = await store.get_job(job_id)
     if live is None:
+        return
+    if live.get("status") == "cancelled":
+        # The user deleted this scan while it was still running. Persisting it
+        # now would re-insert the row that delete_scan just hard-deleted (and
+        # revive it with a fresh 7-day expiry). Free the slot and stop.
+        await store.finish_job(job_id, duration_seconds=time.time() - start)
         return
     now = datetime.now(timezone.utc)
     try:

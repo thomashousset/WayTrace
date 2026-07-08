@@ -40,6 +40,9 @@ _TRACKED_HEADERS: list[tuple[str, str, int]] = [
     ("x-drupal-dynamic-cache",       "drupal_dynamic", 80),
     ("x-backend-server",             "backend",       200),
     ("x-pingback",                   "pingback",      300),
+    ("x-litespeed-cache",            "litespeed_cache", 80),
+    ("x-runtime",                    "runtime",        80),
+    ("x-turbo-charged-by",           "litespeed_lscache", 120),
 ]
 
 

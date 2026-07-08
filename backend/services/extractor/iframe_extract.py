@@ -10,6 +10,7 @@ from selectolax.parser import HTMLParser
 # classifications (google_maps) check the URL path after hostname match.
 _SERVICE_MAP: list[tuple[str, str]] = [
     ("youtube.com", "youtube"),
+    ("youtube-nocookie.com", "youtube"),
     ("youtu.be", "youtube"),
     ("vimeo.com", "vimeo"),
     ("google.com", "google_maps"),   # narrowed to /maps in path below

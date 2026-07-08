@@ -9,6 +9,7 @@ _SOCIAL_DOMAINS: dict[str, str] = {
     "x.com": "x",
     "linkedin.com": "linkedin",
     "facebook.com": "facebook",
+    "fb.com": "facebook",
     "instagram.com": "instagram",
     "youtube.com": "youtube",
     "youtu.be": "youtube",
@@ -133,6 +134,11 @@ def extract_outgoing_links(html: str, domain: str, tree: HTMLParser | None = Non
         # Skip fragment-only, javascript, mailto, tel
         if any(href.startswith(scheme) for scheme in _SKIP_SCHEMES) or href == "#":
             continue
+
+        # Protocol-relative URLs (//host/path) are absolute; give them a scheme
+        # so they are treated as real outgoing links, not skipped as relative.
+        if href.startswith("//"):
+            href = "https:" + href
 
         # Skip relative links (no scheme)
         if "://" not in href:

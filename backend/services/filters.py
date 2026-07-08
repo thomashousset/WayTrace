@@ -503,7 +503,9 @@ async def select_snapshots_in_db(
             seen = set()
             filtered = []
             for s in snapshots:
-                path = urlparse(s["url"]).path or "/"
+                # Use the same normalized path key as filter_snapshots so both
+                # pipelines dedup identically (e.g. '/A/' and '/a' collapse).
+                path = _normalize_path(s["url"])
                 key = (path, s["digest"])
                 if key in seen:
                     deduped_count += 1

@@ -7,10 +7,10 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 from loguru import logger
 
-from config import settings
+from config import settings, APP_VERSION
 from db import init_db
 from routers import health, scan
 from routers import collect as collect_router
@@ -58,7 +58,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="WayTrace",
     description="OSINT tool using the Wayback Machine to reconstruct domain history",
-    version="1.0.0",
+    version=APP_VERSION,
     lifespan=lifespan,
     # No public API discoverability in prod. The OpenAPI schema lists the
     # legacy /api/collect / /api/analyze admin-facing endpoints that we don't
@@ -75,7 +75,7 @@ app.add_middleware(
     # turning on a whole class of CORS attacks the moment someone later
     # adds a session.
     allow_credentials=False,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["Content-Type", "Accept"],
 )
 
@@ -149,9 +149,11 @@ async def serve_manifest():
 
 @app.get("/robots.txt", include_in_schema=False)
 async def serve_robots():
-    return FileResponse(FRONTEND_DIR / "robots.txt", media_type="text/plain") \
-        if (FRONTEND_DIR / "robots.txt").exists() else \
-        FileResponse(FRONTEND_DIR / "icons" / "favicon.ico")  # 404-ish fallback
+    robots = FRONTEND_DIR / "robots.txt"
+    if robots.exists():
+        return FileResponse(robots, media_type="text/plain")
+    # Sensible default rather than serving a binary icon as robots.txt.
+    return PlainTextResponse("User-agent: *\nAllow: /\n")
 
 
 @app.get("/")

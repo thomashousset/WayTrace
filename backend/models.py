@@ -171,10 +171,6 @@ class JobCreate(BaseModel):
         return _normalize_domain(v)
 
 
-class JobResponse(BaseModel):
-    job_id: str
-
-
 class ScanCreateResponse(BaseModel):
     """v2 scan submission response, public-facing url_id + queue info."""
     job_id: str
@@ -205,6 +201,7 @@ class HealthResponse(BaseModel):
     status: str
     active_jobs: int
     uptime_seconds: float
+    version: str
 
 
 class StatsResponse(BaseModel):

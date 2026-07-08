@@ -4,6 +4,7 @@ import time
 
 from fastapi import APIRouter
 
+from config import APP_VERSION
 from models import HealthResponse, StatsResponse
 from services import archive_health
 from store import store
@@ -25,6 +26,7 @@ async def health():
         status="ok",
         active_jobs=active,
         uptime_seconds=round(time.monotonic() - _start_time, 1),
+        version=APP_VERSION,
     )
 
 

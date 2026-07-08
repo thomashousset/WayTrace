@@ -30,7 +30,9 @@ _HOTJAR_HJID_RE = re.compile(r"hjid\s*[:=]\s*['\"]?(\d{5,8})['\"]?")
 _HOTJAR_URL_RE = re.compile(r"static\.hotjar\.com/c/hotjar-(\d{5,8})")
 
 # Matomo (formerly Piwik)
-_MATOMO_SITE_RE = re.compile(r"setSiteId\(\s*['\"]*(\d{1,6})['\"]*\s*\)")
+# Matches both setSiteId(7) / setSiteId('7') and the _paq.push(["setSiteId","7"])
+# array form used by the standard Matomo JS snippet.
+_MATOMO_SITE_RE = re.compile(r"setSiteId['\"]?\s*[,(]\s*['\"]?(\d{1,6})")
 _MATOMO_URL_RE = re.compile(r"piwik\.php\?idsite=(\d{1,6})")
 _MATOMO_URL_RE2 = re.compile(r"matomo\.php\?idsite=(\d{1,6})")
 

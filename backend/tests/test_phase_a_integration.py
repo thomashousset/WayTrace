@@ -47,12 +47,39 @@ def test_favicons_extracted():
 def test_outgoing_links_extracted():
     pages = [{"html": RICH_HTML, "url": "http://example.com/", "timestamp": "20230615120000"}]
     results = extract_all(pages, "example.com")
-    assert len(results["outgoing_links"]) >= 3
+    # Social links are deduped into Social profiles; Outgoing links keeps only
+    # non-social external domains (single source of truth per RETEX n2).
     cats = {o["category"] for o in results["outgoing_links"]}
-    assert "social" in cats
+    assert "social" not in cats
     assert "other" in cats
-    services = {o["service"] for o in results["outgoing_links"] if o["service"]}
-    assert "discord" in services
+    assert any(o["domain"] == "partner-site.com" for o in results["outgoing_links"])
+    # The social links (twitter/github/discord) now surface under Social profiles.
+    social_services = {s["platform"] for s in results["social_profiles"]}
+    assert {"twitter", "github", "discord"} <= social_services
+
+
+def test_fbcom_routed_to_social_not_persons():
+    # RETEX n2: fb.com is the facebook shortener; a fb.com profile URL must be
+    # a Social profile, and a Facebook URL sitting in <meta author> must not
+    # leak into Named persons.
+    html = (
+        '<html><head>'
+        '<meta name="author" content="http://fb.com/john.doe">'
+        '</head><body>'
+        '<a href="http://fb.com/john.doe">Our page</a>'
+        '<a href="https://www.pinterest.com/astroriahd/">Pinterest</a>'
+        '</body></html>'
+    )
+    pages = [{"html": html, "url": "http://example.com/", "timestamp": "20230615120000"}]
+    results = extract_all(pages, "example.com")
+    social = {s["platform"] for s in results["social_profiles"]}
+    assert "facebook" in social
+    assert "pinterest" in social
+    # No person value should be a URL, and the fb handle must not be a person.
+    for p in results["persons"]:
+        assert "/" not in p["name"] and "fb.com" not in p["name"].lower()
+    # Social links are not duplicated in outgoing.
+    assert not any(o["category"] == "social" for o in results["outgoing_links"])
 
 
 def test_hosting_detected():
