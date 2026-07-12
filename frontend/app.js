@@ -902,7 +902,7 @@ function renderPublicScan(job) {
     // all the wall-clock time). No arbitrary phase floor. Kept monotonic.
     const m = (job.step || '').match(/(\d+)\s*\/\s*(\d+)/);
     const now = Date.now();
-    let barHtml;
+    let stepTxt, pctTxt = '', etaTxt = '', fillPct = null;   // fillPct null => indeterminate
     if (m) {
       const done = +m[1], total = Math.max(+m[2], 1);
       let p = Math.round((done / total) * 98);           // 0 -> 98%, real pages
@@ -917,27 +917,49 @@ function renderPublicScan(job) {
         _runStats.lastDone = done; _runStats.lastTime = now;
       }
       const remaining = Math.max(0, total - done);
-      const etaTxt = (_runStats.rate > 0 && remaining > 0)
+      stepTxt = t('Scraped {done} / {total} archived pages').replace('{done}', done).replace('{total}', total);
+      pctTxt = p + '%';
+      etaTxt = (_runStats.rate > 0 && remaining > 0)
         ? _fmtEtaSecs(Math.round(remaining / _runStats.rate)) : t('estimating…');
-      barHtml = `
-        <div class="pub-run-step">${esc(t('Scraped {done} / {total} archived pages').replace('{done}', done).replace('{total}', total))}</div>
-        <div class="pub-run-pct">${p}%</div>
-        <div class="pub-run-bar"><div class="pub-run-bar-fill" style="width:${p}%;"></div></div>
-        <div class="pub-run-eta">${esc(etaTxt)}</div>`;
+      fillPct = p;
     } else {
       // Setup phase (querying archive.org, selecting): honest indeterminate bar.
-      barHtml = `
-        <div class="pub-run-step">${esc(job.step || t('Preparing scan…'))}</div>
-        <div class="pub-run-bar indeterminate"><div class="pub-run-bar-fill"></div></div>`;
+      stepTxt = job.step || t('Preparing scan…');
     }
-    body.innerHTML = `
-      <div class="pub-state-card">
-        <div class="pub-run-spinner" aria-hidden="true"></div>
-        ${barHtml}
-      </div>
-      ${renderPrivacyCard(job)}
-    `;
-    wireCopyShareLink();
+    // Build the running scaffold ONCE, then patch only the dynamic text/width on
+    // every poll. Rebuilding innerHTML each tick recreated the spinner node (its
+    // rotation restarted from 0deg -> the visible stutter) and reset the bar's
+    // width transition. Keeping the nodes alive lets both animate smoothly.
+    let live = body.querySelector('.pub-run-live');
+    if (!live) {
+      body.innerHTML = `
+        <div class="pub-state-card pub-run-live">
+          <div class="pub-run-spinner" aria-hidden="true"></div>
+          <div class="pub-run-step"></div>
+          <div class="pub-run-pct"></div>
+          <div class="pub-run-bar"><div class="pub-run-bar-fill"></div></div>
+          <div class="pub-run-eta"></div>
+        </div>
+        ${renderPrivacyCard(job)}
+      `;
+      wireCopyShareLink();
+      live = body.querySelector('.pub-run-live');
+    }
+    const stepEl = live.querySelector('.pub-run-step');
+    const pctEl  = live.querySelector('.pub-run-pct');
+    const barEl  = live.querySelector('.pub-run-bar');
+    const fillEl = live.querySelector('.pub-run-bar-fill');
+    const etaEl  = live.querySelector('.pub-run-eta');
+    stepEl.textContent = stepTxt;
+    pctEl.textContent = pctTxt;  pctEl.style.display = pctTxt ? '' : 'none';
+    etaEl.textContent = etaTxt;  etaEl.style.display = etaTxt ? '' : 'none';
+    if (fillPct === null) {
+      barEl.classList.add('indeterminate');
+      fillEl.style.width = '';
+    } else {
+      barEl.classList.remove('indeterminate');
+      fillEl.style.width = fillPct + '%';
+    }
   } else if (status === 'completed') {
     // Clear the loading skeleton (this view is about to be hidden) and switch
     // to the rich results view via the adapter.
@@ -3483,15 +3505,14 @@ function renderResultsHeader(info) {
         + `<b>${n(scr)}</b> pages ont été récupérées et analysées`
         + (gaps ? `, <b>${n(gaps)}</b> n'étaient plus disponibles côté archive (lacunes d'archive)` : '')
         + (dedup ? `, <b>${n(dedup)}</b> doublons ignorés` : '')
+        + (blocked ? `, <b>${n(blocked)}</b> pages non récupérées (archive.org limitait le débit)` : '')
         + `${range ? `, couvrant ${esc(range)}` : ''}.`
       : `Of ${found ? `<b>${n(found)}</b> archived snapshots` : 'the archived snapshots'}, `
         + `<b>${n(scr)}</b> pages were retrieved and analysed`
         + (gaps ? `, <b>${n(gaps)}</b> were no longer available from the archive (archive gaps)` : '')
         + (dedup ? `, <b>${n(dedup)}</b> duplicates skipped` : '')
+        + (blocked ? `, <b>${n(blocked)}</b> pages archive.org rate-limited this run` : '')
         + `${range ? `, spanning ${esc(range)}` : ''}.`;
-    const blockedWarn = blocked ? (LANG === 'fr'
-      ? `Archive.org a bloqué ce serveur pendant le scan : <b>${n(blocked)}</b> pages n'ont pas pu être récupérées, les résultats sont peut-être incomplets. Réessayez plus tard.`
-      : `Archive.org blocked this server during the scan: <b>${n(blocked)}</b> pages could not be fetched, so results may be incomplete. Try again later.`) : '';
     el.innerHTML =
       `<div class="rm-line">`
       + `<span class="rm-stat"><span class="rm-num">${n(fnd)}</span> ${t('findings')}</span>`
@@ -3499,8 +3520,7 @@ function renderResultsHeader(info) {
       + `<span class="rm-stat"><span class="rm-num">${n(scr)}</span> ${t('pages scraped')}</span>`
       + (range ? `<span class="rm-range">${esc(range)}</span>` : '')
       + `</div>`
-      + `<div class="rm-explain">${explain}</div>`
-      + (blockedWarn ? `<div class="rm-warn">${blockedWarn}</div>` : '');
+      + `<div class="rm-explain">${explain}</div>`;
   } else {
     const crawl = info.crawl || {};
     const parts = [];

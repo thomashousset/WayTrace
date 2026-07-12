@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Single source of truth for the tool version, surfaced in the API (/api/health,
 # OpenAPI) and injected into the frontend footer.
-APP_VERSION = "1.3.0"
+APP_VERSION = "1.5.0"
 
 # Shared User-Agent for every archive.org request (CDX collector, page scraper,
 # favicon fetcher). One polite identity so the Internet Archive can attribute
@@ -35,13 +35,21 @@ class Settings(BaseSettings):
     # IP is never pushed past archive.org's (dynamic, unpublished) tolerance.
     # archive_rate_per_minute is the STARTING rate; _max is the hard ceiling it
     # may probe up to. Values are requests per minute.
-    archive_rate_per_minute: int = 90     # start: 1.5 req/s (proven safe)
+    archive_rate_per_minute: int = 75     # start: 1.25 req/s
     archive_rate_min: int = 60            # floor: 1 req/s
-    archive_rate_max: int = 150           # ceiling: 2.5 req/s (well below the 4/s that got throttled)
+    archive_rate_max: int = 80            # ceiling: ~1.33 req/s (below the ~105/min that got refused on 2600.eu)
     archive_rate_step: int = 15           # additive increase: +0.25 req/s per bump
     archive_rate_increase_interval: float = 90.0   # seconds clean before a bump
     archive_rate_decrease_factor: float = 0.5      # multiplicative decrease on a refusal
     archive_rate_burst: int = 6
+    # Hard-block (connection-refusal) cooldown ESCALATION. A first refusal is
+    # usually a temporary, rate-based reject that clears in seconds, so the first
+    # pause is short; it only lengthens if refusals keep recurring close together
+    # (the signature of a real block). cooldown = base * 2**streak, capped at max;
+    # a quiet gap longer than _streak_reset resets the streak to 0.
+    archive_hard_cooldown_base: int = 120     # 2 min: first hard-block pause
+    archive_hard_cooldown_max: int = 1800     # 30 min: ceiling for repeated blocks
+    archive_hard_streak_reset: int = 900      # 15 min quiet since last block = fresh incident
     job_ttl_seconds: int = 7200
     max_active_jobs: int = 10
 
@@ -49,9 +57,9 @@ class Settings(BaseSettings):
     # 2 running at once so the aggregate archive.org load stays low (politeness,
     # not a memory limit) and extra scans queue rather than pile on. The global
     # rate limiter above is the real ceiling regardless of this.
-    max_active_total: int = 2
-    max_queue_total: int = 20
-    max_active_per_ip: int = 3
+    max_active_total: int = 1
+    max_queue_total: int = 15
+    max_active_per_ip: int = 1
     # Hard ceiling on snapshots scanned per scan on the HOSTED service, to keep
     # archive.org load bounded and scans fast. The selection stays representative
     # (year-proportional). Set to 0 to disable the ceiling entirely — that's the

@@ -18,6 +18,8 @@ def _reset_archive_singletons():
             _ah._latencies.clear()
             _ah._open_until = 0.0
             _ah._tripped_hard = False
+            _ah._hard_streak = 0
+            _ah._last_hard_trip_at = 0.0
             _ah._last_latency = 0.0
             _ah._last_latency_at = 0.0
 

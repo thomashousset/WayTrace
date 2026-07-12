@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.5.0
+
+- **Rate ceiling pinned below the refusal point.** The adaptive governor's ceiling drops from 150 to **80 req/min** (starting at 75): after a dense scan measured archive.org refusing TCP connections once the self-tuned rate crept to ~105/min, the governor can no longer climb into that zone. The floor/burst behaviour is unchanged.
+- **Escalating hard-block cooldown.** A connection refusal used to pause scanning for a flat 30 minutes — far too long for what is usually a temporary, rate-based reject that clears in seconds. The pause is now **2 minutes on a first/isolated refusal** and only doubles (capped at 30 min) when refusals recur back-to-back within 15 minutes, i.e. the signature of a real block. Refusals are now logged at WARNING (were invisible at the default log level).
+- **One scan at a time.** The public queue runs a **single scan at a time** with a **15-deep** waiting queue and **one in-flight scan per client**, so aggregate archive.org load stays minimal and no single user can stack scans.
+- **UX.** The scan-progress spinner no longer stutters (its animation was restarting on every status poll). The alarming red "blocked" banner is gone — the count of pages archive.org rate-limited is folded into the neutral scan-summary line instead.
+
 ## v1.3.0
 
 - **Self-governing archive.org request rate.** A process-wide governor bounds every archive.org call (page scrape, CDX enumeration, favicon) to both a shared request rate and a shared concurrency limit, so no number of parallel scans or users can burst past archive.org's tolerance. The rate is not a fixed guess: it **adapts** (AIMD, like TCP congestion control) - it starts conservative, creeps up while responses stay clean, and halves the instant archive.org refuses a connection, staying within a safe floor/ceiling. This keeps the server IP from being throttled or blocked.

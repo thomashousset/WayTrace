@@ -13,6 +13,8 @@ from __future__ import annotations
 import threading
 import time
 
+from config import settings
+
 _FAIL_WINDOW = 120        # seconds: failures are counted within this window
 _FAIL_THRESHOLD = 5       # this many soft failures (timeout/429/5xx) trips it
 _COOLDOWN = 180           # seconds the breaker stays open after a soft trip
@@ -22,7 +24,9 @@ _COOLDOWN = 180           # seconds the breaker stays open after a soft trip
 # refused IP will not recover in 3 minutes, and every retry only confirms the
 # block, so we trip fast and stay closed for a long cooldown.
 _HARD_FAIL_THRESHOLD = 2  # this many refusals in the window = "we are blocked"
-_HARD_COOLDOWN = 1800     # 30 min: give the IP real time to be un-blocked
+# Hard-block cooldown is now dynamic (escalating) - see settings.archive_hard_*
+# and record_hard_block(): short on a first/isolated refusal, longer only when
+# refusals recur close together.
 
 # "Slow mode" is advisory UX only (the breaker is the real ban protection). It
 # must reflect SUSTAINED slowness, not archive.org's normal per-request jitter:
@@ -40,6 +44,8 @@ _fails: list[float] = []
 _hard_fails: list[float] = []
 _open_until: float = 0.0
 _tripped_hard: bool = False
+_hard_streak: int = 0            # consecutive hard-block trips (drives cooldown escalation)
+_last_hard_trip_at: float = 0.0
 _last_latency: float = 0.0
 _last_latency_at: float = 0.0
 _latencies: list[tuple[float, float]] = []  # (timestamp, seconds), recent only
@@ -87,15 +93,28 @@ def record_failure() -> None:
 
 def record_hard_block() -> None:
     """Log a connection REFUSAL (TCP reject) - the signature of an IP block.
-    Trips fast and for a long cooldown so we stop hammering a blocked IP."""
-    global _open_until, _tripped_hard
+    Trips after _HARD_FAIL_THRESHOLD refusals. The cooldown ESCALATES only when
+    trips recur inside archive_hard_streak_reset: a first/isolated refusal
+    (usually temporary rate-limiting that clears in seconds) pauses briefly;
+    repeated back-to-back refusals (a real block) pause progressively longer,
+    capped at archive_hard_cooldown_max."""
+    global _open_until, _tripped_hard, _hard_streak, _last_hard_trip_at
     now = time.time()
     with _lock:
         _hard_fails[:] = [t for t in _hard_fails if t > now - _FAIL_WINDOW]
         _hard_fails.append(now)
         if len(_hard_fails) >= _HARD_FAIL_THRESHOLD:
-            _open_until = now + _HARD_COOLDOWN
+            if _last_hard_trip_at and (now - _last_hard_trip_at) <= settings.archive_hard_streak_reset:
+                _hard_streak += 1
+            else:
+                _hard_streak = 0
+            cooldown = min(
+                settings.archive_hard_cooldown_max,
+                settings.archive_hard_cooldown_base * (2 ** _hard_streak),
+            )
+            _open_until = now + cooldown
             _tripped_hard = True
+            _last_hard_trip_at = now
             _hard_fails.clear()
             _fails.clear()
 

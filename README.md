@@ -25,13 +25,14 @@ The interface is fully bilingual (English / French), switchable from the navbar.
 
 ---
 
-## What's new in v1.3.0
+## What's new in v1.5.0
 
-- **Self-governing, IP-safe archive.org access.** Every request goes through a shared, *adaptive* rate governor (AIMD, like TCP congestion control: it creeps up while responses stay clean and halves on the first connection-refusal) plus a shared concurrency limit — so no number of parallel scans or users can push the server IP past archive.org's tolerance. A hard IP block is detected and backed off from immediately.
+- **Self-governing, IP-safe archive.org access.** Every request goes through a shared, *adaptive* rate governor (AIMD, like TCP congestion control: it creeps up while responses stay clean and halves on the first connection-refusal) plus a shared concurrency limit — so no number of parallel scans or users can push the server IP past archive.org's tolerance. v1.5 pins the ceiling at **80 req/min** (below the point archive.org was measured refusing connections) and makes a hard-block pause **escalate from 2 minutes** instead of a flat 30, so a temporary reject is cheap.
+- **One scan at a time.** A single active scan, a 15-deep queue, and one in-flight scan per client keep aggregate archive.org load minimal.
 - **Full-text search over page content** (from v1.2.0): search any word across a scan's archived pages, not just the extracted pivots, with highlighted excerpts and links to the Wayback capture.
-- **Leaner codebase & UX polish:** loading progress now tracks real pages scraped with a measured ETA, a bilingual archive.org status banner, self-describing result categories, and a lot of dead code removed.
+- **UX polish:** honest loading progress (real pages scraped + measured ETA, no stutter), a bilingual archive.org status banner, self-describing result categories, and a lot of dead code removed.
 
-See [CHANGELOG.md](CHANGELOG.md) for the full history (v1.0 → v1.3).
+See [CHANGELOG.md](CHANGELOG.md) for the full history (v1.0 → v1.5).
 
 ---
 

@@ -25,13 +25,14 @@ L'interface est entièrement bilingue (anglais / français), basculable depuis l
 
 ---
 
-## Nouveautés de la v1.3.0
+## Nouveautés de la v1.5.0
 
-- **Accès archive.org auto-régulé, sûr pour l'IP.** Chaque requête passe par un gouverneur de débit *adaptatif* partagé (AIMD, comme le contrôle de congestion TCP : il monte doucement tant que les réponses restent propres et se divise par deux au premier refus de connexion) plus une limite de concurrence partagée — donc aucun nombre de scans ou d'utilisateurs simultanés ne peut pousser l'IP du serveur au-delà de la tolérance d'archive.org. Un blocage d'IP dur est détecté et évité immédiatement.
+- **Accès archive.org auto-régulé, sûr pour l'IP.** Chaque requête passe par un gouverneur de débit *adaptatif* partagé (AIMD, comme le contrôle de congestion TCP : il monte doucement tant que les réponses restent propres et se divise par deux au premier refus de connexion) plus une limite de concurrence partagée. La v1.5 fixe le plafond à **80 req/min** (sous le seuil où archive.org a été mesuré refusant les connexions) et fait **démarrer une pause de blocage à 2 minutes** au lieu de 30 fixes, escaladant seulement sur refus consécutifs — un refus passager coûte donc peu.
+- **Un seul scan à la fois.** Un scan actif unique, une file d'attente de 15, et un scan en cours max par client gardent la charge archive.org minimale.
 - **Recherche plein-texte dans le contenu des pages** (depuis la v1.2.0) : cherchez n'importe quel mot dans les pages archivées d'un scan, pas seulement les pivots extraits, avec extraits surlignés et liens vers la capture Wayback.
-- **Code allégé & finitions UX :** la progression de chargement suit désormais les vraies pages récupérées avec une ETA mesurée, une bannière d'état archive.org bilingue, des catégories de résultats auto-descriptives, et beaucoup de code mort retiré.
+- **Finitions UX :** progression de chargement honnête (vraies pages récupérées + ETA mesurée, sans hoquet), bannière d'état archive.org bilingue, catégories de résultats auto-descriptives, et beaucoup de code mort retiré.
 
-Voir [CHANGELOG.md](CHANGELOG.md) pour l'historique complet (v1.0 → v1.3).
+Voir [CHANGELOG.md](CHANGELOG.md) pour l'historique complet (v1.0 → v1.5).
 
 ---
 

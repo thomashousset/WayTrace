@@ -283,6 +283,11 @@ async def scrape_snapshots(
                         url, attempt + 1, 1 + settings.scrape_max_retries, exc,
                     )
                     if _is_connection_refused(exc):
+                        logger.warning(
+                            "archive.org REFUSED the connection for {} (errno 111) "
+                            "- adaptive_rate={}/min. Backing off + feeding the breaker.",
+                            url, archive_rate.current_rate_per_minute(),
+                        )
                         # Our IP is being refused: this is a block, not a blip.
                         # Halve the adaptive rate at once, feed the hard-block
                         # breaker, and stop immediately - retrying only confirms
