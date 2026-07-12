@@ -87,3 +87,25 @@ async def test_persist_and_finish_noop_for_unknown_job(fresh_db, monkeypatch):
 
     await scan_module._persist_and_finish("nope", 0.0)
     # Should not raise; DB should remain empty
+
+
+@pytest.mark.asyncio
+async def test_persist_and_finish_skips_cancelled_job(fresh_db, monkeypatch):
+    # A scan the user deleted while it was running (status=cancelled) must NOT
+    # be re-persisted: that would resurrect the row delete_scan removed, with a
+    # fresh 7-day expiry, back into My scans / the feed.
+    import store as store_module
+    import routers.scan as scan_module
+    fresh = JobStore()
+    monkeypatch.setattr(store_module, "store", fresh)
+    monkeypatch.setattr(scan_module, "store", fresh)
+
+    res = await fresh.create_job("gone.com", "3.3.3.3")
+    await fresh.update_job(res["job_id"], status="cancelled", step="Cancelled")
+
+    await scan_module._persist_and_finish(res["job_id"], 0.0)
+
+    # Not written to the DB, and the per-IP slot is still freed.
+    assert await get_job_by_url_id(res["url_id"]) is None
+    assert fresh.per_ip_count.get("3.3.3.3", 0) == 0
+    assert res["job_id"] not in fresh.active

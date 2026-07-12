@@ -89,6 +89,29 @@ async def test_scan_rejects_url(client):
 
 
 @pytest.mark.anyio
+async def test_scan_rejects_foreign_snapshot_url(client):
+    # A selected snapshot on a different host must be rejected (no fetching an
+    # unrelated domain through Wayback).
+    resp = await client.post("/api/scan", json={
+        "domain": "example.com",
+        "selected_snapshots": [{"timestamp": "20200101000000", "url": "http://evil.com/x"}],
+    })
+    assert resp.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_scan_accepts_own_domain_and_subdomain_snapshots(client):
+    resp = await client.post("/api/scan", json={
+        "domain": "example.com",
+        "selected_snapshots": [
+            {"timestamp": "20200101000000", "url": "http://example.com/a"},
+            {"timestamp": "20200101000000", "url": "http://blog.example.com/b"},
+        ],
+    })
+    assert resp.status_code == 200
+
+
+@pytest.mark.anyio
 async def test_scan_rejects_ip(client):
     resp = await client.post("/api/scan", json={"domain": "192.168.1.1"})
     assert resp.status_code == 422

@@ -173,3 +173,36 @@ async def test_global_pause_shared_across_workers(monkeypatch):
     assert len(successes) == 2
     # The global pause was installed and respected
     assert any(s >= 5.0 for s in sleeps)
+
+
+def _conn_error_response():
+    """A response whose context-manager entry raises a connection-level error,
+    simulating archive.org dropping the TCP connection (its real throttle)."""
+    resp = AsyncMock()
+    err = scraper.aiohttp.ClientConnectorError(MagicMock(), OSError("connection refused"))
+    resp.__aenter__ = AsyncMock(side_effect=err)
+    resp.__aexit__ = AsyncMock(return_value=False)
+    return resp
+
+
+@pytest.mark.asyncio
+async def test_connection_error_feeds_breaker_and_tags_conn(monkeypatch):
+    from services import archive_health
+    archive_health.record_success()  # ensure breaker closed / streak reset
+    fails = {"n": 0}
+    monkeypatch.setattr(archive_health, "record_failure", lambda: fails.__setitem__("n", fails["n"] + 1))
+    monkeypatch.setattr(archive_health, "is_open", lambda: False)
+
+    sleeps: list[float] = []
+    # scrape_max_retries=2 -> 3 attempts, all raising a connection error.
+    responses = [_conn_error_response() for _ in range(3)]
+    _install_scraper_patches(monkeypatch, sleeps, responses)
+
+    results = await scraper.scrape_snapshots(
+        [{"timestamp": "20200101000000", "url": "http://example.com/"}], "job-conn"
+    )
+
+    assert results[0]["html"] is None
+    assert results[0].get("error") == "conn"          # tagged as connection throttle
+    assert fails["n"] >= 1                              # fed the circuit breaker
+    assert any(s >= 8 for s in sleeps)                 # coordinated hard back-off (8*(attempt+1))

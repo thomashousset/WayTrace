@@ -13,9 +13,6 @@ from loguru import logger
 from config import settings, APP_VERSION
 from db import init_db
 from routers import health, scan
-from routers import collect as collect_router
-from routers import analyze as analyze_router
-from routers import domains as domains_router
 from routers import public as public_router
 from services.background_tasks import queue_worker_loop, cleanup_loop
 from store import store
@@ -121,9 +118,6 @@ async def security_headers(request, call_next):
 
 app.include_router(scan.router)
 app.include_router(health.router)
-app.include_router(collect_router.router)
-app.include_router(analyze_router.router)
-app.include_router(domains_router.router)
 app.include_router(public_router.router)
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
@@ -154,6 +148,16 @@ async def serve_robots():
         return FileResponse(robots, media_type="text/plain")
     # Sensible default rather than serving a binary icon as robots.txt.
     return PlainTextResponse("User-agent: *\nAllow: /\n")
+
+
+@app.get("/styles.css", include_in_schema=False)
+async def serve_styles():
+    return FileResponse(FRONTEND_DIR / "styles.css", media_type="text/css")
+
+
+@app.get("/app.js", include_in_schema=False)
+async def serve_app_js():
+    return FileResponse(FRONTEND_DIR / "app.js", media_type="text/javascript")
 
 
 @app.get("/")

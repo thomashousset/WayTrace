@@ -24,7 +24,13 @@ The interface is fully bilingual (English / French), switchable from the navbar.
 
 ---
 
-## What's new in v1.1.0
+## What's new in v1.2.0
+
+- **Full-text search over page content.** Search any word across a scan's archived pages (not only the extracted pivots), with highlighted excerpts and links to the Wayback capture. Accent-insensitive.
+- **Single, simpler scan pipeline** and a round of **security hardening** (ReDoS fix, spoof-resistant client-IP, domain-scoped snapshots, production secret guard) and **reliability** (backs off on archive.org connection throttling, not only HTTP 429).
+- **Accessibility & privacy.** WCAG-AA contrast, keyboard-operable favicon tiles, and the Google favicon fallback removed (it leaked the investigated domain — only archive.org is contacted).
+
+### Earlier, in v1.1.0
 
 - **Private by default.** New scans are private; publishing to the public feed is an explicit opt-in.
 - **Delete a scan.** Remove a scan entirely, from your list and from the public feed.

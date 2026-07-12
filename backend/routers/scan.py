@@ -4,6 +4,7 @@ import asyncio
 import json
 import time
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -11,6 +12,8 @@ from loguru import logger
 
 from config import settings
 from db import save_job as _save_job_to_db
+from db import index_scan_pages
+from selectolax.parser import HTMLParser
 from models import (
     DateRange,
     JobCreate,
@@ -36,6 +39,24 @@ from services.scraper import scrape_snapshots
 from store import store, PerIpLimitError, QueueFullError
 
 router = APIRouter(prefix="/api", tags=["scan"])
+
+
+def _visible_text(html: str | None) -> str:
+    """Extract the human-visible text of a page for full-text indexing.
+
+    Drops script/style/template noise so a search for a word matches page copy,
+    not inlined JS. Best-effort: any parse error yields an empty string.
+    """
+    if not html:
+        return ""
+    try:
+        tree = HTMLParser(html)
+        for node in tree.css("script, style, noscript, template"):
+            node.decompose()
+        root = tree.body or tree.root
+        return root.text(separator=" ", strip=True) if root is not None else ""
+    except Exception:
+        return ""
 
 
 # ---------------------------------------------------------------------------
@@ -255,6 +276,21 @@ async def _scan_pipeline(
             logger.debug("favicon hashing skipped: {}", exc)
         results["highlights"] = compute_highlights(results, domain)
 
+        # Index the visible text of each scraped page for full-text search
+        # (search the archived CONTENT, not just the pivots). Best-effort and
+        # capped; never fatal to the scan.
+        try:
+            live = await store.get_job(job_id)
+            _uid = live.get("url_id") if live else None
+            if _uid:
+                fts_rows = [
+                    (p.get("timestamp", ""), p.get("url", ""), _visible_text(p.get("html")))
+                    for p in pages if p.get("html")
+                ]
+                await index_scan_pages(_uid, fts_rows)
+        except Exception as exc:
+            logger.debug("page-text indexing skipped for job {}: {}", job_id, exc)
+
         duration = round(time.time() - start, 1)
         meta = {
             "domain": domain,
@@ -469,6 +505,17 @@ async def create_scan(body: JobCreate, request: Request):
 
     sel_snaps = None
     if body.selected_snapshots:
+        # Every selected snapshot must belong to the scanned domain (or a
+        # subdomain). Otherwise a client could hand-craft a request to make the
+        # server fetch archived copies of an unrelated host through Wayback.
+        dom = body.domain.lower()
+        for s in body.selected_snapshots:
+            host = (urlparse(s.url).hostname or "").lower()
+            if not (host == dom or host.endswith("." + dom)):
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Snapshot URL is not on the scanned domain: {s.url}",
+                )
         sel_snaps = [{"timestamp": s.timestamp, "url": s.url} for s in body.selected_snapshots]
 
     # Bound the scan to the hosted ceiling (no-op when self-hosted/local).

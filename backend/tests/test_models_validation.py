@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from models import CollectRequest, JobCreate, ScanConfig, SnapshotRef
+from models import JobCreate, ScanConfig, SnapshotRef
 
 
 # ------ SnapshotRef ------------------------------------------------------
@@ -87,8 +87,3 @@ def test_job_create_rejects_extra_field():
         JobCreate(domain="example.com", admin=True)
 
 
-# ------ CollectRequest ---------------------------------------------------
-
-def test_collect_request_rejects_extra():
-    with pytest.raises(ValidationError):
-        CollectRequest(domain="example.com", debug=True)

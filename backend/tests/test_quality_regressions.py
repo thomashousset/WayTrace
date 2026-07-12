@@ -372,29 +372,6 @@ def test_api_key_oauth_client_tier_public():
     assert matched[0]["tier"] == "public"
 
 
-def test_cdx_depth_budgets_monotonic():
-    """quick must be cheaper than standard, standard than full, etc.
-    Without these guards a quick scan on stripe.com / wordpress.org
-    pulls 250k CDX rows just to throw 99.9% away."""
-    from services.collector import cdx_budget_for_depth
-    snaps_q, secs_q = cdx_budget_for_depth("quick")
-    snaps_s, secs_s = cdx_budget_for_depth("standard")
-    snaps_f, secs_f = cdx_budget_for_depth("full")
-    snaps_m, secs_m = cdx_budget_for_depth("max")
-    assert snaps_q < snaps_s < snaps_f < snaps_m
-    assert secs_q < secs_s < secs_f < secs_m
-    # quick must stay under 2 minutes wall-clock so a UI user doesn't
-    # bail before getting a single snapshot.
-    assert secs_q <= 120
-    # quick should never pull more than ~10x the typical eventual download.
-    assert snaps_q <= 10_000
-
-
-def test_cdx_depth_budgets_unknown_falls_back_to_standard():
-    from services.collector import cdx_budget_for_depth
-    snaps, secs = cdx_budget_for_depth("nonexistent_preset")
-    snaps_s, secs_s = cdx_budget_for_depth("standard")
-    assert snaps == snaps_s and secs == secs_s
 
 
 def test_highlights_split_secret_vs_public_keys():

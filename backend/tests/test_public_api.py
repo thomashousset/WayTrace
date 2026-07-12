@@ -235,3 +235,5 @@ async def test_export_csv_flattens_findings(client):
 async def test_export_json_404_unknown(client):
     r = await client.get("/api/s/nope/export.json")
     assert r.status_code == 404
+
+

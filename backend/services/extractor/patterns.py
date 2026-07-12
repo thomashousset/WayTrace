@@ -99,9 +99,13 @@ SOCIAL_PATTERNS = {
 # an unrelated host is not mistaken for a bucket:
 #   virtual-hosted: <bucket>.s3[.-]<region>.amazonaws.com/...
 #   path-style:     s3[.-]<region>.amazonaws.com/<bucket>...
+# Region labels are matched unambiguously (each `.`/`-` separator is followed by
+# a `[a-z0-9]`-led label) so a run of dashes can't be split many ways: the old
+# `(?:[.\-][a-z0-9\-]+)*` overlapped separator and body and backtracked
+# exponentially (a ~50-char archived string could freeze the extraction worker).
 S3_RE = re.compile(
-    r"(?:[a-z0-9.\-]+\.s3(?:[.\-][a-z0-9\-]+)*\.amazonaws\.com"
-    r"|s3(?:[.\-][a-z0-9\-]+)*\.amazonaws\.com/[a-z0-9._\-]+)"
+    r"(?:[a-z0-9][a-z0-9.\-]{0,62}\.s3(?:[.\-][a-z0-9]+(?:-[a-z0-9]+)*){0,4}\.amazonaws\.com"
+    r"|s3(?:[.\-][a-z0-9]+(?:-[a-z0-9]+)*){0,4}\.amazonaws\.com/[a-z0-9._\-]+)"
     r"[^\s\"'<>]*",
     re.IGNORECASE,
 )

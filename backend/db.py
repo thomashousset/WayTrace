@@ -107,6 +107,20 @@ CREATE INDEX IF NOT EXISTS idx_jobs_published ON jobs(is_published, published_at
 CREATE INDEX IF NOT EXISTS idx_jobs_expires ON jobs(expires_at);
 CREATE INDEX IF NOT EXISTS idx_jobs_client_ip ON jobs(client_ip);
 
+-- Full-text index over the visible text of a scan's pages, so users can search
+-- the archived CONTENT (not only the extracted pivots). Standalone FTS5 table:
+-- it stores the text so snippet() can return highlighted excerpts. Keyed by the
+-- scan's url_id (UNINDEXED, filtered alongside MATCH); rows are removed with the
+-- scan (delete_job / delete_expired_jobs). remove_diacritics folds accents so
+-- "societe" matches "société".
+CREATE VIRTUAL TABLE IF NOT EXISTS scan_pages_fts USING fts5(
+    text,
+    url_id UNINDEXED,
+    timestamp UNINDEXED,
+    url UNINDEXED,
+    tokenize = 'unicode61 remove_diacritics 2'
+);
+
 """
 
 
@@ -192,6 +206,11 @@ async def get_db(db_path: str | None = None) -> aiosqlite.Connection:
     db = await aiosqlite.connect(path)
     db.row_factory = aiosqlite.Row
     await db.execute("PRAGMA foreign_keys=ON")
+    # Wait for a lock instead of failing instantly: with several scans persisting
+    # concurrently plus the hourly cleanup, a bare connection would raise
+    # "database is locked". NORMAL sync is safe under WAL and cuts fsyncs.
+    await db.execute("PRAGMA busy_timeout=5000")
+    await db.execute("PRAGMA synchronous=NORMAL")
     return db
 
 
@@ -318,12 +337,74 @@ async def delete_job(url_id: str) -> bool:
     The jobs table is self-contained (findings live in the row's JSON
     ``results`` column), so a single DELETE fully removes the scan; the public
     feed excludes it immediately since list_feed only returns existing rows.
+    Also drops the scan's full-text page index.
     """
     db = await get_db()
     try:
         cur = await db.execute("DELETE FROM jobs WHERE url_id = ?", (url_id,))
+        await db.execute("DELETE FROM scan_pages_fts WHERE url_id = ?", (url_id,))
         await db.commit()
         return cur.rowcount > 0
+    finally:
+        await db.close()
+
+
+# Cap the text stored per page and the number of pages indexed per scan so the
+# full-text index stays bounded (visible text, not raw HTML). ~40 KB x 400 pages
+# is a few MB per scan, purged on the 7-day retention.
+_FTS_MAX_CHARS_PER_PAGE = 40_000
+_FTS_MAX_PAGES = 600
+
+
+async def index_scan_pages(url_id: str, rows: list[tuple[str, str, str]]) -> int:
+    """Index (timestamp, url, text) rows for a scan into the full-text table.
+
+    Best-effort: callers wrap it so a failure never breaks the scan. Replaces any
+    existing rows for this url_id (idempotent on re-scan of the same url_id).
+    """
+    if not rows:
+        return 0
+    db = await get_db()
+    try:
+        await db.execute("DELETE FROM scan_pages_fts WHERE url_id = ?", (url_id,))
+        count = 0
+        for ts, url, text in rows[:_FTS_MAX_PAGES]:
+            if not text:
+                continue
+            await db.execute(
+                "INSERT INTO scan_pages_fts (text, url_id, timestamp, url) VALUES (?, ?, ?, ?)",
+                (text[:_FTS_MAX_CHARS_PER_PAGE], url_id, ts or "", url or ""),
+            )
+            count += 1
+        await db.commit()
+        return count
+    finally:
+        await db.close()
+
+
+async def search_scan_pages(url_id: str, query: str, limit: int = 50) -> list[dict]:
+    """Full-text search within a scan's pages. Returns url/timestamp + a
+    highlighted snippet, ranked by relevance (bm25)."""
+    q = (query or "").strip()
+    if not q:
+        return []
+    limit = max(1, min(limit, 200))
+    db = await get_db()
+    try:
+        cur = await db.execute(
+            """SELECT url, timestamp,
+                      snippet(scan_pages_fts, 0, '<mark>', '</mark>', ' … ', 12) AS snippet
+                 FROM scan_pages_fts
+                WHERE url_id = ? AND scan_pages_fts MATCH ?
+                ORDER BY bm25(scan_pages_fts)
+                LIMIT ?""",
+            (url_id, q, limit),
+        )
+        rows = await cur.fetchall()
+        return [
+            {"url": r["url"], "timestamp": r["timestamp"], "snippet": r["snippet"]}
+            for r in rows
+        ]
     finally:
         await db.close()
 
@@ -392,6 +473,11 @@ async def delete_expired_jobs() -> int:
     try:
         now = _iso(datetime.now(timezone.utc))
         cur = await db.execute("DELETE FROM jobs WHERE expires_at <= ?", (now,))
+        # Prune the full-text index of any scan that no longer exists (expired
+        # or deleted), so it follows the same 7-day retention as the scans.
+        await db.execute(
+            "DELETE FROM scan_pages_fts WHERE url_id NOT IN (SELECT url_id FROM jobs)"
+        )
         await db.commit()
         return cur.rowcount
     finally:

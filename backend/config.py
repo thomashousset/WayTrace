@@ -3,7 +3,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Single source of truth for the tool version, surfaced in the API (/api/health,
 # OpenAPI) and injected into the frontend footer.
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.2.0"
+
+# Shared User-Agent for every archive.org request (CDX collector, page scraper,
+# favicon fetcher). One polite identity so the Internet Archive can attribute
+# and contact us.
+USER_AGENT = f"WayTrace/{APP_VERSION} (OSINT research tool; +https://github.com/HXLLO/WayTrace)"
 
 
 class Settings(BaseSettings):
@@ -39,6 +44,17 @@ class Settings(BaseSettings):
     # Security: hide OpenAPI schema + Swagger UI by default in prod.
     # Set EXPOSE_API_DOCS=1 in dev/local for interactive exploration.
     expose_api_docs: bool = False
+
+    # Only trust CF-Connecting-IP / X-Forwarded-For for the client IP when a
+    # known proxy (Cloudflare) actually sits in front. Off by default: our
+    # deployment terminates TLS at Caddy, which overwrites X-Real-IP with the
+    # real remote host, so a direct client cannot forge its IP to dodge the
+    # per-IP caps. Set TRUST_CLOUDFLARE=1 only if Cloudflare fronts the app.
+    trust_cloudflare: bool = False
+
+    # Set IS_PRODUCTION=1 in deploy/.env.prod. Enables production boot checks
+    # (e.g. refusing to start with the default SECRET_KEY).
+    is_production: bool = False
     archive_request_timeout: int = 60
     archive_retry_count: int = 3
     scan_timeout_seconds: int = 3600

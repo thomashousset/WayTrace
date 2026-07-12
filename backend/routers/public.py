@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 from db import (
     delete_job,
     get_job_by_url_id,
+    search_scan_pages,
     list_feed,
     set_published,
 )
@@ -145,6 +146,22 @@ async def delete_scan(url_id: str, request: Request):
         await store.cancel_job(live["id"])
     await delete_job(url_id)
     return {"url_id": url_id, "deleted": True}
+
+
+@router.get("/s/{url_id}/search")
+async def search_scan(url_id: str, q: str = "", limit: int = 50):
+    """Full-text search within a scan's archived page content.
+
+    Returns matching snapshots (url + timestamp) with a highlighted excerpt,
+    ranked by relevance. The url_id is the capability token, same as viewing.
+    """
+    persisted = await get_job_by_url_id(url_id)
+    if persisted is None:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    if _is_expired(persisted.get("expires_at")):
+        raise HTTPException(status_code=410, detail="Scan expired")
+    results = await search_scan_pages(url_id, q, limit=limit)
+    return {"query": q, "count": len(results), "results": results}
 
 
 @router.get("/feed", response_model=FeedResponse)

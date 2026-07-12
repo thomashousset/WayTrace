@@ -15,7 +15,7 @@ from store import store
 WAYBACK_URL = "https://web.archive.org/web/{timestamp}id_/{url}"
 
 # Single-source User-Agent reused by the CDX collector and this scraper.
-from services.collector import USER_AGENT  # noqa: E402
+from config import USER_AGENT
 
 # Upper bound on a honored Retry-After. 600 s is long enough to survive a
 # genuine server cooldown, short enough that a misbehaving or adversarial

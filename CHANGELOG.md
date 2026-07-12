@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.2.0
+
+- **Full-text search over scanned page content.** Search any word across a scan's archived pages (not only the extracted pivots), with highlighted excerpts and links to the Wayback capture. Accent-insensitive; the index is kept per-scan and purged on the 7-day retention.
+- **Single scan pipeline.** Removed a dead, divergent second pipeline (collect/analyze) that duplicated CDX/scraping/extraction; the public scan flow is now the only path. This also removed unauthenticated legacy endpoints (IDOR).
+- **Security hardening.** Fixed a catastrophic ReDoS in the S3 bucket regex; made client-IP detection spoof-resistant (trust the reverse-proxy header, not client-forgeable ones); reject selected snapshots that aren't on the scanned domain; refuse to boot in production with the default secret.
+- **Reliability.** Reworked the scraper to back off on archive.org connection-level throttling (not only HTTP 429) and report a per-outcome breakdown, so large scans no longer fail silently.
+- **Accessibility & UI.** WCAG-AA text contrast, keyboard-operable favicon tiles, and the Google favicon fallback removed (it leaked the investigated domain to Google — the tool now contacts only archive.org).
+- **Codebase.** The single-file frontend is split into cacheable `index.html` + `styles.css` + `app.js`.
+
 ## v1.1.0
 
 Public release folding in the RETEX round 2 work (shipped to the hosted beta first).

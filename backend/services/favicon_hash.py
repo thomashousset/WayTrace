@@ -27,7 +27,7 @@ from loguru import logger
 
 from config import settings
 from services import archive_health
-from services.collector import USER_AGENT
+from config import USER_AGENT
 from services.scraper import _get_global_sem
 
 # A favicon is tiny; cap the read so a mislabelled large asset can't hurt us.

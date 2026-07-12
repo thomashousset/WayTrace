@@ -209,36 +209,3 @@ class StatsResponse(BaseModel):
     active_jobs: int
 
 
-# --- v2 models ---
-
-class CollectRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    domain: str
-    config: ScanConfig | None = None
-
-    @field_validator("domain", mode="before")
-    @classmethod
-    def normalize_domain_v2(cls, v: str) -> str:
-        return _normalize_domain(v)
-
-
-class CollectResponse(BaseModel):
-    domain_id: int
-    status: str
-
-
-class CollectStatus(BaseModel):
-    domain_id: int
-    domain: str
-    phase: str
-    status: str
-    progress: float
-    total_snapshots: int
-    snapshots_indexed: int
-    pages_downloaded: int
-    pages_failed: int
-    started_at: str | None = None
-    updated_at: str | None = None
-    pages_selected: int = 0
-    coverage_pct: float = 0.0
