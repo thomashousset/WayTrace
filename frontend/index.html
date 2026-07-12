@@ -73,6 +73,7 @@
 <div id="view-home" class="view">
   <div class="home-hero">
     <h1 class="home-title">Way<span>Trace</span></h1>
+    <p class="home-tagline" data-i18n="home.tagline">The internet never forgets.</p>
     <p class="home-sub" data-i18n-html="home.sub">OSINT tool for researchers and professionals. Reveal what a domain has exposed over time (emails, subdomains, tech, leaks) from the <a href="https://web.archive.org" target="_blank" rel="noopener">Wayback Machine</a> archive.</p>
     <form class="home-search" onsubmit="event.preventDefault(); document.getElementById('domain-input').value = this.querySelector('.home-search-input').value.trim(); if (document.getElementById('domain-input').value) startAdvancedScan();">
       <input class="home-search-input" type="text" placeholder="example.com" spellcheck="false" autocomplete="off" autocapitalize="off" autofocus>
@@ -96,7 +97,11 @@
     <div id="home-feed-list" class="home-feed-grid">
       <div class="pub-empty" style="padding: 24px;" data-i18n="Loading…">Loading…</div>
     </div>
-    <div id="home-feed-empty" class="pub-empty" style="display:none;" data-i18n="No published scans yet. Run the first one above.">No published scans yet. Run the first one above.</div>
+    <div id="home-feed-empty" class="feed-empty" style="display:none;">
+      <svg class="feed-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg>
+      <div class="feed-empty-title" data-i18n="No published scans yet">No published scans yet</div>
+      <div class="feed-empty-sub" data-i18n="Run one above. A scan stays private until you choose to publish it here.">Run one above. A scan stays private until you choose to publish it here.</div>
+    </div>
   </div>
 </div>
 

@@ -2,9 +2,9 @@
 
 [English](README.md) . **Français**
 
-> **L'archive n'oublie jamais.**
+> **Internet n'oublie jamais.**
 
-Reconnaissance OSINT passive qui reconstruit l'historique numérique complet d'un domaine à partir de la Wayback Machine (archive.org). Saisissez un domaine. WayTrace récupère le HTML archivé sur des décennies, sélectionne les snapshots les plus révélateurs, et extrait **43 catégories** de renseignement. Chaque résultat porte des horodatages `first_seen` / `last_seen`, pour une chronologie complète de ce qui est apparu, a changé, puis disparu.
+Reconnaissance OSINT passive qui reconstruit l'historique numérique complet d'un domaine à partir de la Wayback Machine (archive.org). Saisissez un domaine. WayTrace récupère le HTML archivé sur des décennies, sélectionne les snapshots les plus révélateurs, et extrait **43 catégories** de renseignement. Chaque résultat porte des horodatages `first_seen` / `last_seen`, pour une chronologie complète de ce qui est apparu, a changé, puis disparu. Vous pouvez même faire une recherche plein-texte dans le contenu des pages archivées.
 
 **Aucun scan actif. Aucun brute-force. Aucun trafic vers la cible. Uniquement des données publiques d'archive.org.**
 
@@ -26,25 +26,11 @@ L'interface est entièrement bilingue (anglais / français), basculable depuis l
 
 ## Nouveautés de la v1.3.0
 
-- **Accès archive.org auto-régulé, sûr pour l'IP.** Chaque requête est soumise à un débit **adaptatif** partagé (AIMD : monte doucement tant que c'est propre, se divise par deux au premier refus de connexion) et à une limite de concurrence partagée — donc aucun nombre de scans ou d'utilisateurs simultanés ne peut pousser l'IP du serveur au-delà de la tolérance d'archive.org. Les blocages d'IP durs sont détectés et évités immédiatement.
-- **Code allégé & finitions UX.** Retrait du front-end collect/v1 retiré et de son CSS + tables de base morts ; ajout de skeletons de chargement, d'une bannière d'état archive.org bilingue et de traductions manquantes.
+- **Accès archive.org auto-régulé, sûr pour l'IP.** Chaque requête passe par un gouverneur de débit *adaptatif* partagé (AIMD, comme le contrôle de congestion TCP : il monte doucement tant que les réponses restent propres et se divise par deux au premier refus de connexion) plus une limite de concurrence partagée — donc aucun nombre de scans ou d'utilisateurs simultanés ne peut pousser l'IP du serveur au-delà de la tolérance d'archive.org. Un blocage d'IP dur est détecté et évité immédiatement.
+- **Recherche plein-texte dans le contenu des pages** (depuis la v1.2.0) : cherchez n'importe quel mot dans les pages archivées d'un scan, pas seulement les pivots extraits, avec extraits surlignés et liens vers la capture Wayback.
+- **Code allégé & finitions UX :** la progression de chargement suit désormais les vraies pages récupérées avec une ETA mesurée, une bannière d'état archive.org bilingue, des catégories de résultats auto-descriptives, et beaucoup de code mort retiré.
 
-## Nouveautés de la v1.2.0
-
-- **Recherche plein-texte dans le contenu des pages.** Cherchez n'importe quel mot dans les pages archivées d'un scan (pas seulement les pivots extraits), avec extraits surlignés et liens vers la capture Wayback. Insensible aux accents.
-- **Pipeline de scan unique et simplifié**, une passe de **durcissement sécurité** (correctif ReDoS, IP client anti-spoof, snapshots restreints au domaine, garde-fou du secret en prod) et de **fiabilité** (lève le pied sur le throttling connexion d'archive.org, pas seulement le HTTP 429).
-- **Accessibilité & confidentialité.** Contraste WCAG-AA, tuiles favicon au clavier, et fallback Google Favicons retiré (il divulguait le domaine investigué — seul archive.org est contacté).
-
-### Auparavant, en v1.1.0
-
-- **Privé par défaut.** Un nouveau scan est privé ; la publication dans le flux public est une action explicite.
-- **Suppression d'un scan.** Retirez complètement un scan, de votre liste et du flux public.
-- **Hash de favicons pour le pivot.** Chaque favicon porte désormais un **MD5**, un **SHA-256** et la valeur **Shodan `http.favicon.hash`** (MurmurHash3 du favicon encodé en base64), pour pivoter des icônes identiques entre hôtes sur Shodan et Censys.
-- **Classification affinée.** Les URL `fb.com` et les profils sociaux sont routés vers Social profiles (jamais confondus avec des personnes) ; les liens sociaux trouvés dans les liens sortants apparaissent dans Social profiles, dédupliqués. Une passe de QA a supprimé de nombreux faux positifs (domaines sosies, identifiants de tracker factices de documentation, mentions de marque dans la prose, URL en template literal, chaînes de format de date) tout en comblant des lacunes de détection.
-- **Identifiants pub / trackers précis.** Les résultats conservent leur préfixe exact avec une étiquette de plateforme : AdSense (`ca-pub-`), AdMob (`ca-app-pub-`), Google Analytics (`UA-`/`G-`), GTM, Meta Pixel, etc.
-- **Scans plus fiables.** Le scraper reconnaît le throttling au niveau connexion d'archive.org (pas seulement le HTTP 429), lève le pied et journalise le détail par cause, pour que les gros scans n'échouent plus silencieusement.
-
-Voir [CHANGELOG.md](CHANGELOG.md) pour la liste complète.
+Voir [CHANGELOG.md](CHANGELOG.md) pour l'historique complet (v1.0 → v1.3).
 
 ---
 
@@ -198,9 +184,9 @@ WayTrace classe chaque résultat en quatre niveaux et fait remonter les importan
 | Niveau | Sens | Exemples |
 |--------|------|----------|
 | **LEAK** | Exposition sensible non destinée à la publication | clés API actives, buckets cloud exposés, chaînes de connexion avec identifiants, JWT, IP internes, listings de répertoires |
-| **PIVOT** | Une piste à creuser | boîtes nommées, sous-domaines, endpoints admin/auth, clés API publiques, personnes, dépôts GitHub, identifiants d'entreprise |
-| **CONTEXT** | Contexte utile | stack technique, trackers analytics, hébergement/CDN, organisations, en-têtes HTTP |
-| **BACKGROUND** | Listé par exhaustivité, jamais mis en avant | balises meta, titres, assets, liens sortants, commentaires |
+| **PIVOT** | Une piste à creuser | boîtes nommées, sous-domaines, endpoints admin/auth, personnes, dépôts GitHub, identifiants d'entreprise, IDs analytics & trackers, hash de favicons |
+| **CONTEXT** | Contexte utile | stack technique, hébergement/CDN, en-têtes HTTP, titres & balises meta, organisations, documents liés |
+| **BACKGROUND** | Listé par exhaustivité, jamais mis en avant | liens sortants, profils sociaux, fichiers d'assets, commentaires HTML |
 
 LEAK et PIVOT sont promus en haut des résultats ; CONTEXT et BACKGROUND restent à un clic.
 
@@ -215,7 +201,9 @@ Les résultats s'ouvrent sur une page unique avec un bloc de renseignement à on
 - **Sous-domaines** - classés par occurrences avec leur période d'activité.
 - **Tech & infra** - stack, hébergement/CDN et en-têtes HTTP avec premières/dernières dates vues.
 
-Sur tous les onglets : une **recherche globale** (filtre tous les onglets à la fois), des **colonnes triables**, une **copie de colonne en un clic** (p. ex. tous les emails), et un **export** en JSON, CSV (onglet courant) ou toutes les catégories d'un coup. Toute l'interface est bilingue (FR / EN).
+Sur tous les onglets : une **recherche globale** (filtre tous les onglets à la fois), des **colonnes triables**, une **copie de colonne en un clic** (p. ex. tous les emails), et un **export** en JSON, CSV (onglet courant) ou toutes les catégories d'un coup. Il y a aussi une **recherche plein-texte dans le contenu même des pages archivées** — trouvez n'importe quel mot dans les pages récupérées, avec extraits surlignés et lien vers la capture Wayback exacte. Toute l'interface est bilingue (FR / EN).
+
+Chaque catégorie de résultat est affichée — y compris celles à **zéro résultat** — chacune avec une description en une ligne de ce qu'elle détecte, pour que vous voyiez toujours l'étendue complète de ce qui a été cherché, pas seulement de ce qui a été trouvé.
 
 ---
 
@@ -348,9 +336,15 @@ Progression du statut : `queued` -> `running` -> `completed` | `failed`.
 
 Server-Sent Events pour la progression en temps réel (préféré au polling). Événements : `progress`, `complete`, `error`, `expired` ; battement toutes les 15 s.
 
-### Scans partagés
+### Scans partagés & stockage
 
-`GET /api/s/{url_id}` (consulter), `POST /api/s/{url_id}/publish` (basculer public), et `GET /api/s/{url_id}/export.{json,csv,html}` (télécharger). `GET /api/feed` liste les scans publiés.
+Chaque scan est stocké sous un `url_id` stable et reste disponible pendant la fenêtre de rétention (7 jours sur le build hébergé ; configurable en auto-hébergé) :
+
+- `GET /api/s/{url_id}` — consulter un scan ; `DELETE` pour le supprimer ; `POST /api/s/{url_id}/publish` pour basculer public.
+- `GET /api/s/{url_id}/search?q=…` — recherche plein-texte dans le contenu des pages archivées du scan.
+- `GET /api/s/{url_id}/export.{json,csv,html}` — télécharger.
+- `GET /api/feed` — scans récemment publiés.
+- `GET /api/local-scans` — **auto-hébergé uniquement** : liste tous les scans lancés par cette instance (publiés ou privés), pour qu'un utilisateur solo conserve et réaccède à tous ses scans depuis « Mes scans ». Désactivé sur le build hébergé, qui rattache les scans aux comptes.
 
 ### GET /api/health
 
@@ -366,21 +360,20 @@ Tous les réglages sont dans `.env` (copié depuis `.env.example`). Les valeurs 
 
 | Variable | Défaut | Description |
 |----------|--------|-------------|
-| `MAX_CONCURRENT_SCRAPES` | `8` | Requêtes Wayback parallèles (1-50) |
+| `ARCHIVE_RATE_PER_MINUTE` | `90` | Débit **de départ** des requêtes archive.org (req/min). Le gouverneur l'adapte en direct. |
+| `ARCHIVE_RATE_MIN` / `ARCHIVE_RATE_MAX` | `60` / `150` | Plancher et plafond dans lesquels le débit adaptatif reste (1 → 2,5 req/s) |
+| `ARCHIVE_GLOBAL_CONCURRENCY` | `3` | Connexions archive.org simultanées max, tous scans confondus |
+| `MAX_CONCURRENT_SCRAPES` | `4` | Requêtes parallèles par scan (1-50) |
+| `SCRAPE_DELAY_MIN` / `SCRAPE_DELAY_MAX` | `0.5` / `1.2` | Gigue par requête (s) |
+| `MAX_ACTIVE_TOTAL` | `2` | Scans exécutés en même temps ; le reste attend en file |
 | `ARCHIVE_REQUEST_TIMEOUT` | `60` | Délai par requête (s) |
-| `ARCHIVE_RETRY_COUNT` | `3` | Réessais sur erreurs transitoires CDX/Wayback |
-| `SCRAPE_DELAY_MIN` | `0.25` | Délai min entre requêtes (s) |
-| `SCRAPE_DELAY_MAX` | `0.75` | Délai max entre requêtes (s) |
-| `SCRAPE_MAX_RETRIES` | `3` | Réessais par page scrapée |
-| `JOB_TTL_SECONDS` | `7200` | Expiration du job (2 heures) |
-| `MAX_ACTIVE_JOBS` | `10` | Scans concurrents max |
-| `SCAN_TIMEOUT_SECONDS` | `3600` | Délai dur par scan (60 min) |
-| `HOSTED_SNAPSHOT_CEILING` | `5000` | Plafond de snapshots par scan ; `0` le désactive pour des scans complets auto-hébergés |
-| `CORS_ORIGINS` | `localhost:5173,3000` | Origines autorisées (séparées par virgules) |
+| `HOSTED_SNAPSHOT_CEILING` | `5000` | Plafond de snapshots par scan ; `0` le désactive pour des scans **complets** auto-hébergés |
+| `SCAN_RETENTION_DAYS` | `7` | Durée pendant laquelle un scan stocké reste consultable |
+| `IS_PRODUCTION` | `0` | `1` en prod : refuse de démarrer avec le `SECRET_KEY` par défaut |
 | `DATABASE_URL` | `/data/waytrace.db` | Chemin SQLite (à surcharger hors Docker) |
 | `LOG_LEVEL` | `INFO` | `DEBUG` / `INFO` / `WARNING` / `ERROR` |
 
-Un limiteur de débit adaptatif (`RATE_LIMIT_*`) augmente le délai sur 429 et récupère sur une série de succès ; voir `.env.example` pour l'ensemble.
+**À propos du gouverneur de débit.** archive.org ne publie aucune limite de scraping et sa tolérance est dynamique, donc WayTrace ne devine pas un chiffre fixe : il démarre prudemment, pousse le débit vers le haut tant que les réponses restent propres, et *le divise par deux dès qu'archive.org refuse une connexion* (AIMD, comme le contrôle de congestion TCP). Cela garde l'IP du serveur hors de la liste de blocage d'archive.org quel que soit le nombre de scans ou d'utilisateurs simultanés. Relever les plafonds accélère les scans à vos risques. Voir `.env.example` pour l'ensemble.
 
 ---
 
@@ -391,22 +384,23 @@ backend/
   main.py                 App FastAPI, middleware, lifespan (nettoyage TTL)
   config.py               Réglages Pydantic depuis .env
   models.py               Schémas requête/réponse (Pydantic v2)
-  db.py                   SQLite (aiosqlite) - état de crawl, jobs, résultats
+  db.py                   SQLite (aiosqlite) - scans + index FTS5 du contenu des pages
   store.py                Index de jobs en mémoire + file équitable (progression)
   routers/
     scan.py               POST /scan, POST /scan/preflight, GET /jobs/{id}, SSE
-    public.py             Scans partagés (/api/s/{url_id}), publication, exports, flux
-    health.py             GET /health, GET /stats
+    public.py             Scans partagés (/api/s/{url_id}), recherche, exports, flux
+    health.py             GET /health, GET /archive-status, GET /stats
   services/
     cdx.py                Client CDX, HTML uniquement, paginé, cache gzip
     filters.py            Sélection des snapshots, notation des chemins, dédup, densité
-    scraper.py            Téléchargeur Wayback concurrent, sémaphore, recul, budget
+    scraper.py            Téléchargeur Wayback concurrent, budget, recul
+    archive_rate.py       Gouverneur de débit (AIMD) + concurrence partagé
+    archive_health.py     Disjoncteur : détection throttling + blocage d'IP dur
     extractor/            Un module par catégorie (43 au total) + finalize/highlights
 
-frontend/
-  index.html              Fichier unique, JS vanilla, thème sombre, sans build,
-                          bilingue FR/EN, résultats à onglets, recherche, export
-tests/                    ~1200 tests : extraction, sélection, API, régressions
+frontend/                 index.html + styles.css + app.js - JS vanilla, sans build,
+                          clair/sombre, bilingue FR/EN, résultats à onglets
+tests/                    1200+ tests : extraction, sélection, API, anti-blocage, régressions
 ```
 
 **Stack :** Python 3.12+, FastAPI, aiohttp, selectolax, Pydantic v2, aiosqlite, loguru.
@@ -416,7 +410,7 @@ tests/                    ~1200 tests : extraction, sélection, API, régression
 - **selectolax** plutôt que BeautifulSoup - en C, ~10x plus rapide en parsing volumineux.
 - **Tout en asynchrone** - aiohttp pour toutes les E/S réseau, aucun appel bloquant.
 - **Filtrage CDX côté serveur** - demande seulement `text/html` + `status:200`, jamais des milliers d'assets.
-- **Limitation adaptative** - `asyncio.Semaphore` + délai gigué ; recule sur 429, récupère sur succès.
+- **Gouverneur de débit adaptatif, sûr pour l'IP** - un token bucket partagé dont le débit s'auto-ajuste (AIMD) sur chaque appel archive.org, plus un plafond de concurrence partagé et un disjoncteur qui distingue un blocage d'IP dur d'un throttling ordinaire. Garde l'IP du serveur hors de la liste de blocage sous n'importe quelle charge.
 - **Budget temps de scraping** - un archive.org lent ne bloque jamais un scan ; les pages téléchargées sont conservées et analysées même si des traînards sont abandonnés.
 - **Provenance par résultat** - chaque entité est marquée de sa page source pour les pivots de co-occurrence.
 

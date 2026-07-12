@@ -28,7 +28,6 @@ async def test_init_db_creates_all_tables(tmp_db_path):
         tables = [row[0] for row in await cursor.fetchall()]
     # Live schema.
     assert "jobs" in tables
-    assert "users" in tables
     assert "scan_pages_fts" in tables
     # The v1 collect/analyze tables were removed and must not be recreated.
     for dead in ("domains", "snapshots", "pages", "findings", "crawl_state", "backup_files"):

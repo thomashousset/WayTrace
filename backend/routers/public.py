@@ -17,11 +17,13 @@ from fastapi.responses import Response
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from config import settings
 from db import (
     delete_job,
     get_job_by_url_id,
     search_scan_pages,
     list_feed,
+    list_recent_scans,
     set_published,
 )
 from services.html_export import build_standalone_html
@@ -171,6 +173,16 @@ async def get_feed(limit: int = 20, offset: int = 0):
     offset = max(0, offset)
     items = await list_feed(limit=limit, offset=offset)
     return FeedResponse(items=items, count=len(items))
+
+
+@router.get("/local-scans")
+async def local_scans(limit: int = 50):
+    """SOLO / self-hosted 'My scans': every scan this instance has run (published
+    or not). Disabled on the hosted build - which scopes scans per account - so
+    it can never expose other users' private scans."""
+    if hasattr(settings, "require_account_to_scan"):
+        return {"scans": []}
+    return {"scans": await list_recent_scans(limit=limit)}
 
 
 @router.get("/s/{url_id}/export.html")

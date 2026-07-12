@@ -368,6 +368,12 @@
     .home-search-btn:focus-visible {
       outline: none;
     }
+    .home-tagline {
+      font-size: clamp(15px, 2.2vw, 19px);
+      font-weight: 500; color: var(--text);
+      letter-spacing: .005em; line-height: 1.3; margin: 8px 0 0;
+    }
+    .home-tagline::after { content: ""; }
     .home-sub {
       font-size: clamp(15px, 1.4vw, 17px);
       color: var(--text-dim); max-width: 580px;
@@ -906,7 +912,7 @@
        (not a full top stripe). Lifts on hover, flips to accent on active. */
     .cat-section { margin-bottom: 16px; }
     .cat-grid {
-      display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(236px, 1fr));
       gap: 8px;
     }
     .cat-empty-toggle {
@@ -936,25 +942,24 @@
     /* display:grid above otherwise defeats the [hidden] attribute. */
     .cat-grid[hidden] { display: none; }
     .cat-tile {
-      position: relative;
+      position: relative; display: flex; flex-direction: column; gap: 6px;
       background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 9px 11px 9px 13px;
-      cursor: pointer; box-shadow: var(--shadow-xs);
+      border-radius: var(--radius-lg); padding: 13px 15px 13px 17px;
+      cursor: pointer; box-shadow: var(--shadow-xs); min-height: 80px;
       transition: border-color .15s var(--ease-out), background .15s var(--ease-out), box-shadow .15s var(--ease-out), opacity .15s var(--ease-out), transform .15s var(--ease-out);
       text-align: left;
     }
     .cat-tile::before {
-      content: ''; position: absolute; left: 0; top: 9px; bottom: 9px;
+      content: ''; position: absolute; left: 0; top: 11px; bottom: 11px;
       width: 4px; border-radius: 0 2px 2px 0;
       background: var(--border);
       transition: background .15s var(--ease-out);
     }
     .cat-tile:hover { border-color: var(--border-hover); box-shadow: var(--shadow-sm, var(--shadow-xs)); transform: translateY(-1px); }
-    /* Categories with no findings still show (so the investigator sees what was
-       searched) but recede until hovered or selected. */
-    .cat-tile.is-empty { opacity: .42; box-shadow: none; }
-    .cat-tile.is-empty:hover { opacity: .8; }
-    .cat-tile.is-empty.active { opacity: 1; }
+    /* Categories with no findings stay visible (the point: the investigator sees
+       exactly what was searched) but recede a little - kept legible, not ghosted. */
+    .cat-tile.is-empty { opacity: .6; box-shadow: none; }
+    .cat-tile.is-empty:hover, .cat-tile.is-empty.active { opacity: 1; }
     .cat-tile.is-empty .cat-tile-count { color: var(--text-faint); }
     /* "All" tile reads as a neutral aggregate, not a tier. */
     .cat-tile-all::before { background: var(--text-faint); }
@@ -966,18 +971,23 @@
     .cat-tile.cat-tier-leak::before { background: var(--red); }
     .cat-tile.cat-tier-pivot::before { background: var(--orange); }
     .cat-tile.cat-tier-context::before { background: var(--pivot); }
-    .cat-tile.cat-tier-background { opacity: 0.88; }
     .cat-tile.cat-tier-background::before { background: var(--text-faint); }
+    .cat-tile-head { display: flex; align-items: baseline; gap: 9px; }
     .cat-tile-count {
-      font-size: 17px; font-weight: 600; color: var(--text-bright);
+      font-size: 20px; font-weight: 700; color: var(--text-bright);
       font-family: var(--mono); font-variant-numeric: tabular-nums;
-      letter-spacing: -.01em; line-height: 1.1;
+      letter-spacing: -.02em; line-height: 1;
     }
     .cat-tile-name {
-      font-size: 10px; color: var(--text-dim); text-transform: uppercase;
-      letter-spacing: .07em; margin-top: 3px; font-weight: 500;
+      font-size: 12px; color: var(--text); font-weight: 600;
+      letter-spacing: .01em; line-height: 1.25;
     }
-    .cat-tile.active .cat-tile-name { color: var(--accent); }
+    .cat-tile.active .cat-tile-name, .cat-tile.active .cat-tile-count { color: var(--accent); }
+    .cat-tile-desc {
+      font-size: 11.5px; color: var(--text-faint); line-height: 1.4;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .cat-tile:hover .cat-tile-desc, .cat-tile.active .cat-tile-desc { color: var(--text-dim); }
 
     /* Visible per-category description banner under the grid. Tells the
        investigator what the selected category captures and what pivot it gives. */
@@ -3237,26 +3247,38 @@
       color: var(--text-faint); margin-bottom: 18px;
     }
     .pub-state-eta { font-size: 14px; color: var(--text-dim); margin-bottom: 28px; }
-    .pub-progress-track {
-      max-width: 400px; margin: 0 auto;
-      height: 4px; background: var(--surface3);
-      border-radius: 2px; overflow: hidden;
-    }
-    .pub-progress-fill {
-      height: 100%; background: var(--accent);
-      width: 0%; border-radius: 2px;
-      transition: width .6s var(--ease-out);
-    }
     .pub-run-step {
       font-size: 13px; color: var(--text-dim);
-      margin-bottom: 12px;
+      margin-bottom: 14px;
     }
     .pub-run-pct {
-      font-size: 32px; font-weight: 600; color: var(--text-bright);
-      font-variant-numeric: tabular-nums; margin-bottom: 8px;
+      font-size: 34px; font-weight: 600; color: var(--text-bright);
+      font-variant-numeric: tabular-nums; letter-spacing: -.01em; margin-bottom: 10px;
     }
-    .pub-run-bar { height: 6px; background: var(--surface3); border-radius: 3px; overflow: hidden; }
-    .pub-run-bar-fill { height: 100%; background: var(--accent); transition: width .8s var(--ease-out); }
+    .pub-run-bar {
+      position: relative; max-width: 420px; margin: 0 auto;
+      height: 6px; background: var(--surface3);
+      border-radius: 3px; overflow: hidden;
+    }
+    .pub-run-bar-fill {
+      height: 100%; border-radius: 3px;
+      background: linear-gradient(90deg, var(--accent-dim), var(--accent));
+      box-shadow: 0 0 8px -1px var(--accent-glow);
+      transition: width .7s var(--ease-out);
+    }
+    /* Indeterminate (setup phase / queue): a slim segment sweeps across, so we
+       signal work honestly without inventing a percentage. */
+    .pub-run-bar.indeterminate .pub-run-bar-fill {
+      position: absolute; inset: 0 auto 0 0; width: 34%;
+      transition: none; animation: pub-sweep 1.25s ease-in-out infinite;
+    }
+    @keyframes pub-sweep {
+      0%   { transform: translateX(-115%); }
+      100% { transform: translateX(315%); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .pub-run-bar.indeterminate .pub-run-bar-fill { animation-duration: 3s; }
+    }
     .pub-run-spinner {
       width: 40px; height: 40px; margin: 0 auto 16px;
       border-radius: 50%;
@@ -3299,6 +3321,13 @@
     .feed-card .chips { display: flex; flex-wrap: wrap; gap: 4px; }
     .feed-card .chips .pub-chip { font-size: 10px; }
 
+    .feed-empty {
+      display: flex; flex-direction: column; align-items: center; text-align: center;
+      padding: 44px 24px 56px; color: var(--text-faint); text-align: center;
+    }
+    .feed-empty-icon { width: 30px; height: 30px; color: var(--text-faint); opacity: .7; margin-bottom: 14px; }
+    .feed-empty-title { font-size: 15px; font-weight: 600; color: var(--text-dim); margin-bottom: 5px; text-align: center; }
+    .feed-empty-sub { font-size: 13px; color: var(--text-faint); max-width: 360px; line-height: 1.5; margin: 0 auto; }
     .pub-empty { padding: 48px 24px; text-align: center; color: var(--text-faint); font-size: 13px; }
 
     /* Privacy + share-link card shown under the queued/running scan state.

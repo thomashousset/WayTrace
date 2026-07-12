@@ -344,6 +344,26 @@ async def search_scan_pages(url_id: str, query: str, limit: int = 50) -> list[di
         await db.close()
 
 
+async def list_recent_scans(limit: int = 50) -> list[dict]:
+    """Every non-expired scan this instance has run (published or not), newest
+    first. For the SOLO/self-hosted build only: a single-user install has no
+    account to scope by, so "My scans" lists everything it has run. The hosted
+    build must NOT use this (it would expose other users' private scans)."""
+    limit = max(1, min(limit, 100))
+    db = await get_db()
+    try:
+        now = _iso(datetime.now(timezone.utc))
+        cur = await db.execute(
+            """SELECT url_id, domain, status, is_published, created_at
+               FROM jobs WHERE expires_at > ?
+               ORDER BY created_at DESC LIMIT ?""",
+            (now, limit),
+        )
+        return [dict(r) for r in await cur.fetchall()]
+    finally:
+        await db.close()
+
+
 async def list_feed(limit: int = 20, offset: int = 0) -> list[dict]:
     """Return published, non-expired jobs sorted by published_at DESC."""
     db = await get_db()

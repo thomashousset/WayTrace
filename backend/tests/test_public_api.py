@@ -237,3 +237,19 @@ async def test_export_json_404_unknown(client):
     assert r.status_code == 404
 
 
+
+
+@pytest.mark.anyio
+async def test_local_scans_lists_all_published_and_private():
+    # Solo/self-hosted "My scans" must list EVERY scan, not just published ones.
+    from db import list_recent_scans, save_job
+    now = datetime.now(timezone.utc)
+    await save_job(url_id="pubd", domain="a.com", client_ip="1.1.1.1", created_at=now,
+                   expires_at=now + timedelta(days=7), status="completed", meta={}, results={})
+    await save_job(url_id="priv", domain="b.com", client_ip="1.1.1.1", created_at=now,
+                   expires_at=now + timedelta(days=7), status="completed", meta={}, results={})
+    from db import set_published
+    await set_published("pubd", True)
+    scans = await list_recent_scans()
+    ids = {s["url_id"] for s in scans}
+    assert {"pubd", "priv"} <= ids          # both, published or not

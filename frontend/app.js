@@ -49,6 +49,8 @@ const TIMELINE_CATEGORY_LABELS = {
   verification_tags: 'Verification',
   meta_info: 'Meta tags',
   subdomains: 'Subdomains',
+  cloud_buckets: 'Cloud buckets',
+  addresses: 'Postal addresses',
   outgoing_links: 'Outgoing',
   // Fallback: any other category is title-cased from the string
 };
@@ -198,6 +200,9 @@ const I18N = {
     'nav.history': 'Historique',
     'nav.signin': 'Connexion',
     'nav.scan': 'Analyser',
+    'No published scans yet': 'Aucun scan publié pour l\'instant',
+    'Run one above. A scan stays private until you choose to publish it here.': "Lancez-en un ci-dessus. Un scan reste privé jusqu'à ce que vous choisissiez de le publier ici.",
+    'home.tagline': "Internet n'oublie jamais.",
     'home.sub': "Outil d'OSINT pour chercheurs et professionnels. Révélez ce qu'un domaine a exposé au fil du temps (e-mails, sous-domaines, technos, fuites) depuis les archives de la <a href=\"https://web.archive.org\" target=\"_blank\" rel=\"noopener\">Wayback Machine</a>.",
     'home.scan': 'Analyser',
     'home.publish': 'Publier dans le flux public à la fin de ce scan',
@@ -304,6 +309,17 @@ const I18N = {
     'distinct': 'distincts', 'archived': 'archivés', 'of': 'sur',
     'Download HTML': 'Télécharger HTML', 'Copy link': 'Copier le lien',
     'Scan more': 'Scanner plus',
+    'In queue': 'En file d\'attente',
+    'Position in queue': 'Position dans la file',
+    'Estimated wait:': 'Attente estimée :',
+    'Starting shortly…': 'Démarrage imminent…',
+    'Cancel my spot': 'Annuler ma place',
+    'Scanning': 'Analyse en cours',
+    'Preparing scan…': 'Préparation du scan…',
+    'estimating…': 'estimation…',
+    'Scraped {done} / {total} archived pages': '{done} / {total} pages archivées récupérées',
+    '~{s}s left': '~{s}s restantes',
+    '~{m} min left': '~{m} min restantes',
     'Copy link': 'Copier le lien',
     'Private': 'Privé',
     'archived': 'archivés',
@@ -844,6 +860,15 @@ function showScanSkeleton() {
   }
 }
 
+// Live progress state for the running scan: drives a monotonic percentage and
+// an ETA derived from the REAL page-completion rate (not a hardcoded guess).
+let _runStats = null;
+
+function _fmtEtaSecs(secs) {
+  if (secs < 60) return t('~{s}s left').replace('{s}', secs);
+  return t('~{m} min left').replace('{m}', Math.max(1, Math.round(secs / 60)));
+}
+
 function renderPublicScan(job) {
   $('public-scan-domain').textContent = job.domain || '';
   const meta = $('public-scan-meta');
@@ -851,45 +876,64 @@ function renderPublicScan(job) {
   publicScanLastStatus = status;
   const body = $('public-scan-body');
   const actions = $('public-scan-actions');
+  if (status !== 'running') _runStats = null;   // reset between phases / scans
 
   if (status === 'queued') {
     actions.style.display = 'none';
     const pos = Math.max(job.position || 1, 1);
     const eta = job.eta_seconds || 0;
     const total = Math.max(job.total_in_queue || pos, pos);
-    meta.textContent = 'In queue';
+    meta.textContent = t('In queue');
     body.innerHTML = `
       <div class="pub-state-card">
-        <div class="pub-state-label">Position</div>
+        <div class="pub-state-label">${esc(t('Position in queue'))}</div>
         <div class="pub-state-num">${pos}<span class="total"> / ${total}</span></div>
-        <div class="pub-state-eta">Estimated wait: ${formatEta(eta)}</div>
-        <div class="pub-progress-track"><div class="pub-progress-fill" style="animation: wt-queue-fill ${Math.max(eta, 8)}s linear forwards;"></div></div>
-        <button class="btn" style="margin-top: 28px;" onclick="cancelPublicScan()">Cancel my spot</button>
+        <div class="pub-state-eta">${eta ? esc(t('Estimated wait:')) + ' ' + esc(formatEta(eta)) : esc(t('Starting shortly…'))}</div>
+        <div class="pub-run-bar indeterminate"><div class="pub-run-bar-fill"></div></div>
+        <button class="btn" style="margin-top: 28px;" onclick="cancelPublicScan()">${esc(t('Cancel my spot'))}</button>
       </div>
       ${renderPrivacyCard(job)}
-      <style>@keyframes wt-queue-fill { from { width: 0%; } to { width: 100%; } }</style>
     `;
     wireCopyShareLink();
   } else if (status === 'running') {
     actions.style.display = 'none';
-    const pct = job.progress || 0;
-    meta.textContent = 'Scanning';
-    // Rough ETA from the "Scraping page X/N" step. ~0.3s/page accounts for
-    // concurrency + archive.org latency; refined later from real stats.
-    let eta = '';
+    meta.textContent = t('Scanning');
+    // Percentage from REAL work: pages scraped X/N (the scrape phase is nearly
+    // all the wall-clock time). No arbitrary phase floor. Kept monotonic.
     const m = (job.step || '').match(/(\d+)\s*\/\s*(\d+)/);
+    const now = Date.now();
+    let barHtml;
     if (m) {
-      const left = Math.max(0, (+m[2]) - (+m[1]));
-      const secs = Math.round(left * 0.3);
-      if (secs > 5) eta = secs < 90 ? `about ${secs}s left` : `about ${Math.round(secs / 60)} min left`;
+      const done = +m[1], total = Math.max(+m[2], 1);
+      let p = Math.round((done / total) * 98);           // 0 -> 98%, real pages
+      if (!_runStats) _runStats = { pct: 0, rate: 0, lastDone: done, lastTime: now };
+      p = Math.min(99, Math.max(_runStats.pct, p));      // never regress, cap 99
+      _runStats.pct = p;
+      // Observed page rate (EMA) -> honest ETA.
+      const dt = (now - _runStats.lastTime) / 1000;
+      if (done > _runStats.lastDone && dt > 0.25) {
+        const inst = (done - _runStats.lastDone) / dt;
+        _runStats.rate = _runStats.rate ? _runStats.rate * 0.6 + inst * 0.4 : inst;
+        _runStats.lastDone = done; _runStats.lastTime = now;
+      }
+      const remaining = Math.max(0, total - done);
+      const etaTxt = (_runStats.rate > 0 && remaining > 0)
+        ? _fmtEtaSecs(Math.round(remaining / _runStats.rate)) : t('estimating…');
+      barHtml = `
+        <div class="pub-run-step">${esc(t('Scraped {done} / {total} archived pages').replace('{done}', done).replace('{total}', total))}</div>
+        <div class="pub-run-pct">${p}%</div>
+        <div class="pub-run-bar"><div class="pub-run-bar-fill" style="width:${p}%;"></div></div>
+        <div class="pub-run-eta">${esc(etaTxt)}</div>`;
+    } else {
+      // Setup phase (querying archive.org, selecting): honest indeterminate bar.
+      barHtml = `
+        <div class="pub-run-step">${esc(job.step || t('Preparing scan…'))}</div>
+        <div class="pub-run-bar indeterminate"><div class="pub-run-bar-fill"></div></div>`;
     }
     body.innerHTML = `
       <div class="pub-state-card">
         <div class="pub-run-spinner" aria-hidden="true"></div>
-        <div class="pub-run-step">${esc(job.step || 'Working…')}</div>
-        <div class="pub-run-pct">${pct}%</div>
-        <div class="pub-run-bar"><div class="pub-run-bar-fill" style="width:${pct}%;"></div></div>
-        <div class="pub-run-eta">${eta || 'estimating time…'}</div>
+        ${barHtml}
       </div>
       ${renderPrivacyCard(job)}
     `;
@@ -1251,13 +1295,13 @@ async function loadHomeFeed() {
     const resp = await fetch(API + '/api/feed?limit=20');
     if (!resp.ok) {
       listEl.innerHTML = '';
-      emptyEl.style.display = 'block';
+      emptyEl.style.display = 'flex';
       return;
     }
     const data = await resp.json();
     if (!data.items || data.items.length === 0) {
       listEl.innerHTML = '';
-      emptyEl.style.display = 'block';
+      emptyEl.style.display = 'flex';
       return;
     }
     emptyEl.style.display = 'none';
@@ -1275,7 +1319,7 @@ async function loadHomeFeed() {
     }).join('');
   } catch (e) {
     listEl.innerHTML = '';
-    emptyEl.style.display = 'block';
+    emptyEl.style.display = 'flex';
   }
 }
 
@@ -3633,8 +3677,8 @@ function renderCategoryGrid(info, activeKey) {
          aria-label="${esc(label(key))}: ${count} findings"
          title="${esc(t(CAT_DESCRIPTIONS[key] || ''))}"
          onclick="selectCategory('${key}')" ${kbd}>
-      <div class="cat-tile-count">${count}</div>
-      <div class="cat-tile-name">${esc(label(key))}</div>
+      <div class="cat-tile-head"><span class="cat-tile-count">${count}</span><span class="cat-tile-name">${esc(label(key))}</span></div>
+      <div class="cat-tile-desc">${esc(t(CAT_DESCRIPTIONS[key] || ''))}</div>
     </div>`;
 
   // Progressive disclosure: surface categories that actually have findings;
@@ -3646,8 +3690,8 @@ function renderCategoryGrid(info, activeKey) {
     <div class="cat-tile cat-tile-all${!activeKey ? ' active' : ''}"
          role="button" tabindex="0" aria-pressed="${!activeKey}"
          aria-label="Show all categories" onclick="selectCategory(null)" ${kbd}>
-      <div class="cat-tile-count">${total}</div>
-      <div class="cat-tile-name">All</div>
+      <div class="cat-tile-head"><span class="cat-tile-count">${total}</span><span class="cat-tile-name">${esc(t('All'))}</span></div>
+      <div class="cat-tile-desc">${esc(t('Every finding across all categories.'))}</div>
     </div>`;
   // Group the populated categories by OSINT tier under a small header each, so
   // the grid reads as meaningful sections (leaks, pivots, context...) instead
@@ -5865,18 +5909,21 @@ async function renderMyScans() {
   const host = $('my-scans');
   if (!host) return;
 
-  // Solo build: list this instance's recent scans from the public feed.
-  host.innerHTML = '<div class="myscans-note">Loading recent scans…</div>';
+  // Solo / self-hosted build: list EVERY scan this instance has run (published
+  // or not) - it's a single-user install, so they are all yours.
+  host.innerHTML = '<div class="myscans-note">' + t('Loading your scans…') + '</div>';
   let items = [];
-  try { const r = await fetch(API + '/api/feed?limit=50'); const d = await r.json(); items = d.items || []; } catch (_) {}
+  try { const r = await fetch(API + '/api/local-scans?limit=50'); const d = await r.json(); items = d.scans || []; } catch (_) {}
   if (!items.length) {
-    host.innerHTML = '<div class="myscans-note">No scans yet.'
-      + '<div><button class="btn btn-accent" onclick="location.hash=\'#/\';document.getElementById(\'domain-input\').focus()">Run a scan</button></div></div>';
+    host.innerHTML = '<div class="myscans-note">' + t('No scans yet.')
+      + '<div><button class="btn btn-accent" onclick="location.hash=\'#/\';document.getElementById(\'domain-input\').focus()">' + t('Run a scan') + '</button></div></div>';
     return;
   }
   host.innerHTML = '<div class="myscans-list">' + items.map(s => `
     <div class="myscans-row" onclick="location.hash='#/s/${encodeURIComponent(s.url_id)}'">
       <span class="myscans-domain">${esc(s.domain)}</span>
+      <span class="myscans-status st-${esc(s.status)}">${esc(t(s.status))}</span>
+      <span class="myscans-pub ${s.is_published ? 'on' : 'off'}">${s.is_published ? t('Public') : t('Private')}</span>
       <span class="myscans-date">${esc((s.created_at || '').slice(0, 10))}</span>
       <button class="myscans-del" title="${esc(t('Delete scan'))}" aria-label="${esc(t('Delete scan'))}" onclick="deleteMyScan('${esc(s.url_id)}', event)">&times;</button>
     </div>`).join('') + '</div>';

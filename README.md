@@ -2,9 +2,9 @@
 
 **English** . [Français](README.fr.md)
 
-> **The archive never forgets.**
+> **The internet never forgets.**
 
-Passive OSINT reconnaissance that reconstructs the complete digital history of any domain from the Wayback Machine (archive.org). Enter a domain. WayTrace pulls archived HTML across decades, selects the most revealing snapshots, and extracts **43 categories** of intelligence. Every finding carries `first_seen` / `last_seen` timestamps, so you get a full timeline of what appeared, changed, and disappeared.
+Reconstruct the complete digital history of any domain from the Wayback Machine (archive.org). Enter a domain: WayTrace pulls archived HTML across decades, selects the most revealing snapshots, and extracts **43 categories** of intelligence — emails, subdomains, exposed secrets, tech stacks, people — each stamped with `first_seen` / `last_seen`, so you get a full timeline of what appeared, changed, and disappeared. You can even full-text search the archived page content itself.
 
 **No active scanning. No brute-forcing. No traffic to the target. Only public data from archive.org.**
 
@@ -26,25 +26,11 @@ The interface is fully bilingual (English / French), switchable from the navbar.
 
 ## What's new in v1.3.0
 
-- **Self-governing, IP-safe archive.org access.** Every request is held to a shared, adaptive rate (AIMD: creeps up when clean, halves on the first connection-refusal) and a shared concurrency limit, so no number of parallel scans or users can push the server IP past archive.org's tolerance. Hard IP blocks are detected and backed off from immediately.
-- **Leaner codebase & UX polish.** Removed the retired collect/v1 front-end and its dead CSS + database tables; added loading skeletons, a bilingual archive.org status banner, and filled-in translations.
+- **Self-governing, IP-safe archive.org access.** Every request goes through a shared, *adaptive* rate governor (AIMD, like TCP congestion control: it creeps up while responses stay clean and halves on the first connection-refusal) plus a shared concurrency limit — so no number of parallel scans or users can push the server IP past archive.org's tolerance. A hard IP block is detected and backed off from immediately.
+- **Full-text search over page content** (from v1.2.0): search any word across a scan's archived pages, not just the extracted pivots, with highlighted excerpts and links to the Wayback capture.
+- **Leaner codebase & UX polish:** loading progress now tracks real pages scraped with a measured ETA, a bilingual archive.org status banner, self-describing result categories, and a lot of dead code removed.
 
-## What's new in v1.2.0
-
-- **Full-text search over page content.** Search any word across a scan's archived pages (not only the extracted pivots), with highlighted excerpts and links to the Wayback capture. Accent-insensitive.
-- **Single, simpler scan pipeline** and a round of **security hardening** (ReDoS fix, spoof-resistant client-IP, domain-scoped snapshots, production secret guard) and **reliability** (backs off on archive.org connection throttling, not only HTTP 429).
-- **Accessibility & privacy.** WCAG-AA contrast, keyboard-operable favicon tiles, and the Google favicon fallback removed (it leaked the investigated domain — only archive.org is contacted).
-
-### Earlier, in v1.1.0
-
-- **Private by default.** New scans are private; publishing to the public feed is an explicit opt-in.
-- **Delete a scan.** Remove a scan entirely, from your list and from the public feed.
-- **Favicon hashes for pivoting.** Every favicon now carries an **MD5**, a **SHA-256**, and the **Shodan `http.favicon.hash`** value (MurmurHash3 of the base64-encoded icon), so identical icons can be pivoted across hosts on Shodan and Censys.
-- **Sharper classification.** `fb.com` and social-profile URLs are routed to Social profiles (never mistaken for named persons); social links found among outgoing links surface under Social profiles and are de-duplicated. A round of extractor QA removed many false positives (look-alike domains, documentation-placeholder tracker IDs, prose brand mentions, template-literal URLs, date-format strings) while closing recall gaps.
-- **Precise advertising / tracker ids.** Findings keep their exact prefix and show a platform chip: AdSense (`ca-pub-`), AdMob (`ca-app-pub-`), Google Analytics (`UA-`/`G-`), GTM, Meta Pixel, and more.
-- **More reliable scans.** The scraper now recognises archive.org's connection-level throttling (not only HTTP 429), backs off, and reports a per-outcome breakdown, so large scans no longer fail silently.
-
-See [CHANGELOG.md](CHANGELOG.md) for the full list.
+See [CHANGELOG.md](CHANGELOG.md) for the full history (v1.0 → v1.3).
 
 ---
 
@@ -198,9 +184,9 @@ WayTrace ranks every result into four tiers and surfaces the important ones auto
 | Tier | Meaning | Examples |
 |------|---------|----------|
 | **LEAK** | Sensitive exposure the owner didn't mean to publish | live API keys, exposed cloud buckets, connection strings with credentials, JWTs, internal IPs, directory listings |
-| **PIVOT** | A lead worth chasing | named mailboxes, subdomains, admin/auth endpoints, public API keys, persons, GitHub repos, business IDs |
-| **CONTEXT** | Useful background | tech stack, analytics trackers, hosting/CDN, organisations, HTTP headers |
-| **BACKGROUND** | Listed for completeness, never highlighted | meta tags, titles, assets, outgoing links, comments |
+| **PIVOT** | A lead worth chasing | named mailboxes, subdomains, admin/auth endpoints, persons, GitHub repos, business IDs, analytics & tracker IDs, favicon hashes |
+| **CONTEXT** | Useful background | tech stack, hosting/CDN, HTTP headers, page titles & meta tags, organisations, linked documents |
+| **BACKGROUND** | Listed for completeness, never highlighted | outgoing links, social profiles, asset files, HTML comments |
 
 LEAK and PIVOT are promoted to the top of the results; CONTEXT and BACKGROUND stay one click away.
 
@@ -215,7 +201,9 @@ Results open as a single page with a tabbed intelligence block:
 - **Subdomains** - ranked by occurrences with their active period.
 - **Tech & infra** - stack, hosting/CDN, and HTTP headers with first/last seen.
 
-Across every tab: a **global search** (filters all tabs at once), **sortable columns**, **one-click column copy** (e.g. every email), and **export** to JSON, CSV (current tab), or all categories at once. The whole UI is bilingual (EN / FR).
+Across every tab: a **global search** (filters all tabs at once), **sortable columns**, **one-click column copy** (e.g. every email), and **export** to JSON, CSV (current tab), or all categories at once. There's also a **full-text search over the archived page content itself** — find any word inside the scraped pages, with highlighted excerpts and a link to the exact Wayback capture. The whole UI is bilingual (EN / FR).
+
+Every result category is shown — including the ones with **zero findings** — each with a one-line description of what it detects, so you always see the full scope of what was searched, not just what was found.
 
 ---
 
@@ -348,9 +336,15 @@ Status progression: `queued` -> `running` -> `completed` | `failed`.
 
 Server-Sent Events for real-time progress (preferred over polling). Events: `progress`, `complete`, `error`, `expired`; heartbeat every 15s.
 
-### Shared scans
+### Shared scans & storage
 
-`GET /api/s/{url_id}` (view), `POST /api/s/{url_id}/publish` (toggle public), and `GET /api/s/{url_id}/export.{json,csv,html}` (download). `GET /api/feed` lists published scans.
+Every scan is stored under a stable `url_id` and stays available for the retention window (7 days on the hosted build; configurable when self-hosted):
+
+- `GET /api/s/{url_id}` — view a scan; `DELETE` to remove it; `POST /api/s/{url_id}/publish` to toggle public.
+- `GET /api/s/{url_id}/search?q=…` — full-text search the scan's archived page content.
+- `GET /api/s/{url_id}/export.{json,csv,html}` — download.
+- `GET /api/feed` — recently published scans.
+- `GET /api/local-scans` — **self-hosted only**: lists every scan this instance has run (published or private), so a solo user keeps and re-accesses all their scans from "My scans". Disabled on the hosted build, which scopes scans to accounts.
 
 ### GET /api/health
 
@@ -366,21 +360,20 @@ All settings live in `.env` (copy from `.env.example`). Defaults are polite towa
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `MAX_CONCURRENT_SCRAPES` | `8` | Parallel Wayback requests (1-50) |
+| `ARCHIVE_RATE_PER_MINUTE` | `90` | **Starting** archive.org request rate (req/min). The governor adapts it live. |
+| `ARCHIVE_RATE_MIN` / `ARCHIVE_RATE_MAX` | `60` / `150` | Floor and ceiling the adaptive rate stays within (1 → 2.5 req/s) |
+| `ARCHIVE_GLOBAL_CONCURRENCY` | `3` | Max simultaneous archive.org connections across all scans |
+| `MAX_CONCURRENT_SCRAPES` | `4` | Per-scan parallel requests (1-50) |
+| `SCRAPE_DELAY_MIN` / `SCRAPE_DELAY_MAX` | `0.5` / `1.2` | Per-request jitter (s) |
+| `MAX_ACTIVE_TOTAL` | `2` | Scans running at once; the rest queue |
 | `ARCHIVE_REQUEST_TIMEOUT` | `60` | Per-request timeout (s) |
-| `ARCHIVE_RETRY_COUNT` | `3` | Retries on CDX/Wayback transient errors |
-| `SCRAPE_DELAY_MIN` | `0.25` | Min delay between requests (s) |
-| `SCRAPE_DELAY_MAX` | `0.75` | Max delay between requests (s) |
-| `SCRAPE_MAX_RETRIES` | `3` | Retries per page scrape |
-| `JOB_TTL_SECONDS` | `7200` | Job expiry (2 hours) |
-| `MAX_ACTIVE_JOBS` | `10` | Max concurrent scans |
-| `SCAN_TIMEOUT_SECONDS` | `3600` | Hard timeout per scan (60 min) |
-| `HOSTED_SNAPSHOT_CEILING` | `5000` | Per-scan snapshot ceiling; `0` disables it for self-hosted full scans |
-| `CORS_ORIGINS` | `localhost:5173,3000` | Comma-separated allowed origins |
+| `HOSTED_SNAPSHOT_CEILING` | `5000` | Per-scan snapshot ceiling; `0` disables it for self-hosted **full** scans |
+| `SCAN_RETENTION_DAYS` | `7` | How long a stored scan stays retrievable |
+| `IS_PRODUCTION` | `0` | `1` in prod: refuses to boot with the default `SECRET_KEY` |
 | `DATABASE_URL` | `/data/waytrace.db` | SQLite path (override outside Docker) |
 | `LOG_LEVEL` | `INFO` | `DEBUG` / `INFO` / `WARNING` / `ERROR` |
 
-An adaptive rate limiter (`RATE_LIMIT_*`) auto-increases the delay on 429s and recovers on a success streak; see `.env.example` for the full set.
+**About the rate governor.** archive.org publishes no scraping limit and its tolerance is dynamic, so WayTrace doesn't guess a fixed number: it starts conservative, nudges the rate up while responses stay clean, and *halves it the instant archive.org refuses a connection* (AIMD, like TCP congestion control). This keeps the server IP off archive.org's block list no matter how many scans or users run at once. Raising the ceilings speeds scans up at your own risk. See `.env.example` for the full set.
 
 ---
 
@@ -391,22 +384,23 @@ backend/
   main.py                 FastAPI app, middleware, lifespan (TTL cleanup)
   config.py               Pydantic settings from .env
   models.py               Request/response schemas (Pydantic v2)
-  db.py                   SQLite (aiosqlite) - crawl state, jobs, findings
+  db.py                   SQLite (aiosqlite) - scans + FTS5 page-content index
   store.py                In-memory job index + fair queue for live progress
   routers/
     scan.py               POST /scan, POST /scan/preflight, GET /jobs/{id}, SSE
-    public.py             Shared scans (/api/s/{url_id}), publish, exports, feed
-    health.py             GET /health, GET /stats
+    public.py             Shared scans (/api/s/{url_id}), search, exports, feed
+    health.py             GET /health, GET /archive-status, GET /stats
   services/
     cdx.py                CDX client, HTML-only, paginated, gzip cache
     filters.py            Snapshot selection, path scoring, dedup, density
-    scraper.py            Concurrent Wayback downloader, semaphore, backoff, budget
+    scraper.py            Concurrent Wayback downloader, budget, backoff
+    archive_rate.py       Shared adaptive (AIMD) rate + concurrency governor
+    archive_health.py     Circuit breaker: throttle + hard IP-block detection
     extractor/            One module per category (43 total) + finalize/highlights
 
-frontend/
-  index.html              Single file, vanilla JS, dark theme, no build step,
-                          bilingual EN/FR, tabbed results, search, export
-tests/                    ~1200 tests: extraction, selection, API, regressions
+frontend/                 index.html + styles.css + app.js - vanilla JS, no
+                          build step, dark/light, bilingual EN/FR, tabbed results
+tests/                    1200+ tests: extraction, selection, API, anti-block, regressions
 ```
 
 **Stack:** Python 3.12+, FastAPI, aiohttp, selectolax, Pydantic v2, aiosqlite, loguru.
@@ -416,7 +410,7 @@ tests/                    ~1200 tests: extraction, selection, API, regressions
 - **selectolax** over BeautifulSoup - C-based, ~10x faster for high-volume parsing.
 - **Async throughout** - aiohttp for all network I/O, no blocking calls.
 - **CDX server-side filtering** - request only `text/html` + `status:200`, never thousands of asset entries.
-- **Adaptive rate limiting** - `asyncio.Semaphore` + jittered delay; backs off on 429, recovers on success.
+- **Adaptive, IP-safe rate governor** - one shared token bucket whose rate self-tunes (AIMD) across every archive.org call, plus a shared concurrency cap and a circuit breaker that tells a hard IP block from ordinary throttling. Keeps the server IP off the block list under any load.
 - **Scrape time budget** - a slow archive.org never hangs a scan; downloaded pages are kept and analysed even if stragglers are dropped.
 - **Per-finding provenance** - every entity is stamped with the source page for co-occurrence pivots.
 
