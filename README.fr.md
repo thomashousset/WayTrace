@@ -9,6 +9,7 @@ Reconnaissance OSINT passive qui reconstruit l'historique numérique complet d'u
 **Aucun scan actif. Aucun brute-force. Aucun trafic vers la cible. Uniquement des données publiques d'archive.org.**
 
 [![En ligne sur waytrace.org](https://img.shields.io/badge/en%20ligne-waytrace.org-6f5bd6)](https://waytrace.org)
+[![tests](https://github.com/HXLLO/WayTrace/actions/workflows/ci.yml/badge.svg)](https://github.com/HXLLO/WayTrace/actions/workflows/ci.yml)
 ![Licence MIT](https://img.shields.io/badge/licence-MIT-blue)
 ![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-green)
