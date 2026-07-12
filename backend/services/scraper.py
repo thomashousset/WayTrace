@@ -9,7 +9,7 @@ import aiohttp
 from loguru import logger
 
 from config import settings
-from services import archive_health
+from services import archive_health, archive_rate
 from store import store
 
 WAYBACK_URL = "https://web.archive.org/web/{timestamp}id_/{url}"
@@ -44,6 +44,14 @@ _THROTTLE_ERRORS = (
     aiohttp.ClientPayloadError,
     asyncio.TimeoutError,
 )
+
+
+def _is_connection_refused(exc: BaseException) -> bool:
+    """True when the OS actively rejected the TCP connect (errno 111) - the
+    signature of archive.org firewalling our IP, versus a timeout or a mid-stream
+    drop. aiohttp wraps the OS error on ClientConnectorError.os_error."""
+    err = getattr(exc, "os_error", None) or exc
+    return isinstance(err, ConnectionRefusedError) or getattr(err, "errno", None) == 111
 
 # Process-wide budget of simultaneous archive.org requests, shared by every
 # running scan. Each scan still holds its own per-scan semaphore
@@ -159,12 +167,23 @@ async def scrape_snapshots(
             # outside the semaphore so blocked workers don't hold their slot.
             await _respect_global_pause()
 
-            # If the breaker is open (archive.org is refusing us), pause this
-            # worker instead of firing doomed requests. Bounded so a stuck-open
-            # breaker can't hang the task forever; the caller's scrape budget
-            # cancels any stragglers.
+            # Hard IP block: the server is refused at the TCP level and will not
+            # recover within this scan. Don't wait (that would burn 20s per
+            # remaining page for nothing) - give up on this page immediately so
+            # the scan finishes fast with whatever was already fetched.
+            if archive_health.is_hard_block():
+                result = {
+                    "timestamp": snap["timestamp"], "url": snap["url"],
+                    "html": None, "error": "blocked",
+                }
+                break
+
+            # Soft throttle (429/timeout): the breaker is open but archive.org
+            # should recover soon, so pause this worker briefly instead of firing
+            # doomed requests. Bounded so a stuck-open breaker can't hang forever;
+            # the caller's scrape budget cancels any stragglers.
             _breaker_waits = 0
-            while archive_health.is_open() and _breaker_waits < 15:
+            while archive_health.is_open() and not archive_health.is_hard_block() and _breaker_waits < 15:
                 await _wait_outside_semaphore(min(archive_health.seconds_remaining() or 10, 20))
                 _breaker_waits += 1
 
@@ -173,6 +192,9 @@ async def scrape_snapshots(
             # all scans never exceeds archive_global_concurrency.
             async with semaphore, _get_global_sem():
                 try:
+                    # Process-wide rate ceiling: spaces requests so a burst
+                    # never exceeds archive.org's tolerance (IP-block guard).
+                    await archive_rate.acquire()
                     async with session.get(url) as resp:
                         status = resp.status
                         retry_after = _parse_retry_after(resp.headers.get("Retry-After"))
@@ -239,8 +261,10 @@ async def scrape_snapshots(
                                 "response_headers": _orig_response_headers(resp.headers),
                             }
                             # A clean response clears the failure streak so the
-                            # breaker closes once archive.org is healthy again.
+                            # breaker closes once archive.org is healthy again,
+                            # and feeds the adaptive rate governor (creep up).
                             archive_health.record_success()
+                            archive_rate.report_success()
                             # Gradually recover delays on success
                             if _delay_state["min"] > settings.scrape_delay_min:
                                 _delay_state["min"] = max(
@@ -258,6 +282,18 @@ async def scrape_snapshots(
                         "Scrape failed for {} (attempt {}/{}): {}",
                         url, attempt + 1, 1 + settings.scrape_max_retries, exc,
                     )
+                    if _is_connection_refused(exc):
+                        # Our IP is being refused: this is a block, not a blip.
+                        # Halve the adaptive rate at once, feed the hard-block
+                        # breaker, and stop immediately - retrying only confirms
+                        # the block and deepens it.
+                        archive_rate.report_refusal()
+                        archive_health.record_hard_block()
+                        result = {
+                            "timestamp": snap["timestamp"], "url": snap["url"],
+                            "html": None, "error": "blocked",
+                        }
+                        break
                     if is_throttle:
                         # Connection drop / stall = archive.org throttling us.
                         # Feed the breaker and back off hard + globally so every
@@ -347,7 +383,8 @@ async def scrape_snapshots(
     # throttling vs missing captures.
     breakdown = " ".join(f"{k}={v}" for k, v in outcomes.most_common())
     logger.info(
-        "Scraped {}/{} pages successfully (429 hits: {}) [{}]",
+        "Scraped {}/{} pages successfully (429 hits: {}) [{}] adaptive_rate={}/min",
         success, total, _rate_limit_hits["count"], breakdown,
+        archive_rate.current_rate_per_minute(),
     )
     return list(results)

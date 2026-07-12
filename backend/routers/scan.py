@@ -261,6 +261,10 @@ async def _scan_pipeline(
 
         pages_scraped = sum(1 for p in pages if p["html"] is not None)
         pages_failed = len(pages) - pages_scraped
+        # Pages we skipped because archive.org was refusing this server's IP
+        # (hard block), as opposed to genuine archive gaps. Surfaced so the UI
+        # can explain an empty scan honestly instead of blaming "archive gaps".
+        pages_blocked = sum(1 for p in pages if p.get("error") == "blocked")
 
         # Phase 4: Extraction
         await store.update_job(
@@ -298,6 +302,7 @@ async def _scan_pipeline(
             "snapshots_analyzed": len(selected),
             "pages_scraped": pages_scraped,
             "pages_failed": pages_failed,
+            "pages_blocked": pages_blocked,
             "pages_deduped": pages_deduped,
             "date_first_seen": date_first,
             "date_last_seen": date_last,

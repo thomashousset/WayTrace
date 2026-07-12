@@ -3,7 +3,9 @@ from config import settings
 
 
 def test_max_active_total_default():
-    assert settings.max_active_total == 4
+    # Kept low (2) so aggregate archive.org load stays polite; the global rate
+    # limiter is the real ceiling.
+    assert settings.max_active_total == 2
 
 
 def test_max_queue_total_default():

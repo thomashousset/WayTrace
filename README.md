@@ -24,6 +24,11 @@ The interface is fully bilingual (English / French), switchable from the navbar.
 
 ---
 
+## What's new in v1.3.0
+
+- **Self-governing, IP-safe archive.org access.** Every request is held to a shared, adaptive rate (AIMD: creeps up when clean, halves on the first connection-refusal) and a shared concurrency limit, so no number of parallel scans or users can push the server IP past archive.org's tolerance. Hard IP blocks are detected and backed off from immediately.
+- **Leaner codebase & UX polish.** Removed the retired collect/v1 front-end and its dead CSS + database tables; added loading skeletons, a bilingual archive.org status banner, and filled-in translations.
+
 ## What's new in v1.2.0
 
 - **Full-text search over page content.** Search any word across a scan's archived pages (not only the extracted pivots), with highlighted excerpts and links to the Wayback capture. Accent-insensitive.

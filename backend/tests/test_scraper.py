@@ -43,6 +43,22 @@ def _install_scraper_patches(monkeypatch, sleeps, responses):
     monkeypatch.setattr(scraper.settings, "max_concurrent_scrapes", 2)
     monkeypatch.setattr(scraper.settings, "archive_request_timeout", 5)
     monkeypatch.setattr(scraper.settings, "scrape_max_retries", 2)
+    # Neutralise the shared adaptive rate governor for scraper tests: keep it
+    # effectively unlimited (so it never adds spacing that would perturb the
+    # back-off assertions) and reset its process-wide state so one test's
+    # refusals don't leak into the next.
+    from services import archive_rate as _ar
+    monkeypatch.setattr(scraper.settings, "archive_rate_per_minute", 100000)
+    monkeypatch.setattr(scraper.settings, "archive_rate_max", 100000)
+    _ar.reset()
+    # Reset the shared circuit-breaker state so a prior test's trip doesn't make
+    # is_hard_block() skip every page here.
+    from services import archive_health as _ah
+    with _ah._lock:
+        _ah._fails.clear()
+        _ah._hard_fails.clear()
+        _ah._open_until = 0.0
+        _ah._tripped_hard = False
 
     session = AsyncMock()
     session.get = MagicMock(side_effect=lambda *a, **kw: responses.pop(0))
@@ -206,3 +222,59 @@ async def test_connection_error_feeds_breaker_and_tags_conn(monkeypatch):
     assert results[0].get("error") == "conn"          # tagged as connection throttle
     assert fails["n"] >= 1                              # fed the circuit breaker
     assert any(s >= 8 for s in sleeps)                 # coordinated hard back-off (8*(attempt+1))
+
+
+def _refused_response():
+    """A response whose connect is REFUSED at the TCP level (errno 111),
+    simulating archive.org firewalling our IP."""
+    resp = AsyncMock()
+    err = scraper.aiohttp.ClientConnectorError(MagicMock(), ConnectionRefusedError(111, "refused"))
+    resp.__aenter__ = AsyncMock(side_effect=err)
+    resp.__aexit__ = AsyncMock(return_value=False)
+    return resp
+
+
+@pytest.mark.asyncio
+async def test_connection_refused_is_hard_block_no_retry(monkeypatch):
+    from services import archive_health
+    archive_health.record_success()
+    hard = {"n": 0}
+    monkeypatch.setattr(archive_health, "record_hard_block", lambda: hard.__setitem__("n", hard["n"] + 1))
+    monkeypatch.setattr(archive_health, "is_open", lambda: False)
+
+    sleeps: list[float] = []
+    # Provide 4 refusals; a hard block must give up on the FIRST (no retry), so
+    # only one is consumed.
+    responses = [_refused_response() for _ in range(4)]
+    _install_scraper_patches(monkeypatch, sleeps, responses)
+
+    results = await scraper.scrape_snapshots(
+        [{"timestamp": "20200101000000", "url": "http://example.com/"}], "job-blocked"
+    )
+
+    assert results[0]["html"] is None
+    assert results[0].get("error") == "blocked"   # tagged as an IP block
+    assert hard["n"] == 1                          # hard-block breaker fed
+    assert len(responses) == 3                     # only ONE attempt consumed, no retries
+
+
+@pytest.mark.asyncio
+async def test_hard_block_skips_pages_without_requesting(monkeypatch):
+    # When the breaker is open due to a hard IP block, pages are skipped
+    # immediately - no request is issued and no back-off wait happens.
+    from services import archive_health
+    monkeypatch.setattr(archive_health, "is_hard_block", lambda: True)
+    monkeypatch.setattr(archive_health, "is_open", lambda: True)
+
+    sleeps: list[float] = []
+    responses: list = []  # none should ever be consumed
+    session = _install_scraper_patches(monkeypatch, sleeps, responses)
+
+    results = await scraper.scrape_snapshots(
+        [{"timestamp": "20200101000000", "url": f"http://example.com/{i}"} for i in range(5)],
+        "job-hardblock",
+    )
+
+    assert all(r["html"] is None and r.get("error") == "blocked" for r in results)
+    assert session.get.call_count == 0          # no archive.org request made
+    assert all(s < 1 for s in sleeps)           # no 20s-per-page breaker back-off

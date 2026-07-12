@@ -26,7 +26,7 @@ import aiohttp
 from loguru import logger
 
 from config import settings
-from services import archive_health
+from services import archive_health, archive_rate
 from config import USER_AGENT
 from services.scraper import _get_global_sem
 
@@ -157,6 +157,7 @@ async def hash_favicons(favicons: list[dict], domain: str) -> int:
             return
         try:
             async with _get_global_sem():
+                await archive_rate.acquire()
                 async with session.get(url) as resp:
                     if resp.status != 200:
                         if resp.status in (429, 503):

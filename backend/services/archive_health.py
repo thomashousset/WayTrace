@@ -14,8 +14,15 @@ import threading
 import time
 
 _FAIL_WINDOW = 120        # seconds: failures are counted within this window
-_FAIL_THRESHOLD = 3       # this many failures trips the breaker
-_COOLDOWN = 300           # seconds the breaker stays open (no calls allowed)
+_FAIL_THRESHOLD = 5       # this many soft failures (timeout/429/5xx) trips it
+_COOLDOWN = 180           # seconds the breaker stays open after a soft trip
+
+# A "hard block" is a TCP-level connection REFUSAL - the signature of archive.org
+# firewalling our IP, not mere throttling. It needs a very different response: a
+# refused IP will not recover in 3 minutes, and every retry only confirms the
+# block, so we trip fast and stay closed for a long cooldown.
+_HARD_FAIL_THRESHOLD = 2  # this many refusals in the window = "we are blocked"
+_HARD_COOLDOWN = 1800     # 30 min: give the IP real time to be un-blocked
 
 # "Slow mode" is advisory UX only (the breaker is the real ban protection). It
 # must reflect SUSTAINED slowness, not archive.org's normal per-request jitter:
@@ -30,7 +37,9 @@ _SLOW_FAIL_THRESHOLD = 2  # this many recent failures also reads as "slow"
 
 _lock = threading.Lock()
 _fails: list[float] = []
+_hard_fails: list[float] = []
 _open_until: float = 0.0
+_tripped_hard: bool = False
 _last_latency: float = 0.0
 _last_latency_at: float = 0.0
 _latencies: list[tuple[float, float]] = []  # (timestamp, seconds), recent only
@@ -56,8 +65,16 @@ def seconds_remaining() -> int:
         return max(0, int(_open_until - time.time()))
 
 
+def is_hard_block() -> bool:
+    """True when the breaker is open because of a hard IP block (connection
+    refused), as opposed to soft throttling. Callers use this to abort rather
+    than wait: a refused IP will not recover within a scan's lifetime."""
+    with _lock:
+        return _tripped_hard and time.time() < _open_until
+
+
 def record_failure() -> None:
-    """Log a timeout / 429 / 5xx. Trips the breaker once the threshold is hit."""
+    """Log a soft failure (timeout / 429 / 5xx). Trips after _FAIL_THRESHOLD."""
     global _open_until
     now = time.time()
     with _lock:
@@ -68,12 +85,38 @@ def record_failure() -> None:
             _fails.clear()
 
 
+def record_hard_block() -> None:
+    """Log a connection REFUSAL (TCP reject) - the signature of an IP block.
+    Trips fast and for a long cooldown so we stop hammering a blocked IP."""
+    global _open_until, _tripped_hard
+    now = time.time()
+    with _lock:
+        _hard_fails[:] = [t for t in _hard_fails if t > now - _FAIL_WINDOW]
+        _hard_fails.append(now)
+        if len(_hard_fails) >= _HARD_FAIL_THRESHOLD:
+            _open_until = now + _HARD_COOLDOWN
+            _tripped_hard = True
+            _hard_fails.clear()
+            _fails.clear()
+
+
 def record_success() -> None:
-    """A clean response: clear the failure streak and close the breaker."""
-    global _open_until
+    """A clean response: clear the SOFT failure streak and close a soft pause.
+
+    It deliberately does NOT clear the hard-refusal window: an intermittent
+    throttle (archive.org dropping a fraction of connections while others still
+    succeed) must still accumulate toward the hard-block threshold instead of
+    being reset by every good response in between - that intermittent case is
+    exactly what slipped through before. The hard window ages out on its own.
+    While a hard pause is in force it is left untouched so its cooldown is
+    respected; once the cooldown has elapsed a success clears the hard flag."""
+    global _open_until, _tripped_hard
+    now = time.time()
     with _lock:
         _fails.clear()
-        _open_until = 0.0
+        if now >= _open_until:
+            _open_until = 0.0
+            _tripped_hard = False
 
 
 def record_latency(seconds: float) -> None:
@@ -94,15 +137,23 @@ def status() -> dict:
     with _lock:
         now = time.time()
         cooldown = max(0, int(_open_until - now))
+        hard = _tripped_hard
         recent_fail = len([t for t in _fails if t > now - _FAIL_WINDOW])
         fresh = [sec for (t, sec) in _latencies if t > now - _LAT_WINDOW]
         lat = _last_latency if (now - _last_latency_at) < _LAT_WINDOW else 0.0
     med = _median(fresh)
     if cooldown > 0:
+        mins = max(1, round(cooldown / 60))
+        msg = (
+            (f"Archive.org is refusing connections from this server (it looks IP-blocked). "
+             f"Scanning is paused for about {mins} min to let it recover.")
+            if hard else
+            (f"Scanning is paused for about {cooldown}s: archive.org is rate-limiting us. "
+             "Please retry in a moment.")
+        )
         return {
             "state": "paused", "cooldown_remaining": cooldown, "last_latency": round(lat, 1),
-            "message": (f"Scanning is paused for about {cooldown}s: archive.org is rate-limiting us. "
-                        "Please retry in a moment."),
+            "blocked": hard, "message": msg,
         }
     # Sustained-slow only: a slow MEDIAN over >= _SLOW_MIN_SAMPLES recent calls,
     # or a run of failures. One jittery spike (a single 15-50s CDX call while

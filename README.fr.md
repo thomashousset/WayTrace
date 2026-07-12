@@ -24,6 +24,11 @@ L'interface est entièrement bilingue (anglais / français), basculable depuis l
 
 ---
 
+## Nouveautés de la v1.3.0
+
+- **Accès archive.org auto-régulé, sûr pour l'IP.** Chaque requête est soumise à un débit **adaptatif** partagé (AIMD : monte doucement tant que c'est propre, se divise par deux au premier refus de connexion) et à une limite de concurrence partagée — donc aucun nombre de scans ou d'utilisateurs simultanés ne peut pousser l'IP du serveur au-delà de la tolérance d'archive.org. Les blocages d'IP durs sont détectés et évités immédiatement.
+- **Code allégé & finitions UX.** Retrait du front-end collect/v1 retiré et de son CSS + tables de base morts ; ajout de skeletons de chargement, d'une bannière d'état archive.org bilingue et de traductions manquantes.
+
 ## Nouveautés de la v1.2.0
 
 - **Recherche plein-texte dans le contenu des pages.** Cherchez n'importe quel mot dans les pages archivées d'un scan (pas seulement les pivots extraits), avec extraits surlignés et liens vers la capture Wayback. Insensible aux accents.

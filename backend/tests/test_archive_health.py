@@ -9,7 +9,9 @@ from services import archive_health as ah
 def _reset():
     with ah._lock:
         ah._fails.clear()
+        ah._hard_fails.clear()
         ah._open_until = 0.0
+        ah._tripped_hard = False
         ah._latencies.clear()
         ah._last_latency = 0.0
         ah._last_latency_at = 0.0
@@ -68,13 +70,19 @@ def test_two_failures_read_as_slow():
     assert ah.status()["state"] == "slow"
 
 
-def test_three_failures_pause_the_breaker():
-    for _ in range(3):
+def test_threshold_failures_pause_the_breaker():
+    for _ in range(ah._FAIL_THRESHOLD):
         ah.record_failure()
     s = ah.status()
     assert s["state"] == "paused"
     assert s["cooldown_remaining"] > 0
     assert ah.is_open()
+
+
+def test_below_threshold_does_not_pause():
+    for _ in range(ah._FAIL_THRESHOLD - 1):
+        ah.record_failure()
+    assert not ah.is_open()
 
 
 def test_stale_latency_samples_age_out():
@@ -99,3 +107,58 @@ def test_success_clears_failure_streak_but_not_latency_history():
     with ah._lock:
         assert len(ah._fails) == 0
         assert len(ah._latencies) == 2
+
+
+# ---- hard IP-block detection (connection refused) ----
+
+def test_hard_block_trips_fast_and_long():
+    # Fewer refusals than the soft threshold, but it still trips - and for the
+    # long (30 min) cooldown, not the short soft one.
+    for _ in range(ah._HARD_FAIL_THRESHOLD):
+        ah.record_hard_block()
+    assert ah.is_open()
+    assert ah.seconds_remaining() > ah._COOLDOWN  # longer than a soft trip
+
+
+def test_hard_block_message_says_blocked():
+    for _ in range(ah._HARD_FAIL_THRESHOLD):
+        ah.record_hard_block()
+    msg = ah.status()["message"].lower()
+    assert "block" in msg
+
+
+def test_single_hard_block_below_threshold_stays_closed():
+    ah.record_hard_block()  # one refusal is not yet a confirmed block
+    assert not ah.is_open()
+
+
+def test_success_does_not_reopen_during_hard_cooldown():
+    # A stray success while the hard pause is in force must NOT reopen the gate;
+    # the cooldown has to elapse first.
+    for _ in range(ah._HARD_FAIL_THRESHOLD):
+        ah.record_hard_block()
+    assert ah.is_open()
+    ah.record_success()
+    assert ah.is_open()
+    assert ah._tripped_hard is True
+
+
+def test_success_clears_hard_flag_after_cooldown():
+    for _ in range(ah._HARD_FAIL_THRESHOLD):
+        ah.record_hard_block()
+    # Force the cooldown to have elapsed, then a clean response recovers.
+    with ah._lock:
+        ah._open_until = 0.0
+    ah.record_success()
+    assert not ah.is_open()
+    assert ah._tripped_hard is False
+
+
+def test_intermittent_refusals_still_trip_the_breaker():
+    # The 2600.eu case: refusals interleaved with successes. A success used to
+    # reset the hard-fail streak, so it never tripped. It must now trip.
+    ah.record_hard_block()
+    ah.record_success()
+    ah.record_hard_block()   # 2 refusals within the window, despite the success
+    assert ah.is_open()
+    assert ah._tripped_hard is True

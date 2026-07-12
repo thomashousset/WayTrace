@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Single source of truth for the tool version, surfaced in the API (/api/health,
 # OpenAPI) and injected into the frontend footer.
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.3.0"
 
 # Shared User-Agent for every archive.org request (CDX collector, page scraper,
 # favicon fetcher). One polite identity so the Internet Archive can attribute
@@ -20,17 +20,36 @@ class Settings(BaseSettings):
     # a scan from cascading into hundreds of connection failures and getting the
     # server IP blocked. This is the PER-SCAN cap; archive_global_concurrency
     # caps the aggregate across all running scans.
-    max_concurrent_scrapes: int = 5
+    max_concurrent_scrapes: int = 4
     # Process-wide ceiling on simultaneous archive.org requests, shared by every
-    # running scan, so N parallel scans never exceed this in flight.
-    archive_global_concurrency: int = 6
+    # running scan, so N parallel scans never exceed this in flight. Kept low on
+    # purpose: archive.org rate-limits by connection count, and staying at ~3 in
+    # flight (with the delays below) keeps us under its throttling threshold so a
+    # normal scan never trips the circuit breaker.
+    archive_global_concurrency: int = 3
+    # Process-wide archive.org request-rate governor (services/archive_rate.py).
+    # The rate ADAPTS (AIMD, like TCP congestion control): it starts at
+    # archive_rate_per_minute, creeps up by _step after _increase_interval
+    # seconds with no connection-refusal, and HALVES on the first refusal, kept
+    # within [_min, _max]. Bias is deliberately slow-up / fast-down so the server
+    # IP is never pushed past archive.org's (dynamic, unpublished) tolerance.
+    # archive_rate_per_minute is the STARTING rate; _max is the hard ceiling it
+    # may probe up to. Values are requests per minute.
+    archive_rate_per_minute: int = 90     # start: 1.5 req/s (proven safe)
+    archive_rate_min: int = 60            # floor: 1 req/s
+    archive_rate_max: int = 150           # ceiling: 2.5 req/s (well below the 4/s that got throttled)
+    archive_rate_step: int = 15           # additive increase: +0.25 req/s per bump
+    archive_rate_increase_interval: float = 90.0   # seconds clean before a bump
+    archive_rate_decrease_factor: float = 0.5      # multiplicative decrease on a refusal
+    archive_rate_burst: int = 6
     job_ttl_seconds: int = 7200
     max_active_jobs: int = 10
 
-    # v2 public-mode queue caps. Scans are I/O-bound on archive.org, so running
-    # 4 in parallel is safe now that archive_global_concurrency caps the
-    # aggregate request rate; it just drains the queue faster between users.
-    max_active_total: int = 4
+    # v2 public-mode queue caps. Scans are I/O-bound on archive.org; keep only
+    # 2 running at once so the aggregate archive.org load stays low (politeness,
+    # not a memory limit) and extra scans queue rather than pile on. The global
+    # rate limiter above is the real ceiling regardless of this.
+    max_active_total: int = 2
     max_queue_total: int = 20
     max_active_per_ip: int = 3
     # Hard ceiling on snapshots scanned per scan on the HOSTED service, to keep
@@ -64,8 +83,8 @@ class Settings(BaseSettings):
     # already fetched ("fresh"), and let the pipeline extract that subset so the
     # scan still completes. 0 disables the budget (scrape until done).
     scrape_budget_seconds: int = 0
-    scrape_delay_min: float = 0.25
-    scrape_delay_max: float = 0.75
+    scrape_delay_min: float = 0.5
+    scrape_delay_max: float = 1.2
     scrape_max_retries: int = 3
     log_level: str = "INFO"
 

@@ -6,7 +6,7 @@ from fastapi import APIRouter
 
 from config import APP_VERSION
 from models import HealthResponse, StatsResponse
-from services import archive_health
+from services import archive_health, archive_rate
 from store import store
 
 router = APIRouter(prefix="/api", tags=["health"])
@@ -32,8 +32,9 @@ async def health():
 
 @router.get("/archive-status")
 async def archive_status():
-    """Public archive.org health (ok / slow / paused) so the UI can warn users."""
-    return archive_health.status()
+    """Public archive.org health (ok / slow / paused) so the UI can warn users.
+    Includes the live adaptive request rate so it can be watched auto-tuning."""
+    return {**archive_health.status(), "rate_per_minute": archive_rate.current_rate_per_minute()}
 
 
 @router.get("/stats", response_model=StatsResponse)

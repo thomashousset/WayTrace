@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.3.0
+
+- **Self-governing archive.org request rate.** A process-wide governor bounds every archive.org call (page scrape, CDX enumeration, favicon) to both a shared request rate and a shared concurrency limit, so no number of parallel scans or users can burst past archive.org's tolerance. The rate is not a fixed guess: it **adapts** (AIMD, like TCP congestion control) - it starts conservative, creeps up while responses stay clean, and halves the instant archive.org refuses a connection, staying within a safe floor/ceiling. This keeps the server IP from being throttled or blocked.
+- **Connection-refusal handling.** A hard IP block (TCP connection refused) is detected distinctly from ordinary throttling: the breaker trips fast, holds a long cooldown, does not retry (retrying only deepens a block), and a scan already running aborts gracefully instead of grinding. Intermittent throttling (some connections dropped, others served) is now caught too. A scan curtailed this way is shown honestly rather than being miscounted as archive gaps.
+- **Leaner codebase.** Removed a large tranche of dead front-end code (the retired collect/v1 UI: comparison view, old history table, legacy pollers) and its orphaned CSS, and dropped the unused v1 database tables from the schema (with a migration that removes them from existing installs).
+- **UX.** Loading skeletons on the scan view (no blank flash on a deep link), a bilingual archive.org status banner, and a handful of filled-in translation gaps.
+
 ## v1.2.0
 
 - **Full-text search over scanned page content.** Search any word across a scan's archived pages (not only the extracted pivots), with highlighted excerpts and links to the Wayback capture. Accent-insensitive; the index is kept per-scan and purged on the 7-day retention.

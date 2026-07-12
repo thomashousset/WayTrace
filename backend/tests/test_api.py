@@ -112,6 +112,23 @@ async def test_scan_accepts_own_domain_and_subdomain_snapshots(client):
 
 
 @pytest.mark.anyio
+async def test_scan_refused_with_503_when_breaker_open(client, monkeypatch):
+    # When archive.org has the server IP blocked/throttled (breaker open), a new
+    # scan is refused fast - queued nothing, sent no request - with a clear 503
+    # so we never add load while being rate-limited.
+    monkeypatch.setattr("routers.scan.archive_health.is_open", lambda: True)
+    monkeypatch.setattr(
+        "routers.scan.archive_health.status",
+        lambda: {"state": "paused", "message": "archive.org is blocking us",
+                 "cooldown_remaining": 1800},
+    )
+    monkeypatch.setattr("routers.scan.archive_health.seconds_remaining", lambda: 1800)
+    r = await client.post("/api/scan", json={"domain": "example.com"})
+    assert r.status_code == 503
+    assert r.json()["detail"]["error"] == "archive_paused"
+
+
+@pytest.mark.anyio
 async def test_scan_rejects_ip(client):
     resp = await client.post("/api/scan", json={"domain": "192.168.1.1"})
     assert resp.status_code == 422

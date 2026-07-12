@@ -65,6 +65,15 @@ def _fast_and_fake(monkeypatch):
     monkeypatch.setattr(settings, "scrape_delay_max", 0.0)
     monkeypatch.setattr(settings, "scrape_max_retries", 0)
     monkeypatch.setattr(scraper.aiohttp, "ClientSession", _FakeSession)
+    # Keep the shared rate governor unlimited and the breaker closed, and reset
+    # both so state from another test can't skip every page here.
+    from services import archive_rate as _ar, archive_health as _ah
+    monkeypatch.setattr(settings, "archive_rate_per_minute", 100000)
+    monkeypatch.setattr(settings, "archive_rate_max", 100000)
+    _ar.reset()
+    with _ah._lock:
+        _ah._fails.clear(); _ah._hard_fails.clear()
+        _ah._open_until = 0.0; _ah._tripped_hard = False
 
 
 @pytest.mark.anyio

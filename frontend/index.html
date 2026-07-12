@@ -87,7 +87,7 @@
       <li><span class="home-cap-label" data-i18n="home.cap.timeline">Timeline</span><span class="home-cap-desc" data-i18n="home.cap.timeline.d">When each fact appeared, and when it disappeared.</span></li>
     </ul>
     <p class="home-caption" data-i18n-html="home.caption">Public data only &middot; Wayback Machine &middot; <a href="https://web.archive.org" target="_blank" rel="noopener">archive.org</a> &middot; <a href="#/legal">Legal &amp; licence</a></p>
-    <p class="home-version" data-i18n-html="home.version">WayTrace v1.2.0 &middot; hosted &middot; <a href="https://github.com/HXLLO/WayTrace" target="_blank" rel="noopener">source</a></p>
+    <p class="home-version" data-i18n-html="home.version">WayTrace v1.3.0 &middot; hosted &middot; <a href="https://github.com/HXLLO/WayTrace" target="_blank" rel="noopener">source</a></p>
     <p class="home-provenance" data-i18n="home.provenance">Open-source OSINT tool. The hosted build caps snapshots per scan; self-host it from GitHub to scan a domain in full.</p>
   </div>
 
@@ -303,37 +303,6 @@
   </div>
 </div>
 
-<div id="view-progress" class="view">
-  <div class="progress-page">
-    <div id="error-progress" class="error-msg"></div>
-    <div class="progress-domain" id="prog-domain"></div>
-    <div class="progress-phase" id="prog-phase">Starting...</div>
-    <div class="progress-health" id="prog-health" aria-live="polite"></div>
-    <div class="progress-track">
-      <div class="progress-fill" id="prog-fill" style="width:0%"></div>
-    </div>
-    <div class="progress-pct" id="prog-pct">0%</div>
-    <div class="progress-stats">
-      <div class="progress-stat">
-        <div class="progress-stat-val" id="prog-snapshots">0</div>
-        <div class="progress-stat-label">Snapshots</div>
-      </div>
-      <div class="progress-stat">
-        <div class="progress-stat-val" id="prog-pages">0</div>
-        <div class="progress-stat-label">Pages</div>
-      </div>
-      <div class="progress-stat">
-        <div class="progress-stat-val" id="prog-failed">0</div>
-        <div class="progress-stat-label">Failed</div>
-      </div>
-    </div>
-    <div class="progress-actions">
-      <button class="btn" id="pause-btn" onclick="pauseCollection()">Pause</button>
-      <button class="btn" id="resume-btn" onclick="resumeCollection()" style="display:none">Resume</button>
-    </div>
-  </div>
-</div>
-
 <div id="view-results" class="view">
   <div class="results-page">
     <div id="error-results" class="error-msg"></div>
@@ -348,7 +317,6 @@
       <div class="results-actions">
         <button class="btn btn-accent" onclick="openTimeline()" data-i18n="Timeline">Timeline</button>
         <button class="btn" onclick="openExportDrawer()" data-i18n="Export">Export</button>
-        <button class="btn" onclick="reanalyze()" data-i18n="Re-analyze">Re-analyze</button>
       </div>
     </div>
     <div id="res-favicons"></div>
@@ -419,51 +387,7 @@
       <button class="btn btn-accent" onclick="location.hash='#/';document.getElementById('domain-input').focus()" data-i18n="New Scan">New Scan</button>
     </div>
     <div id="my-scans"></div>
-    <div class="filters-bar" id="hist-filters">
-      <select class="filter-select" id="hist-status" aria-label="Filter scans by status" onchange="filterHistory()">
-        <option value="" data-i18n="All statuses">All statuses</option>
-        <option value="done" data-i18n="Analyzed">Analyzed</option>
-        <option value="running" data-i18n="Collecting">Collecting</option>
-        <option value="failed">Failed</option>
-        <option value="paused">Paused</option>
-      </select>
-      <input class="filter-input" id="hist-search" type="text"
-             aria-label="Search scans by domain"
-             placeholder="Search domains..." oninput="debouncedFilterHistory()">
-    </div>
-    <table class="data-table history" id="hist-table">
-      <thead>
-        <tr>
-          <th class="hist-select-col"></th>
-          <th onclick="sortHistory('name')">Domain <span class="sort-arrow"></span></th>
-          <th onclick="sortHistory('status')" style="width:120px">Status <span class="sort-arrow"></span></th>
-          <th onclick="sortHistory('pages_downloaded')" style="width:80px;text-align:right">Pages <span class="sort-arrow"></span></th>
-          <th onclick="sortHistory('total_findings')" style="width:90px;text-align:right">Findings <span class="sort-arrow"></span></th>
-          <th onclick="sortHistory('updated_at')" style="width:130px;text-align:right">Updated <span class="sort-arrow"></span></th>
-        </tr>
-      </thead>
-      <tbody id="hist-tbody"></tbody>
-    </table>
-    <div id="hist-empty" class="empty" style="display:none">
-      No scans yet. Enter a domain above to start.
-    </div>
   </div>
-</div>
-
-<div id="view-compare" class="view">
-  <div class="compare-page" id="compare-body">
-    <div class="compare-header">
-      <div class="compare-title">Compare scans</div>
-      <button class="btn" onclick="location.hash='#/history'">Back to history</button>
-    </div>
-    <div id="compare-content"></div>
-  </div>
-</div>
-
-<div class="compare-floater" id="compare-floater">
-  <span>Selected: <span class="compare-floater-count" id="compare-floater-count">0</span> / 2</span>
-  <button class="compare-floater-btn" id="compare-floater-btn" onclick="launchCompare()" disabled>Compare</button>
-  <button class="compare-floater-clear" onclick="clearCompareSelection()" title="Clear">×</button>
 </div>
 
 <div class="tl-backdrop" id="tl-backdrop" aria-hidden="true" onclick="closeTimeline()"></div>

@@ -10,7 +10,8 @@ import aiohttp
 from loguru import logger
 
 from config import settings
-from services import archive_health
+from services import archive_health, archive_rate
+from services.scraper import _get_global_sem  # shared archive.org concurrency cap
 
 CDX_URL = "https://web.archive.org/cdx/search/cdx"
 
@@ -136,7 +137,7 @@ async def cdx_size_probe(
     timeout = aiohttp.ClientTimeout(total=request_timeout)
     try:
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(url) as resp:
+            async with archive_rate.slot(_get_global_sem()), session.get(url) as resp:
                 if resp.status != 200:
                     return {
                         "ok": False, "page_count": 0, "estimated_records": 0,
@@ -294,7 +295,7 @@ async def fetch_cdx_snapshots(
                 break
             _attempt_start = time.monotonic()
             try:
-                async with session.get(CDX_URL, params=params) as resp:
+                async with archive_rate.slot(_get_global_sem()), session.get(CDX_URL, params=params) as resp:
                     if resp.status == 429:
                         # Rate-limited: count it toward the breaker and stop
                         # early once it trips rather than sleeping + retrying
@@ -415,7 +416,7 @@ async def _fetch_cdx_resume(
         params = build_cdx_params(domain, resume_key=current_key)
 
         try:
-            async with session.get(CDX_URL, params=params) as resp:
+            async with archive_rate.slot(_get_global_sem()), session.get(CDX_URL, params=params) as resp:
                 if resp.status == 429:
                     wait = 30 * (2 ** min(page, 3))
                     logger.warning("CDX resume rate-limited, waiting {}s", wait)

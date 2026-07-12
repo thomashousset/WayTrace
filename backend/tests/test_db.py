@@ -26,12 +26,13 @@ async def test_init_db_creates_all_tables(tmp_db_path):
             "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
         )
         tables = [row[0] for row in await cursor.fetchall()]
-    assert "backup_files" in tables
-    assert "crawl_state" in tables
-    assert "domains" in tables
-    assert "findings" in tables
-    assert "pages" in tables
-    assert "snapshots" in tables
+    # Live schema.
+    assert "jobs" in tables
+    assert "users" in tables
+    assert "scan_pages_fts" in tables
+    # The v1 collect/analyze tables were removed and must not be recreated.
+    for dead in ("domains", "snapshots", "pages", "findings", "crawl_state", "backup_files"):
+        assert dead not in tables, f"dead v1 table {dead} still created"
 
 
 @pytest.mark.asyncio
@@ -63,111 +64,6 @@ async def test_get_db_returns_connection(tmp_db_path):
         assert row[0] == 1
     finally:
         await db.close()
-
-
-@pytest.mark.asyncio
-async def test_domains_table_unique_constraint(tmp_db_path):
-    await init_db(tmp_db_path)
-    async with aiosqlite.connect(tmp_db_path) as db:
-        await db.execute("INSERT INTO domains (name) VALUES ('example.com')")
-        await db.commit()
-        with pytest.raises(aiosqlite.IntegrityError):
-            await db.execute("INSERT INTO domains (name) VALUES ('example.com')")
-            await db.commit()
-
-
-@pytest.mark.asyncio
-async def test_snapshots_table_unique_constraint(tmp_db_path):
-    await init_db(tmp_db_path)
-    async with aiosqlite.connect(tmp_db_path) as db:
-        await db.execute("INSERT INTO domains (name) VALUES ('example.com')")
-        await db.execute(
-            "INSERT INTO snapshots (domain_id, url, timestamp, digest, mimetype, status_code) "
-            "VALUES (1, 'http://example.com/', '20200101000000', 'abc123', 'text/html', '200')"
-        )
-        await db.commit()
-        with pytest.raises(aiosqlite.IntegrityError):
-            await db.execute(
-                "INSERT INTO snapshots (domain_id, url, timestamp, digest, mimetype, status_code) "
-                "VALUES (1, 'http://example.com/', '20200101000000', 'abc123', 'text/html', '200')"
-            )
-            await db.commit()
-
-
-@pytest.mark.asyncio
-async def test_pages_table_status_default(tmp_db_path):
-    await init_db(tmp_db_path)
-    async with aiosqlite.connect(tmp_db_path) as db:
-        await db.execute("INSERT INTO domains (name) VALUES ('example.com')")
-        await db.execute(
-            "INSERT INTO snapshots (domain_id, url, timestamp) "
-            "VALUES (1, 'http://example.com/', '20200101000000')"
-        )
-        await db.execute("INSERT INTO pages (snapshot_id) VALUES (1)")
-        await db.commit()
-        cursor = await db.execute("SELECT status FROM pages WHERE id = 1")
-        row = await cursor.fetchone()
-    assert row[0] == "pending"
-
-
-@pytest.mark.asyncio
-async def test_findings_unique_constraint(tmp_db_path):
-    await init_db(tmp_db_path)
-    async with aiosqlite.connect(tmp_db_path) as db:
-        await db.execute("INSERT INTO domains (name) VALUES ('example.com')")
-        await db.execute(
-            "INSERT INTO findings (domain_id, category, value) VALUES (1, 'emails', 'a@b.com')"
-        )
-        await db.commit()
-        with pytest.raises(aiosqlite.IntegrityError):
-            await db.execute(
-                "INSERT INTO findings (domain_id, category, value) VALUES (1, 'emails', 'a@b.com')"
-            )
-            await db.commit()
-
-
-@pytest.mark.asyncio
-async def test_crawl_state_domain_unique(tmp_db_path):
-    await init_db(tmp_db_path)
-    async with aiosqlite.connect(tmp_db_path) as db:
-        await db.execute("INSERT INTO domains (name) VALUES ('example.com')")
-        await db.execute(
-            "INSERT INTO crawl_state (domain_id, phase) VALUES (1, 'cdx')"
-        )
-        await db.commit()
-        with pytest.raises(aiosqlite.IntegrityError):
-            await db.execute(
-                "INSERT INTO crawl_state (domain_id, phase) VALUES (1, 'scraping')"
-            )
-            await db.commit()
-
-
-@pytest.mark.asyncio
-async def test_snapshots_has_source_columns(tmp_db_path):
-    await init_db(tmp_db_path)
-    async with aiosqlite.connect(tmp_db_path) as db:
-        cursor = await db.execute("PRAGMA table_info(snapshots)")
-        columns = {row[1] for row in await cursor.fetchall()}
-    assert "source" in columns
-    assert "source_url" in columns
-    assert "warc_filename" in columns
-    assert "warc_offset" in columns
-    assert "warc_length" in columns
-
-
-@pytest.mark.asyncio
-async def test_snapshots_source_default(tmp_db_path):
-    await init_db(tmp_db_path)
-    async with aiosqlite.connect(tmp_db_path) as db:
-        await db.execute("INSERT INTO domains (name) VALUES ('example.com')")
-        await db.execute(
-            "INSERT INTO snapshots (domain_id, url, timestamp) "
-            "VALUES (1, 'http://example.com/', '20200101000000')"
-        )
-        await db.commit()
-        cursor = await db.execute("SELECT source FROM snapshots WHERE id = 1")
-        row = await cursor.fetchone()
-    assert row[0] == "archive"
 
 
 @pytest.mark.asyncio

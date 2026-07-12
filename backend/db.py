@@ -9,86 +9,9 @@ import aiosqlite
 from loguru import logger
 
 SCHEMA_SQL = """
-CREATE TABLE IF NOT EXISTS domains (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT UNIQUE NOT NULL,
-    created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now'))
-);
-
-CREATE TABLE IF NOT EXISTS snapshots (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    domain_id INTEGER NOT NULL REFERENCES domains(id),
-    url TEXT NOT NULL,
-    timestamp TEXT NOT NULL,
-    digest TEXT,
-    mimetype TEXT,
-    status_code TEXT,
-    selected INTEGER DEFAULT 0,
-    source TEXT DEFAULT 'archive',
-    source_url TEXT,
-    warc_filename TEXT,
-    warc_offset INTEGER,
-    warc_length INTEGER,
-    UNIQUE(domain_id, url, timestamp)
-);
-CREATE INDEX IF NOT EXISTS idx_snapshots_domain ON snapshots(domain_id);
-CREATE INDEX IF NOT EXISTS idx_snapshots_digest ON snapshots(digest);
-CREATE INDEX IF NOT EXISTS idx_snapshots_selected ON snapshots(domain_id, selected);
-
-CREATE TABLE IF NOT EXISTS pages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    snapshot_id INTEGER UNIQUE NOT NULL REFERENCES snapshots(id),
-    html BLOB,
-    status TEXT DEFAULT 'pending',
-    scraped_at TEXT,
-    error TEXT,
-    response_headers TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_pages_status ON pages(status);
-
-CREATE TABLE IF NOT EXISTS backup_files (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    domain_id INTEGER NOT NULL REFERENCES domains(id),
-    url TEXT NOT NULL,
-    extension TEXT NOT NULL,
-    timestamp TEXT,
-    digest TEXT,
-    UNIQUE(domain_id, url, timestamp)
-);
-
-CREATE TABLE IF NOT EXISTS findings (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    domain_id INTEGER NOT NULL REFERENCES domains(id),
-    category TEXT NOT NULL,
-    value TEXT NOT NULL,
-    metadata TEXT,
-    first_seen TEXT,
-    last_seen TEXT,
-    occurrences INTEGER DEFAULT 1,
-    severity TEXT,
-    source_page_id INTEGER REFERENCES pages(id),
-    UNIQUE(domain_id, category, value)
-);
-CREATE INDEX IF NOT EXISTS idx_findings_domain_cat ON findings(domain_id, category);
-CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(severity);
-
-CREATE TABLE IF NOT EXISTS crawl_state (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    domain_id INTEGER UNIQUE NOT NULL REFERENCES domains(id),
-    phase TEXT NOT NULL,
-    status TEXT DEFAULT 'running',
-    progress REAL DEFAULT 0,
-    total_snapshots INTEGER DEFAULT 0,
-    snapshots_indexed INTEGER DEFAULT 0,
-    pages_downloaded INTEGER DEFAULT 0,
-    pages_failed INTEGER DEFAULT 0,
-    current_delay REAL DEFAULT 1.0,
-    cdx_resume_key TEXT,
-    started_at TEXT,
-    updated_at TEXT,
-    completed_at TEXT,
-    error TEXT
-);
+-- v1 collect/analyze pipeline tables (domains/snapshots/pages/findings/
+-- crawl_state/backup_files) were removed with that dead pipeline. Migration
+-- v6 drops them from any pre-existing database.
 
 CREATE TABLE IF NOT EXISTS jobs (
     url_id TEXT PRIMARY KEY,
@@ -146,11 +69,23 @@ MIGRATIONS: list[tuple[int, str]] = [
         ALTER TABLE jobs ADD COLUMN user_id INTEGER;
         CREATE INDEX IF NOT EXISTS idx_jobs_user ON jobs(user_id);
     """),
+    # v6 drops the dead v1 pipeline tables from any pre-existing database. On a
+    # fresh database (which never created them) these are harmless no-ops.
+    (6, """
+        DROP TABLE IF EXISTS findings;
+        DROP TABLE IF EXISTS backup_files;
+        DROP TABLE IF EXISTS pages;
+        DROP TABLE IF EXISTS snapshots;
+        DROP TABLE IF EXISTS crawl_state;
+        DROP TABLE IF EXISTS domains;
+    """),
 ]
 
-# Migrations whose failure with OperationalError means "already applied
-# by the previous ad-hoc hook" rather than a real error.
-_LEGACY_ADHOC_MIGRATIONS: set[int] = {1}
+# Migrations whose OperationalError is expected and safe to swallow. v1/v2 ALTER
+# the v1 tables (pages/crawl_state), which no longer exist in the schema, so on a
+# fresh database they raise "no such table" and are simply skipped; v6 then drops
+# the tables from any pre-existing database.
+_LEGACY_ADHOC_MIGRATIONS: set[int] = {1, 2}
 
 _db_path: str | None = None
 

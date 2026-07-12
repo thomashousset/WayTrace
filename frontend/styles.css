@@ -670,63 +670,7 @@
       font-family: var(--mono);
     }
 
-    /* ===== PROGRESS ===== */
-    .progress-page { padding: 72px 24px; max-width: 640px; margin: 0 auto; }
-    .progress-domain {
-      font-size: 24px; font-weight: 600; color: var(--text-bright);
-      letter-spacing: -.02em; margin-bottom: 4px;
-      font-family: var(--mono);
-    }
-    .progress-phase {
-      font-size: 14px; color: var(--text-dim); font-family: var(--font);
-      margin-bottom: 8px;
-    }
-    .progress-health {
-      font-size: 11px; color: var(--text-dim); font-family: var(--mono);
-      margin-bottom: 20px; min-height: 14px; opacity: 0.75;
-    }
-    .progress-health.prog-health--warn {
-      color: var(--warn); opacity: 1;
-    }
-    .progress-track {
-      width: 100%; height: 4px; background: var(--surface3);
-      border-radius: 999px; overflow: hidden; margin-bottom: 10px;
-    }
-    .progress-fill {
-      height: 100%; background: var(--accent);
-      border-radius: 999px;
-      transition: width 180ms linear;
-    }
-    .progress-pct {
-      font-size: 28px; font-weight: 600; color: var(--text-bright);
-      font-family: var(--mono); font-variant-numeric: tabular-nums;
-      letter-spacing: -.02em;
-      text-align: center; margin: 4px 0 28px;
-    }
-    .progress-stats {
-      display: grid; grid-template-columns: repeat(3, 1fr); gap: 0;
-      margin-bottom: 24px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      overflow: hidden;
-    }
-    .progress-stat {
-      background: transparent;
-      border-right: 1px solid var(--border);
-      padding: 14px 16px;
-    }
-    .progress-stat:last-child { border-right: none; }
-    .progress-stat-val {
-      font-size: 20px; font-weight: 600; color: var(--text-bright);
-      font-family: var(--mono); font-variant-numeric: tabular-nums;
-      letter-spacing: -.01em;
-    }
-    .progress-stat-label {
-      font-size: 11px; color: var(--text-dim); text-transform: uppercase;
-      letter-spacing: .08em; margin-top: 4px; font-weight: 500;
-    }
-    .progress-actions { display: flex; gap: 8px; }
+    /* ===== BUTTONS ===== */
     .btn {
       height: 32px; padding: 0 12px;
       border: 1px solid var(--border); border-radius: 8px;
@@ -761,6 +705,22 @@
       box-shadow: inset 0 1px 2px rgba(0,0,0,.18);
       transform: translateY(0);
     }
+
+    /* ===== LOADING SKELETON ===== */
+    .skel {
+      display: inline-block; border-radius: var(--radius);
+      background: linear-gradient(90deg, var(--surface) 25%, var(--surface2) 37%, var(--surface) 63%);
+      background-size: 400% 100%;
+      animation: skel-shimmer 1.4s ease infinite;
+    }
+    @keyframes skel-shimmer { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }
+    .skel-title { width: 220px; height: 30px; }
+    .skel-line { width: 150px; height: 14px; margin-top: 10px; }
+    .skel-wrap { margin-top: 22px; }
+    .skel-row { display: block; width: 100%; height: 46px; margin-bottom: 18px; }
+    .skel-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    .skel-tile { height: 74px; }
+    @media (prefers-reduced-motion: reduce) { .skel { animation: none; } }
 
     /* ===== RESULTS ===== */
     .results-page { padding: 32px 24px 48px; max-width: 1120px; margin: 0 auto; }
@@ -800,6 +760,14 @@
       line-height: 1.55; margin-top: 8px; max-width: 760px;
     }
     .results-meta .rm-explain b { color: var(--text-dim); font-weight: 600; }
+    .results-meta .rm-warn {
+      font-family: var(--font); font-size: 13px; line-height: 1.5;
+      margin-top: 10px; max-width: 760px;
+      padding: 9px 12px; border-radius: var(--radius);
+      color: var(--text-dim); background: var(--surface2);
+      border: 1px solid var(--border); border-left: 3px solid var(--warn);
+    }
+    .results-meta .rm-warn b { color: var(--warn); font-weight: 600; }
     .results-actions { display: flex; gap: 6px; flex-shrink: 0; flex-wrap: wrap; align-items: center; }
     /* Expires badge under the v2 action row. Pill-shaped so it reads as a
        status indicator, not a button. Subtle border + dim color keeps it
@@ -1973,8 +1941,6 @@
       font-size: 28px; font-weight: 600; color: var(--text-bright);
       letter-spacing: -.02em;
     }
-    .data-table.history tr { cursor: pointer; }
-    .data-table.history tr:hover td { background: var(--surface2); }
 
     /* ===== ERROR ===== */
     .error-msg {
@@ -2746,186 +2712,6 @@
       flex-shrink: 0;
     }
     .exp-footer .btn { flex: 1; }
-
-    /* ===== COMPARE VIEW ===== */
-    .compare-page {
-      max-width: 1400px; margin: 0 auto; padding: 24px;
-    }
-    .compare-header {
-      display: flex; align-items: center; justify-content: space-between;
-      margin-bottom: 24px;
-      gap: 16px; flex-wrap: wrap;
-    }
-    .compare-title {
-      font-size: 28px; font-weight: 600; color: var(--text-bright);
-      letter-spacing: -.02em;
-    }
-    .compare-subjects {
-      display: flex; gap: 12px; align-items: center;
-      font-family: var(--mono); font-size: 13px;
-    }
-    .compare-subject {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 8px 14px;
-    }
-    .compare-subject.a { border-left: 3px solid var(--accent); }
-    .compare-subject.b { border-left: 3px solid var(--yellow); }
-    .compare-subject .compare-label {
-      font-size: 9px; font-weight: 700;
-      color: var(--text-dim);
-      text-transform: uppercase; letter-spacing: .08em;
-      margin-bottom: 2px;
-    }
-    .compare-arrow {
-      color: var(--text-dim); font-size: 16px;
-    }
-    .compare-summary {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 8px;
-      margin-bottom: 20px;
-    }
-    .compare-stat {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 12px 14px;
-      text-align: left;
-    }
-    .compare-stat-count {
-      font-size: 22px; font-weight: 700;
-      font-family: var(--mono);
-      line-height: 1;
-    }
-    .compare-stat-label {
-      font-size: 10px; font-weight: 600;
-      text-transform: uppercase; letter-spacing: .06em;
-      color: var(--text-dim);
-      margin-top: 6px;
-    }
-    .compare-stat.only-a .compare-stat-count { color: var(--accent); }
-    .compare-stat.only-b .compare-stat-count { color: var(--yellow); }
-    .compare-stat.shared .compare-stat-count { color: var(--green); }
-    .compare-stat.total .compare-stat-count { color: var(--text-bright); }
-    .compare-group {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      margin-bottom: 12px;
-      overflow: hidden;
-    }
-    .compare-group-header {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 12px 16px;
-      cursor: pointer;
-      user-select: none;
-      background: var(--surface2);
-    }
-    .compare-group-header:hover { background: var(--surface3); }
-    .compare-group-name {
-      font-size: 12px; font-weight: 600;
-      color: var(--text-bright);
-      text-transform: uppercase; letter-spacing: .06em;
-    }
-    .compare-group-counts {
-      display: flex; gap: 10px;
-      font-family: var(--mono); font-size: 11px;
-    }
-    .compare-group-counts .only-a { color: var(--accent); }
-    .compare-group-counts .only-b { color: var(--yellow); }
-    .compare-group-counts .shared { color: var(--green); }
-    .compare-group-body {
-      display: none;
-      padding: 0 16px 14px;
-    }
-    .compare-group.open .compare-group-body { display: block; }
-    .compare-columns {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-      margin-top: 8px;
-    }
-    .compare-col {
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 8px 10px;
-    }
-    .compare-col-header {
-      font-size: 10px; font-weight: 600;
-      text-transform: uppercase; letter-spacing: .06em;
-      margin-bottom: 6px;
-    }
-    .compare-col.a .compare-col-header { color: var(--accent); }
-    .compare-col.b .compare-col-header { color: var(--yellow); }
-    .compare-col.shared { grid-column: span 2; }
-    .compare-col.shared .compare-col-header { color: var(--green); }
-    .compare-col-list {
-      display: flex; flex-direction: column; gap: 2px;
-      max-height: 200px; overflow-y: auto;
-    }
-    .compare-item {
-      font-family: var(--mono); font-size: 11px;
-      padding: 3px 6px;
-      border-radius: var(--radius);
-      word-break: break-all;
-      color: var(--text);
-    }
-    .compare-empty {
-      color: var(--text-dim); font-size: 11px;
-      font-style: italic;
-      padding: 6px;
-    }
-    @media (max-width: 900px) {
-      .compare-summary { grid-template-columns: repeat(2, 1fr); }
-      .compare-columns { grid-template-columns: 1fr; }
-      .compare-col.shared { grid-column: span 1; }
-    }
-
-    /* ===== HISTORY COMPARE SELECTOR ===== */
-    .hist-select-col { width: 40px; padding-right: 0; }
-    .hist-select-box {
-      accent-color: var(--accent);
-      cursor: pointer;
-    }
-    .compare-floater {
-      position: fixed; bottom: 24px; left: 50%;
-      transform: translateX(-50%);
-      background: var(--surface);
-      border: 1px solid var(--accent);
-      border-radius: var(--radius-lg);
-      padding: 10px 18px;
-      display: none;
-      align-items: center; gap: 14px;
-      box-shadow: var(--shadow-lg);
-      z-index: 150;
-      font-size: 12px;
-    }
-    .compare-floater.visible { display: flex; }
-    .compare-floater-count {
-      color: var(--accent); font-family: var(--mono); font-weight: 700;
-    }
-    .compare-floater-btn {
-      height: 30px; padding: 0 14px;
-      background: var(--accent);
-      border: 1px solid var(--accent-dim);
-      border-radius: var(--radius);
-      color: #fff; font-family: var(--font); font-size: 12px; font-weight: 500;
-      cursor: pointer;
-      box-shadow: inset 0 1px 0 rgba(255,255,255,.12);
-    }
-    .compare-floater-btn:hover { background: var(--accent-dim); }
-    .compare-floater-btn[disabled] {
-      background: var(--surface3); color: var(--text-dim);
-      cursor: not-allowed;
-    }
-    .compare-floater-clear {
-      background: transparent; border: none;
-      color: var(--text-dim); cursor: pointer;
-      font-size: 14px;
-    }
-    .compare-floater-clear:hover { color: var(--text); }
 
     /* ===== FINDING DETAIL DRAWER ===== */
     /* Backdrop dims the page content while the drawer is open. Without this

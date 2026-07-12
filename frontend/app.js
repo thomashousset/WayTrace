@@ -1,7 +1,6 @@
 /* ===== STATE ===== */
 const API = '';
 let currentDomainId = null;
-let pollTimer = null;
 
 /* ===== v2 PUBLIC STATE ===== */
 let publicScanUrlId = null;
@@ -21,7 +20,6 @@ let activeCategory = null;
 let historyData = [];
 
 // Compare selection (set of domain IDs picked for side-by-side comparison)
-let compareSelection = new Set();
 let histSortCol = 'updated_at';
 let histSortDir = 'desc';
 
@@ -118,9 +116,22 @@ async function checkArchiveStatus() {
     const d = await (await fetch(API + '/api/archive-status')).json();
     if (!d || d.state === 'ok') { el.hidden = true; return; }
     el.className = 'archive-banner ' + (d.state === 'paused' ? 'paused' : 'slow');
-    el.textContent = d.message || '';
+    el.textContent = _archiveStatusMessage(d);
     el.hidden = false;
   } catch (_) { el.hidden = true; }
+}
+
+// Localise the archive.org banner client-side (the backend message is English
+// only). Distinguishes a hard IP block from ordinary throttling.
+function _archiveStatusMessage(d) {
+  if (d.state === 'paused') {
+    if (d.blocked) {
+      const mins = Math.max(1, Math.round((d.cooldown_remaining || 0) / 60));
+      return t('Archive.org is refusing connections from this server (it looks IP-blocked). Scanning is paused for about {n} min to let it recover.').replace('{n}', mins);
+    }
+    return t('Scanning is paused for about {s}s: archive.org is rate-limiting us. Please retry in a moment.').replace('{s}', d.cooldown_remaining || 0);
+  }
+  return t('Archive.org is slow right now; scans may take longer than usual.');
 }
 
 // Show the clean 404 view for unknown routes (and for routes a viewer cannot
@@ -202,7 +213,7 @@ const I18N = {
     'home.cap.timeline': 'Chronologie',
     'home.cap.timeline.d': 'Quand chaque élément est apparu, et quand il a disparu.',
     'home.caption': 'Données publiques uniquement &middot; Wayback Machine &middot; <a href="https://web.archive.org" target="_blank" rel="noopener">archive.org</a> &middot; <a href="#/legal">Mentions légales</a>',
-    'home.version': 'WayTrace v1.2.0 &middot; hébergé &middot; <a href="https://github.com/HXLLO/WayTrace" target="_blank" rel="noopener">source</a>',
+    'home.version': 'WayTrace v1.3.0 &middot; hébergé &middot; <a href="https://github.com/HXLLO/WayTrace" target="_blank" rel="noopener">source</a>',
     'home.provenance': "Outil OSINT open source. La version hébergée limite le nombre de snapshots par scan ; auto-hébergez-la depuis GitHub pour analyser un domaine en entier.",
     'home.ethic': "Conçu pour les chercheurs en sécurité, les équipes, les journalistes et les professionnels curieux. Utilisez ce que vous trouvez de façon responsable : signalez les risques aux personnes qui possèdent les données, jamais contre elles.",
     'home.feed.title': 'Scans publiés récemment',
@@ -293,6 +304,18 @@ const I18N = {
     'distinct': 'distincts', 'archived': 'archivés', 'of': 'sur',
     'Download HTML': 'Télécharger HTML', 'Copy link': 'Copier le lien',
     'Scan more': 'Scanner plus',
+    'Copy link': 'Copier le lien',
+    'Private': 'Privé',
+    'archived': 'archivés',
+    'density': 'densité',
+    'expires': 'expire',
+    'more': 'de plus',
+    'of': 'sur',
+    'pages scraped': 'pages récupérées',
+    'snapshots analysed': 'snapshots analysés',
+    'Archive.org is refusing connections from this server (it looks IP-blocked). Scanning is paused for about {n} min to let it recover.': "Archive.org refuse les connexions depuis ce serveur (IP vraisemblablement bloquée). Les scans sont en pause pendant environ {n} min, le temps que ça se rétablisse.",
+    'Scanning is paused for about {s}s: archive.org is rate-limiting us. Please retry in a moment.': "Scans en pause pendant environ {s}s : archive.org nous limite. Réessayez dans un instant.",
+    'Archive.org is slow right now; scans may take longer than usual.': "Archive.org est lent en ce moment ; les scans peuvent prendre plus de temps que d'habitude.",
     'Search': 'Rechercher',
     'Search a word in the archived page content…': 'Rechercher un mot dans le contenu des pages archivées…',
     'Searching…': 'Recherche…',
@@ -521,9 +544,12 @@ function navigate(hash) {
   const parts = (hash || '#/').replace('#/', '').split('/').filter(Boolean);
   // v2 public scan route: #/s/{url_id}
   let view = parts[0] === 's' ? 'scan-public' : (parts[0] || 'home');
-  const valid = new Set(['home', 'scope', 'progress', 'results', 'history', 'compare', 'scan-public', 'legal']);
+  const valid = new Set(['home', 'scope', 'history', 'scan-public', 'legal']);
   if (!valid.has(view)) view = 'notfound';
-  const views = ['home', 'scope', 'progress', 'results', 'history', 'compare', 'scan-public', 'legal', 'admin', 'notfound'];
+  // 'results' stays here (not in `valid`): the public flow reuses view-results,
+  // so navigate() must still deactivate it when leaving, even though there is no
+  // longer a /#/results route.
+  const views = ['home', 'scope', 'results', 'history', 'scan-public', 'legal', 'admin', 'notfound'];
 
   views.forEach(v => {
     const el = $('view-' + v);
@@ -531,19 +557,10 @@ function navigate(hash) {
   });
 
   $('history-btn').classList.toggle('active', view === 'history');
-  stopPolling();
   stopPublicScanPolling();
   if (view !== 'admin') { try { _stopAdminMon(); } catch (_) {} }
-  // Clear v2 public mode when navigating away from /s/{url_id} so the legacy
-  // results view goes back to its normal /api/domains-driven behavior.
+  // Clear v2 public mode when navigating away from /s/{url_id}.
   if (view !== 'scan-public') v2PublicMode = false;
-  // Also clear any pending results-page re-poll when navigating away,
-  // otherwise a stale loadResults timer can fire after the user has moved on.
-  if (view !== 'results') stopResultsPolling();
-
-  // Hide compare floater unless on history view
-  const floater = document.getElementById('compare-floater');
-  if (floater) floater.classList.toggle('visible', view === 'history' && compareSelection.size > 0);
 
   if (view === 'home') {
     $('domain-input').focus();
@@ -558,21 +575,12 @@ function navigate(hash) {
     }
     publicScanUrlId = newUrlId;
     publicScanLastStatus = null;
+    showScanSkeleton();
     pollPublicScan();
   } else if (view === 'scope' && parts[1]) {
     loadScope(decodeURIComponent(parts[1]));
-  } else if (view === 'progress' && parts[1]) {
-    currentDomainId = parseInt(parts[1]);
-    $('prog-domain').textContent = parts[2] || 'Loading...';
-    startPolling(currentDomainId);
-  } else if (view === 'results' && parts[1]) {
-    currentDomainId = parseInt(parts[1]);
-    activeCategory = parts[2] || null;
-    loadResults(currentDomainId, activeCategory);
   } else if (view === 'history') {
     loadHistory();
-  } else if (view === 'compare' && parts[1] && parts[2]) {
-    loadCompare(parseInt(parts[1]), parseInt(parts[2]));
   }
 }
 
@@ -822,6 +830,20 @@ async function pollPublicScan() {
   }
 }
 
+// Placeholder shown the instant a scan link opens, so a deep-link never flashes
+// a blank card while the first /api/s fetch is in flight. Replaced by the real
+// render on the first response.
+function showScanSkeleton() {
+  const dom = $('public-scan-domain'); if (dom) dom.innerHTML = '<span class="skel skel-title"></span>';
+  const meta = $('public-scan-meta'); if (meta) meta.innerHTML = '<span class="skel skel-line"></span>';
+  const actions = $('public-scan-actions'); if (actions) actions.style.display = 'none';
+  const body = $('public-scan-body');
+  if (body) {
+    body.innerHTML = '<div class="skel-wrap" aria-hidden="true"><span class="skel skel-row"></span>'
+      + '<div class="skel-grid">' + '<span class="skel skel-tile"></span>'.repeat(8) + '</div></div>';
+  }
+}
+
 function renderPublicScan(job) {
   $('public-scan-domain').textContent = job.domain || '';
   const meta = $('public-scan-meta');
@@ -873,7 +895,10 @@ function renderPublicScan(job) {
     `;
     wireCopyShareLink();
   } else if (status === 'completed') {
-    // Switch to the rich legacy results view via adapter
+    // Clear the loading skeleton (this view is about to be hidden) and switch
+    // to the rich results view via the adapter.
+    if (body) body.innerHTML = '';
+    if (meta) meta.innerHTML = '';
     renderV2InLegacyView(job);
     return;
   } else if (status === 'failed' || status === 'cancelled') {
@@ -2067,8 +2092,6 @@ async function launchScopedScan() {
 // from a clean slate. Without this, polling timers + cached findings
 // from the previous domain leak into the new run.
 function resetSessionState() {
-  stopPolling();
-  if (typeof stopResultsPolling === 'function') stopResultsPolling();
   allFindings = [];
   filteredFindings = [];
   activeCategory = null;
@@ -2077,209 +2100,6 @@ function resetSessionState() {
   if (typeof ribbonExpanded !== 'undefined') ribbonExpanded = false;
   if (typeof _techstackExpanded !== 'undefined') _techstackExpanded.clear();
   findingsPage = 0;
-  lastDisplayedPct = 0;
-  targetPct = 0;
-  resetProgressDisplay();
-}
-
-/* ===== PROGRESS ===== */
-let pollHealthTimer = null;
-
-// Adaptive, monotonic progress display. The backend's raw d.progress jumps
-// abruptly between phases; we derive a smoother value here, clamp it to
-// never regress, and reset on each fresh scan.
-let lastDisplayedPct = 0;
-let targetPct = 0;
-let displayedPct = 0;
-let pctTickerTimer = null;
-function stopPctTicker() {
-  if (pctTickerTimer) { clearTimeout(pctTickerTimer); pctTickerTimer = null; }
-}
-function stepPctTicker() {
-  pctTickerTimer = null;
-  if (displayedPct >= targetPct) return;
-  const gap = targetPct - displayedPct;
-  // Adaptive cadence: tight gap feels deliberate (260ms), wide gap catches up (20ms).
-  const delay = Math.max(18, Math.round(280 / Math.max(gap, 1)));
-  displayedPct += 1;
-  const pctEl = document.getElementById('prog-pct');
-  const fillEl = document.getElementById('prog-fill');
-  if (pctEl) pctEl.textContent = displayedPct + '%';
-  if (fillEl) fillEl.style.width = displayedPct + '%';
-  pctTickerTimer = setTimeout(stepPctTicker, delay);
-}
-function setTargetPct(t) {
-  t = Math.min(100, Math.max(0, Math.floor(t)));
-  if (t <= targetPct) return;
-  targetPct = t;
-  if (!pctTickerTimer) stepPctTicker();
-}
-function resetProgressDisplay() {
-  lastDisplayedPct = 0;
-  targetPct = 0;
-  displayedPct = 0;
-  stopPctTicker();
-  const pctEl = document.getElementById('prog-pct');
-  const fillEl = document.getElementById('prog-fill');
-  if (pctEl) pctEl.textContent = '0%';
-  if (fillEl) fillEl.style.width = '0%';
-}
-function computeAdaptivePct(d) {
-  let raw = 0;
-  if (d.phase === 'cdx') {
-    raw = 10 + Math.min(15, (d.snapshots_indexed || 0) * 0.01);
-  } else if (d.phase === 'select' || d.phase === 'backup_scan') {
-    raw = Math.max(25, lastDisplayedPct);
-  } else if (d.phase === 'download') {
-    const denom = Math.max(d.pages_selected || d.total_snapshots || 1, 1);
-    const frac = Math.min(1, (d.pages_downloaded || 0) / denom);
-    raw = 25 + frac * 65;
-  } else if (d.phase === 'done') {
-    raw = 92;
-  }
-  if (d.status === 'done' || d.status === 'completed') raw = 99;
-  const pct = Math.max(lastDisplayedPct, raw);
-  lastDisplayedPct = pct;
-  return pct;
-}
-
-function startPolling(domainId) {
-  stopPolling();
-  resetPollHealth();
-  resetProgressDisplay();
-  pollOnce(domainId);
-  pollTimer = setInterval(() => {
-    // Skip ticks while the tab is backgrounded. saves a /api/jobs/{id}
-    // request every 3 s × however long the user wanders away. The next
-    // visibilitychange listener triggers an immediate catch-up poll.
-    if (document.hidden) return;
-    pollOnce(domainId);
-  }, 3000);
-  // Refresh elapsed / stall indicator every second even when the backend
-  // is silent. so the user sees the timer moving.
-  pollHealthTimer = setInterval(updatePollHealthUI, 1000);
-  pollDomainId = domainId;
-}
-
-function stopPolling() {
-  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-  if (pollHealthTimer) { clearInterval(pollHealthTimer); pollHealthTimer = null; }
-  pollDomainId = null;
-}
-
-let pollDomainId = null;
-// Catch-up poll on tab refocus so the user lands on fresh state instead
-// of waiting up to 3 s for the next interval tick.
-document.addEventListener('visibilitychange', () => {
-  if (!document.hidden && pollDomainId !== null && pollTimer) {
-    pollOnce(pollDomainId);
-  }
-});
-
-// Health state for the progress poller. Tracks elapsed time and failed
-// polls so the UI can show a meaningful banner instead of looking frozen.
-const pollHealth = {
-  startedAt: 0,
-  lastSuccessAt: 0,
-  consecutiveFailures: 0,
-};
-
-function resetPollHealth() {
-  pollHealth.startedAt = Date.now();
-  pollHealth.lastSuccessAt = Date.now();
-  pollHealth.consecutiveFailures = 0;
-}
-
-function updatePollHealthUI() {
-  const el = $('prog-health');
-  if (!el) return;
-  if (!pollHealth.startedAt) { el.textContent = ''; return; }
-  const now = Date.now();
-  const elapsed = Math.round((now - pollHealth.startedAt) / 1000);
-  const sinceLastOk = now - pollHealth.lastSuccessAt;
-  const mins = Math.floor(elapsed / 60);
-  const secs = elapsed % 60;
-  const parts = [`elapsed ${mins > 0 ? mins + 'm ' : ''}${secs}s`];
-  if (sinceLastOk > 10000 && pollHealth.consecutiveFailures > 0) {
-    parts.push(`⚠ no update for ${Math.round(sinceLastOk / 1000)}s (retry ${pollHealth.consecutiveFailures})`);
-    el.classList.add('prog-health--warn');
-  } else {
-    el.classList.remove('prog-health--warn');
-  }
-  el.textContent = parts.join(' · ');
-}
-
-async function pollOnce(domainId) {
-  try {
-    const resp = await fetch(API + '/api/collect/' + domainId + '/status');
-    if (!resp.ok) {
-      pollHealth.consecutiveFailures += 1;
-      updatePollHealthUI();
-      return;
-    }
-    const d = await resp.json();
-
-    pollHealth.lastSuccessAt = Date.now();
-    pollHealth.consecutiveFailures = 0;
-    updatePollHealthUI();
-
-    $('prog-domain').textContent = d.domain;
-    $('prog-snapshots').textContent = d.snapshots_indexed || 0;
-    $('prog-pages').textContent = d.pages_downloaded || 0;
-    $('prog-failed').textContent = d.pages_failed || 0;
-
-    setTargetPct(computeAdaptivePct(d));
-
-    const dlDenom = d.pages_selected || d.total_snapshots || '?';
-    const phaseLabels = {
-      cdx: 'Indexing archive.org · ' + (d.snapshots_indexed || 0) + ' snapshots',
-      select: 'Selecting snapshots to analyze',
-      download: 'Downloading pages: ' + (d.pages_downloaded || 0) + '/' + dlDenom,
-      backup_scan: 'Scanning for backup files',
-      analyze: 'Analyzing findings',
-      done: 'Collection complete',
-    };
-    $('prog-phase').textContent = phaseLabels[d.phase] || d.phase;
-
-    $('pause-btn').style.display = (d.status === 'running') ? '' : 'none';
-    $('resume-btn').style.display = (d.status === 'paused') ? '' : 'none';
-
-    if (d.status === 'done' || d.status === 'completed') {
-      stopPolling();
-      // Backend now runs analyze inline as a 'analyze' phase before the
-      // status flips to done, so when we land here the findings ARE
-      // already in the DB. No need to re-trigger /api/analyze (used to
-      // be a fire-and-forget for the legacy collect→analyze split).
-      // The results view's loadResults still re-polls if findings show
-      // empty, as a defensive belt-and-suspenders.
-      setTargetPct(100);
-      $('scan-btn').disabled = false;
-      location.hash = '#/results/' + domainId;
-      return;
-    } else if (d.status === 'failed') {
-      stopPolling();
-      $('scan-btn').disabled = false;
-      showError('error-progress', 'Collection failed: ' + (d.error || 'unknown'));
-    }
-  } catch (e) {
-    pollHealth.consecutiveFailures += 1;
-    updatePollHealthUI();
-  }
-}
-
-async function pauseCollection() {
-  if (!currentDomainId) return;
-  await fetch(API + '/api/collect/' + currentDomainId + '/pause', {method: 'POST'});
-  stopPolling();
-  $('pause-btn').style.display = 'none';
-  $('resume-btn').style.display = '';
-  $('prog-phase').textContent = 'Paused';
-}
-
-async function resumeCollection() {
-  if (!currentDomainId) return;
-  await fetch(API + '/api/collect/' + currentDomainId + '/resume', {method: 'POST'});
-  startPolling(currentDomainId);
 }
 
 /* ===== RESULTS ===== */
@@ -2288,114 +2108,8 @@ async function resumeCollection() {
 // #/results/{id} between collection-done and analyze-done, the findings
 // endpoint returns []. We re-fetch every 3s and re-render once findings
 // appear, so the user never sees a permanently-empty results page.
-let resultsPollTimer = null;
-function stopResultsPolling() {
-  if (resultsPollTimer) { clearTimeout(resultsPollTimer); resultsPollTimer = null; }
-  loadResults._pendingSince = null;
-}
 
-async function loadResults(domainId, category) {
-  try {
-    const [domainResp, findingsResp] = await Promise.all([
-      fetch(API + '/api/domains/' + domainId),
-      fetch(API + '/api/domains/' + domainId + '/findings?limit=1000'),
-    ]);
-    if (!domainResp.ok) throw new Error('Domain not found');
-    const domainInfo = await domainResp.json();
-    const findingsRaw = await findingsResp.json();
-    const findings = Array.isArray(findingsRaw) ? findingsRaw : [];
 
-    // Detect the pending-analysis race: collection is done but the analyze
-    // step (POST /api/analyze/{id}) hasn't yet stored findings. Without
-    // re-polling here, the user is stuck on a "0 findings" page even
-    // though the backend has 1000+ findings indexed seconds later.
-    const crawlStatus = (domainInfo.crawl || {}).status || '';
-    const collectionDone = crawlStatus === 'done' || crawlStatus === 'completed';
-    const totalFindings = domainInfo.total_findings || findings.length || 0;
-    if (collectionDone && totalFindings === 0) {
-      if (!loadResults._pendingSince) {
-        loadResults._pendingSince = Date.now();
-        // Re-trigger analyze in case the previous POST was lost (bookmarked
-        // results URL, or the fire-and-forget call dropped). Backend is
-        // idempotent.
-        fetch(API + '/api/analyze/' + domainId, {method: 'POST'}).catch(() => {});
-      }
-      const elapsed = Date.now() - loadResults._pendingSince;
-      const tooLong = elapsed > 5 * 60 * 1000;
-      renderResultsHeader(domainInfo);
-      const grid = $('res-catgrid');
-      if (grid) {
-        grid.innerHTML = tooLong
-          ? '<div class="results-pending results-pending--err">Analysis did not complete after 5 minutes. Open DevTools → Network or POST /api/analyze/' + domainId + ' to retry.</div>'
-          : '<div class="results-pending">Analyzing pages, findings will appear shortly. (' + Math.round(elapsed / 1000) + 's)</div>';
-      }
-      if (!tooLong) {
-        resultsPollTimer = setTimeout(() => loadResults(domainId, category), 3000);
-      }
-      return;
-    }
-    // Findings landed: clear the retry state.
-    loadResults._pendingSince = null;
-    if (resultsPollTimer) { clearTimeout(resultsPollTimer); resultsPollTimer = null; }
-
-    allFindings = findings;
-    renderResultsHeader(domainInfo);
-    renderTruncationBanner(domainInfo);
-    renderSeverityStats(findings);
-    renderHighlights(findings);
-    renderTechStack(findings);
-    renderFaviconGallery(findings, domainInfo.name);
-    renderCategoryGrid(domainInfo, category);
-    activeCategory = category;
-    // Reset the ribbon's month filter when reloading from scratch. the
-    // applyFilters call below wires the new findings into the table; we
-    // call renderTimelineRibbon explicitly so the heatmap shows up
-    // immediately even before any filter interaction.
-    timelineMonthFilter = null;
-    renderTimelineRibbon();
-    applyFilters();
-  } catch (e) {
-    showError('error-results', e.message);
-  }
-}
-
-function renderTruncationBanner(info) {
-  const host = $('res-truncation') || (() => {
-    // Lazy-create the banner host once; sits right under the page title.
-    const el = document.createElement('div');
-    el.id = 'res-truncation';
-    const grid = $('res-catgrid');
-    if (grid && grid.parentNode) grid.parentNode.insertBefore(el, grid);
-    return el;
-  })();
-  const cov = info.coverage || {};
-  if (!cov.truncated) {
-    host.innerHTML = '';
-    return;
-  }
-  const pct = cov.coverage_pct != null
-    ? Math.max(1, Math.round(cov.coverage_pct * 100))
-    : null;
-  const sampled = cov.sampled_snapshots || 0;
-  const total = cov.total_estimate || 0;
-  const reason = cov.truncation_reason || '';
-  const reasonLabel = reason.startsWith('deadline')
-    ? 'Wall-clock budget reached'
-    : reason.startsWith('snapshot_cap')
-      ? 'Snapshot count cap reached for the auto-depth tier'
-      : reason;
-  host.innerHTML = `
-    <div class="results-truncation-banner" role="status">
-      <div class="rt-msg">
-        Sampled <span class="rt-pct">${sampled.toLocaleString()}</span>
-        of an estimated <span class="rt-pct">${total.toLocaleString()}</span>
-        snapshots${pct != null ? ` <span class="rt-pct">(~${pct}%)</span>` : ''}.
-        Some entries may be missing.
-        <span style="color:var(--text-dim)">${esc(reasonLabel)}</span>.
-      </div>
-      <button onclick="rescanThorough(${info.id})">Rescan thorough</button>
-    </div>`;
-}
 
 // ──────────────────────────────────────────────────────────────────
 // Inline timeline ribbon
@@ -3700,26 +3414,6 @@ window.addEventListener('mouseup', () => {
   }
 });
 
-async function rescanThorough(domainId) {
-  try {
-    const resp = await fetch(API + '/api/collect', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        domain: $('res-domain').textContent,
-        config: { depth: 'max' },  // force_thorough on the backend
-      }),
-    });
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      throw new Error(err.detail || 'Rescan failed');
-    }
-    const data = await resp.json();
-    location.hash = '#/progress/' + data.domain_id + '/' + esc($('res-domain').textContent);
-  } catch (e) {
-    showError('error-results', e.message);
-  }
-}
 
 function renderResultsHeader(info) {
   $('res-domain').textContent = info.name;
@@ -3730,6 +3424,10 @@ function renderResultsHeader(info) {
     const found = m.total_snapshots_found, ana = m.snapshots_analyzed,
           scr = m.pages_scraped, failed = m.pages_failed || 0, dedup = m.pages_deduped || 0,
           fnd = info.total_findings || 0;
+    // Pages archive.org refused (IP block) are NOT archive gaps - separate them
+    // so the sentence stays honest and a block gets its own clear warning.
+    const blocked = m.pages_blocked || 0;
+    const gaps = Math.max(0, failed - blocked);
     const range = (m.date_first_seen && m.date_last_seen)
       ? `${m.date_first_seen} → ${m.date_last_seen}` : '';
     // Calm, non-redundant sentence: the headline counts already live in the
@@ -3739,14 +3437,17 @@ function renderResultsHeader(info) {
     const explain = (LANG === 'fr')
       ? `Sur ${found ? `<b>${n(found)}</b> snapshots archivés` : 'les snapshots archivés'}, `
         + `<b>${n(scr)}</b> pages ont été récupérées et analysées`
-        + (failed ? `, <b>${n(failed)}</b> n'étaient plus disponibles côté archive (lacunes d'archive)` : '')
+        + (gaps ? `, <b>${n(gaps)}</b> n'étaient plus disponibles côté archive (lacunes d'archive)` : '')
         + (dedup ? `, <b>${n(dedup)}</b> doublons ignorés` : '')
         + `${range ? `, couvrant ${esc(range)}` : ''}.`
       : `Of ${found ? `<b>${n(found)}</b> archived snapshots` : 'the archived snapshots'}, `
         + `<b>${n(scr)}</b> pages were retrieved and analysed`
-        + (failed ? `, <b>${n(failed)}</b> were no longer available from the archive (archive gaps)` : '')
+        + (gaps ? `, <b>${n(gaps)}</b> were no longer available from the archive (archive gaps)` : '')
         + (dedup ? `, <b>${n(dedup)}</b> duplicates skipped` : '')
         + `${range ? `, spanning ${esc(range)}` : ''}.`;
+    const blockedWarn = blocked ? (LANG === 'fr'
+      ? `Archive.org a bloqué ce serveur pendant le scan : <b>${n(blocked)}</b> pages n'ont pas pu être récupérées, les résultats sont peut-être incomplets. Réessayez plus tard.`
+      : `Archive.org blocked this server during the scan: <b>${n(blocked)}</b> pages could not be fetched, so results may be incomplete. Try again later.`) : '';
     el.innerHTML =
       `<div class="rm-line">`
       + `<span class="rm-stat"><span class="rm-num">${n(fnd)}</span> ${t('findings')}</span>`
@@ -3754,7 +3455,8 @@ function renderResultsHeader(info) {
       + `<span class="rm-stat"><span class="rm-num">${n(scr)}</span> ${t('pages scraped')}</span>`
       + (range ? `<span class="rm-range">${esc(range)}</span>` : '')
       + `</div>`
-      + `<div class="rm-explain">${explain}</div>`;
+      + `<div class="rm-explain">${explain}</div>`
+      + (blockedWarn ? `<div class="rm-warn">${blockedWarn}</div>` : '');
   } else {
     const crawl = info.crawl || {};
     const parts = [];
@@ -4468,13 +4170,6 @@ function onSort(col) {
 }
 
 /* ===== RESULTS ACTIONS ===== */
-async function reanalyze() {
-  if (!currentDomainId) return;
-  showToast('Re-analyzing...');
-  await fetch(API + '/api/analyze/' + currentDomainId, {method: 'POST'});
-  loadResults(currentDomainId, activeCategory);
-  showToast('Analysis complete');
-}
 
 function copyAll() {
   const values = filteredFindings.map(f => f.value).join('\n');
@@ -4532,7 +4227,7 @@ function toggleSeverityFilter(sev) {
 /* ===== TECH STACK ===== */
 
 // Per-section expand state. Lives for the page lifetime; cleared on a fresh
-// loadResults call (handled by the cross-scan reset path).
+// scan via the cross-scan reset path.
 const _techstackExpanded = new Set();
 let _techstackLastFindings = null;
 
@@ -6169,10 +5864,6 @@ async function loadHistory() {
 async function renderMyScans() {
   const host = $('my-scans');
   if (!host) return;
-  const tbl = $('hist-table'), fb = $('hist-filters'), emp = $('hist-empty');
-  if (tbl) tbl.style.display = 'none';
-  if (fb) fb.style.display = 'none';
-  if (emp) emp.style.display = 'none';
 
   // Solo build: list this instance's recent scans from the public feed.
   host.innerHTML = '<div class="myscans-note">Loading recent scans…</div>';
@@ -6211,7 +5902,6 @@ async function deleteMyScan(urlId, ev) {
 
 // Debounced wrappers (wired to search inputs).
 const debouncedApplyFilters = _debounce(() => applyFilters(), 150);
-const debouncedFilterHistory = _debounce(() => filterHistory(), 150);
 
 // Full-text search across the scanned page CONTENT (not just the pivots).
 // Snippets come from the server wrapped in <mark>; the underlying page text is
@@ -6250,255 +5940,16 @@ async function runPageSearch() {
 
 const debouncedPageSearch = _debounce(() => runPageSearch(), 300);
 
-function filterHistory() {
-  const statusFilter = $('hist-status').value;
-  const searchFilter = ($('hist-search').value || '').toLowerCase();
 
-  let data = historyData.filter(d => {
-    if (statusFilter && d.status !== statusFilter) return false;
-    if (searchFilter && !d.name.toLowerCase().includes(searchFilter)) return false;
-    return true;
-  });
 
-  // Sort
-  data.sort((a, b) => {
-    let va = a[histSortCol], vb = b[histSortCol];
-    if (typeof va === 'number' || histSortCol === 'pages_downloaded' || histSortCol === 'total_findings') {
-      va = Number(va) || 0; vb = Number(vb) || 0;
-    }
-    const cmp = typeof va === 'number' ? va - vb : String(va||'').localeCompare(String(vb||''));
-    return histSortDir === 'asc' ? cmp : -cmp;
-  });
 
-  // Update sort arrows
-  document.querySelectorAll('#hist-table th').forEach(th => {
-    th.classList.remove('sorted');
-    const arrow = th.querySelector('.sort-arrow');
-    if (arrow) arrow.textContent = '\u25bc';
-  });
 
-  if (!data.length) {
-    $('hist-tbody').innerHTML = '';
-    $('hist-empty').style.display = 'block';
-    return;
-  }
 
-  $('hist-empty').style.display = 'none';
-  $('hist-tbody').innerHTML = data.map(d => {
-    const isAnalyzed = d.status === 'done' || d.status === 'completed';
-    const canCompare = isAnalyzed && (d.total_findings || 0) > 0;
-    const checked = compareSelection.has(d.id) ? 'checked' : '';
-    const disabled = canCompare ? '' : 'disabled';
-    return `
-      <tr>
-        <td class="hist-select-col" onclick="event.stopPropagation()">
-          <input type="checkbox" class="hist-select-box" ${checked} ${disabled}
-                 onclick="toggleCompareSelection(${d.id}, this.checked)"
-                 title="${canCompare ? 'Select to compare' : 'Only analyzed scans can be compared'}">
-        </td>
-        <td style="color:var(--text-bright);font-weight:500;cursor:pointer" onclick="navigateToDomain(${d.id}, '${esc(d.status || '')}')">${esc(d.name)}</td>
-        <td style="cursor:pointer" onclick="navigateToDomain(${d.id}, '${esc(d.status || '')}')">${statusBadge(d.status || 'unknown')}</td>
-        <td style="text-align:right;font-family:var(--mono);cursor:pointer" onclick="navigateToDomain(${d.id}, '${esc(d.status || '')}')">${d.pages_downloaded || 0}</td>
-        <td style="text-align:right;font-family:var(--mono);cursor:pointer" onclick="navigateToDomain(${d.id}, '${esc(d.status || '')}')">${d.total_findings || '-'}</td>
-        <td style="text-align:right;color:var(--text-dim);cursor:pointer" onclick="navigateToDomain(${d.id}, '${esc(d.status || '')}')">${relativeTime(d.updated_at)}</td>
-      </tr>
-    `;
-  }).join('');
-  updateCompareFloater();
-}
 
-function toggleCompareSelection(domainId, checked) {
-  if (checked) {
-    if (compareSelection.size >= 2) {
-      // Enforce 2-max: remove the oldest, add the new one
-      const first = compareSelection.values().next().value;
-      compareSelection.delete(first);
-    }
-    compareSelection.add(domainId);
-  } else {
-    compareSelection.delete(domainId);
-  }
-  // Re-render to update checkbox states
-  filterHistory();
-}
-
-function clearCompareSelection() {
-  compareSelection.clear();
-  filterHistory();
-}
-
-function updateCompareFloater() {
-  const floater = document.getElementById('compare-floater');
-  const btn = document.getElementById('compare-floater-btn');
-  const count = document.getElementById('compare-floater-count');
-  if (!floater) return;
-  count.textContent = String(compareSelection.size);
-  btn.disabled = compareSelection.size !== 2;
-  floater.classList.toggle('visible', compareSelection.size > 0);
-}
-
-function launchCompare() {
-  if (compareSelection.size !== 2) return;
-  const [a, b] = [...compareSelection];
-  location.hash = `#/compare/${a}/${b}`;
-}
-
-function sortHistory(col) {
-  if (histSortCol === col) {
-    histSortDir = histSortDir === 'asc' ? 'desc' : 'asc';
-  } else {
-    histSortCol = col;
-    histSortDir = (col === 'name') ? 'asc' : 'desc';
-  }
-  filterHistory();
-}
-
-function navigateToDomain(id, status) {
-  if (status === 'running' || status === 'paused') {
-    location.hash = '#/progress/' + id;
-  } else {
-    location.hash = '#/results/' + id;
-  }
-}
 
 /* ===== CROSS-DOMAIN COMPARE ===== */
 
-async function loadCompare(idA, idB) {
-  const container = document.getElementById('compare-content');
-  container.innerHTML = '<div class="compare-empty">Loading…</div>';
-  try {
-    const [domA, domB, findA, findB] = await Promise.all([
-      fetch(API + '/api/domains/' + idA).then(r => r.json()),
-      fetch(API + '/api/domains/' + idB).then(r => r.json()),
-      fetch(API + '/api/domains/' + idA + '/findings?limit=5000').then(r => r.json()),
-      fetch(API + '/api/domains/' + idB + '/findings?limit=5000').then(r => r.json()),
-    ]);
-    renderCompare(domA, domB, Array.isArray(findA) ? findA : [], Array.isArray(findB) ? findB : []);
-  } catch (e) {
-    container.innerHTML = `<div class="compare-empty">Failed to load scans: ${esc(e.message || String(e))}</div>`;
-  }
-}
 
-function renderCompare(domA, domB, findingsA, findingsB) {
-  const container = document.getElementById('compare-content');
-
-  // Index both scans by category
-  const catA = {};
-  const catB = {};
-  for (const f of findingsA) (catA[f.category] = catA[f.category] || []).push(f);
-  for (const f of findingsB) (catB[f.category] = catB[f.category] || []).push(f);
-
-  const allCategories = [...new Set([...Object.keys(catA), ...Object.keys(catB)])].sort();
-
-  // Per-category diff
-  const groups = [];
-  let totalOnlyA = 0, totalOnlyB = 0, totalShared = 0;
-
-  for (const cat of allCategories) {
-    const valuesA = new Set((catA[cat] || []).map(f => String(f.value || '')));
-    const valuesB = new Set((catB[cat] || []).map(f => String(f.value || '')));
-    const onlyA = [...valuesA].filter(v => !valuesB.has(v)).sort();
-    const onlyB = [...valuesB].filter(v => !valuesA.has(v)).sort();
-    const shared = [...valuesA].filter(v => valuesB.has(v)).sort();
-
-    if (onlyA.length === 0 && onlyB.length === 0 && shared.length === 0) continue;
-
-    totalOnlyA += onlyA.length;
-    totalOnlyB += onlyB.length;
-    totalShared += shared.length;
-
-    groups.push({ cat, onlyA, onlyB, shared });
-  }
-
-  // Sort by total size of delta (most-different categories first)
-  groups.sort((g1, g2) => (g2.onlyA.length + g2.onlyB.length) - (g1.onlyA.length + g1.onlyB.length));
-
-  const header = `
-    <div class="compare-subjects">
-      <div class="compare-subject a">
-        <div class="compare-label">Scan A</div>
-        ${esc(domA.name || 'Unknown')}
-      </div>
-      <span class="compare-arrow">⇄</span>
-      <div class="compare-subject b">
-        <div class="compare-label">Scan B</div>
-        ${esc(domB.name || 'Unknown')}
-      </div>
-    </div>
-    <div class="compare-summary">
-      <div class="compare-stat only-a">
-        <div class="compare-stat-count">${totalOnlyA}</div>
-        <div class="compare-stat-label">Only in A</div>
-      </div>
-      <div class="compare-stat only-b">
-        <div class="compare-stat-count">${totalOnlyB}</div>
-        <div class="compare-stat-label">Only in B</div>
-      </div>
-      <div class="compare-stat shared">
-        <div class="compare-stat-count">${totalShared}</div>
-        <div class="compare-stat-label">Shared</div>
-      </div>
-      <div class="compare-stat total">
-        <div class="compare-stat-count">${totalOnlyA + totalOnlyB + totalShared}</div>
-        <div class="compare-stat-label">Total unique</div>
-      </div>
-    </div>
-  `;
-
-  if (groups.length === 0) {
-    container.innerHTML = header + '<div class="compare-empty">Both scans are empty.</div>';
-    return;
-  }
-
-  const groupsHtml = groups.map((g, idx) => {
-    const openClass = idx < 3 ? ' open' : '';  // auto-expand top 3
-    const onlyAItems = g.onlyA.length
-      ? g.onlyA.slice(0, 30).map(v => `<div class="compare-item">${esc(String(v).slice(0, 200))}</div>`).join('')
-      : '<div class="compare-empty">(none)</div>';
-    const onlyBItems = g.onlyB.length
-      ? g.onlyB.slice(0, 30).map(v => `<div class="compare-item">${esc(String(v).slice(0, 200))}</div>`).join('')
-      : '<div class="compare-empty">(none)</div>';
-    const sharedItems = g.shared.length
-      ? g.shared.slice(0, 30).map(v => `<div class="compare-item">${esc(String(v).slice(0, 200))}</div>`).join('')
-      : '<div class="compare-empty">(none)</div>';
-    const moreA = g.onlyA.length > 30 ? ` +${g.onlyA.length - 30} more` : '';
-    const moreB = g.onlyB.length > 30 ? ` +${g.onlyB.length - 30} more` : '';
-    const moreShared = g.shared.length > 30 ? ` +${g.shared.length - 30} more` : '';
-
-    return `
-      <div class="compare-group${openClass}" onclick="this.classList.toggle('open')">
-        <div class="compare-group-header">
-          <div class="compare-group-name">${esc(g.cat.replace(/_/g, ' '))}</div>
-          <div class="compare-group-counts">
-            <span class="only-a">${g.onlyA.length} only A</span>
-            <span class="only-b">${g.onlyB.length} only B</span>
-            <span class="shared">${g.shared.length} shared</span>
-          </div>
-        </div>
-        <div class="compare-group-body" onclick="event.stopPropagation()">
-          <div class="compare-columns">
-            <div class="compare-col a">
-              <div class="compare-col-header">Only in ${esc(domA.name || 'A')}${moreA ? ' ·' + moreA : ''}</div>
-              <div class="compare-col-list">${onlyAItems}</div>
-            </div>
-            <div class="compare-col b">
-              <div class="compare-col-header">Only in ${esc(domB.name || 'B')}${moreB ? ' ·' + moreB : ''}</div>
-              <div class="compare-col-list">${onlyBItems}</div>
-            </div>
-            ${g.shared.length > 0 ? `
-              <div class="compare-col shared">
-                <div class="compare-col-header">Shared${moreShared ? ' ·' + moreShared : ''}</div>
-                <div class="compare-col-list">${sharedItems}</div>
-              </div>
-            ` : ''}
-          </div>
-        </div>
-      </div>
-    `;
-  }).join('');
-
-  container.innerHTML = header + groupsHtml;
-}
 
 /* ===== KEYBOARD SHORTCUTS ===== */
 
