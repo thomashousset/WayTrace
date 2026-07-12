@@ -661,9 +661,12 @@
       content: ''; display: block;
       width: 34px; height: 34px;
       border-radius: 50%;
-      background: conic-gradient(from 0deg, transparent 0%, var(--accent) 360deg);
-      -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
-              mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
+      /* Plain bordered ring (NOT a conic-gradient + mask): a mask forces the
+         element to re-rasterize on the main thread, so it stutters whenever the
+         scan's JS is busy. A bordered ring rotates as a pure compositor
+         transform and stays smooth under any main-thread load. */
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
       animation: wt-spin .8s linear infinite;
       will-change: transform;
     }
@@ -3282,9 +3285,11 @@
     .pub-run-spinner {
       width: 40px; height: 40px; margin: 0 auto 16px;
       border-radius: 50%;
-      background: conic-gradient(from 0deg, transparent 0%, var(--accent) 360deg);
-      -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3.5px), #000 calc(100% - 3.5px));
-              mask: radial-gradient(farthest-side, transparent calc(100% - 3.5px), #000 calc(100% - 3.5px));
+      /* Bordered ring, not conic-gradient + mask: a mask re-rasterizes on the
+         main thread and stutters while the scan polls/renders. A bordered ring
+         is a pure compositor transform - smooth regardless of main-thread work. */
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
       animation: wt-spin .8s linear infinite;
       will-change: transform;
     }
