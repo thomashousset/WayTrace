@@ -155,29 +155,6 @@ function showError(elId, msg) {
   setTimeout(() => el.classList.remove('visible'), 8000);
 }
 
-function relativeTime(iso) {
-  if (!iso) return '-';
-  const diff = (Date.now() - new Date(iso + 'Z').getTime()) / 1000;
-  if (diff < 60) return 'just now';
-  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
-  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
-  return Math.floor(diff / 86400) + 'd ago';
-}
-
-function statusBadge(status) {
-  const map = {
-    done: 'badge-done', completed: 'badge-done',
-    running: 'badge-running',
-    failed: 'badge-failed',
-    paused: 'badge-paused',
-  };
-  const label = {
-    done: 'Analyzed', completed: 'Analyzed',
-    running: 'Collecting', failed: 'Failed', paused: 'Paused',
-  };
-  const cls = map[status] || '';
-  return `<span class="badge ${cls}">${esc(label[status] || status)}</span>`;
-}
 
 /* ===== THEME TOGGLE ===== */
 function applyThemeLabel() {
@@ -248,6 +225,8 @@ const I18N = {
     'any word in the archived HTML…': "n'importe quel mot du HTML archivé…",
     'Loading your scans…': 'Chargement de vos scans…',
     'public': 'public',
+    'No findings': 'Aucun résultat',
+    'WayTrace searched all 43 categories across {n} archived pages and found nothing to extract.': 'WayTrace a cherché dans les 43 catégories sur {n} pages archivées et n\'a rien trouvé à extraire.',
     'value': 'valeur',
     'occ.': 'occ.',
     'seen': 'vu de → à',
@@ -407,7 +386,6 @@ const I18N = {
     'All & searched': 'Tout et recherché',
     'categories searched, nothing found (greyed above)': 'catégories recherchées, sans résultat (grisées ci-dessus)',
     'Loading…': 'Chargement…',
-    'No published scans yet. Run the first one above.': "Aucun scan publié pour l'instant. Lancez le premier ci-dessus.",
     'Run a denser scan of this domain, reusing what was already found': 'Relancer un scan plus dense de ce domaine, en réutilisant ce qui a déjà été trouvé',
     'Something went wrong. Please try again.': 'Une erreur est survenue. Réessayez.',
     'Filter the table to': 'Filtrer la table sur', 'more': 'autres',
@@ -439,18 +417,12 @@ const I18N = {
     // --- Results + history chrome ---
     'Timeline': 'Chronologie',
     'Export': 'Exporter',
-    'Re-analyze': 'Ré-analyser',
     'Categories': 'Catégories',
     'Activity': 'Activité',
     'Pivots': 'Pivots',
-    'Tech & infra': 'Tech & infra',
-    'All values': 'Toutes les valeurs',
     'Leak': 'Fuite', 'Context': 'Contexte', 'Background': 'Arrière-plan',
-    'Search values...': 'Rechercher des valeurs...',
-    'Copy all': 'Tout copier',
     'My scans': 'Mes scans',
     'New Scan': 'Nouveau scan',
-    'All statuses': 'Tous les statuts',
     'Analyzed': 'Analysé',
     'Collecting': 'En cours',
     'Failed': 'Échec',
@@ -1166,70 +1138,7 @@ function catLabel(key) {
   return t(CAT_LABELS[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()));
 }
 
-function pickPrimary(item) {
-  // Return the most user-readable representation of a finding item.
-  if (typeof item === 'string') return {value: item, type: null, meta: null, extras: []};
-  if (item == null) return {value: '', type: null, meta: null, extras: []};
 
-  const skip = new Set(['first_seen', 'last_seen', 'occurrences', 'severity', 'source', 'metadata']);
-  const value = item.value ?? item.url ?? item.provider ?? item.name ?? item.email ?? item.id ?? '';
-  const type = item.type || (item.provider && item.value ? item.provider : null);
-  const meta = {
-    first_seen: item.first_seen,
-    last_seen: item.last_seen,
-    occurrences: item.occurrences,
-    source: item.source,
-    severity: item.severity,
-  };
-  const extras = [];
-  for (const [k, v] of Object.entries(item)) {
-    if (skip.has(k)) continue;
-    if (k === 'value' || k === 'type' || k === 'provider') continue;
-    if (v == null || v === '' || (Array.isArray(v) && !v.length)) continue;
-    if (typeof v === 'object') continue;
-    extras.push({key: k, value: String(v)});
-  }
-  return {value: String(value), type, meta, extras};
-}
-
-function renderItem(it, catName) {
-  const {value, type, meta, extras} = pickPrimary(it);
-  const subParts = [];
-  if (meta && meta.first_seen && meta.last_seen && meta.first_seen !== meta.last_seen) {
-    subParts.push(`<span>${esc(meta.first_seen)} → ${esc(meta.last_seen)}</span>`);
-  } else if (meta && meta.first_seen) {
-    subParts.push(`<span>${esc(meta.first_seen)}</span>`);
-  }
-  if (meta && meta.occurrences && meta.occurrences > 1) {
-    subParts.push(`<span>×${meta.occurrences}</span>`);
-  }
-  if (meta && meta.source) {
-    subParts.push(`<span class="pub-chip">${esc(meta.source)}</span>`);
-  }
-  if (meta && meta.severity && meta.severity === 'LEAK') {
-    subParts.push(`<span class="pub-chip leak">LEAK</span>`);
-  }
-  for (const e of extras.slice(0, 4)) {
-    subParts.push(`<span class="pub-chip">${esc(e.key)}: ${esc(String(e.value).slice(0, 40))}</span>`);
-  }
-
-  const typeChip = type ? `<span class="pub-chip type">${esc(type)}</span>` : '';
-  const sub = subParts.length ? `<div class="pub-item-sub">${subParts.join('')}</div>` : '';
-  const displayValue = value.length > 200 ? value.slice(0, 200) + '…' : value;
-  const copyData = esc(value);
-
-  return `
-    <div class="pub-item">
-      <div class="pub-item-main">
-        <div class="pub-item-value">${typeChip}${esc(displayValue)}</div>
-        ${sub}
-      </div>
-      <div class="pub-item-actions">
-        <button class="pub-copy-btn" data-copy="${copyData}" title="Copy to clipboard" aria-label="Copy">⧉</button>
-      </div>
-    </div>
-  `;
-}
 
 // Categories where displaying many items adds little (technical noise that's
 // better browsed via the export). For these, cap at a smaller default.
@@ -1238,63 +1147,6 @@ const VERBOSE_CATS = new Set(['endpoints', 'js_urls', 'assets', 'outgoing_links'
 // they don't show up as duplicate/empty tiles. analytics_ids -> analytics_trackers.
 const MERGED_AWAY_CATS = new Set(['analytics_ids']);
 
-function renderPublicScanResults(job) {
-  const results = job.results || {};
-  const meta = job.meta || {};
-  const cats = Object.entries(results)
-    .filter(([k, v]) => Array.isArray(v) && v.length > 0 && k !== 'highlights')
-    .sort((a, b) => b[1].length - a[1].length);
-  if (cats.length === 0 && (!results.highlights || !results.highlights.length)) {
-    return `<div class="pub-empty">No data extracted for this domain.</div>`;
-  }
-
-  const summary = `
-    <div class="pub-summary">
-      <div class="pub-summary-cell"><div class="label">Snapshots analyzed</div><div class="val">${meta.snapshots_analyzed || 0}</div></div>
-      <div class="pub-summary-cell"><div class="label">Pages scraped</div><div class="val">${meta.pages_scraped || 0}</div></div>
-      <div class="pub-summary-cell"><div class="label">First seen</div><div class="val">${esc(meta.date_first_seen || '·')}</div></div>
-      <div class="pub-summary-cell"><div class="label">Last seen</div><div class="val">${esc(meta.date_last_seen || '·')}</div></div>
-      <div class="pub-summary-cell"><div class="label">Duration</div><div class="val">${formatEta(meta.scan_duration_seconds || 0)}</div></div>
-    </div>`;
-
-  const highlights = results.highlights || [];
-  const hlHtml = highlights.length ? `
-    <div class="pub-section-title">Highlights</div>
-    <div class="pub-highlights">
-      ${highlights.slice(0, 12).map(h => {
-        const sev = (h.severity || 'background').toLowerCase();
-        return `
-          <div class="highlight ${esc(sev)}">
-            <div class="highlight-severity">${esc(h.severity || '')}</div>
-            <div class="highlight-title">${esc(h.title || h.value || '')}</div>
-            ${h.detail ? `<div class="highlight-detail" style="color: var(--text-dim); font-size: 12px; margin-top: 4px;">${esc(h.detail)}</div>` : ''}
-          </div>
-        `;
-      }).join('')}
-    </div>` : '';
-
-  const catsHtml = `
-    <div class="pub-section-title">Findings by category</div>
-    ${cats.map(([cat, items]) => {
-      const initialLimit = VERBOSE_CATS.has(cat) ? 30 : 50;
-      const visible = items.slice(0, initialLimit);
-      const remaining = items.length - visible.length;
-      return `
-      <div class="pub-cat" data-cat="${esc(cat)}">
-        <div class="pub-cat-head" onclick="this.parentElement.classList.toggle('open')">
-          <div class="pub-cat-name"><span class="pub-cat-chevron">▶</span>${esc(catLabel(cat))}</div>
-          <div class="pub-cat-count">${items.length}</div>
-        </div>
-        <div class="pub-cat-body">
-          ${visible.map(it => renderItem(it, cat)).join('')}
-          ${remaining > 0 ? `<div class="pub-cat-more">+ ${remaining} more · download the HTML or refine with a follow-up scan</div>` : ''}
-        </div>
-      </div>
-    `;
-    }).join('')}`;
-
-  return summary + hlHtml + catsHtml;
-}
 
 function wireCatToggles() {
   // Auto-open the first category if no highlights so the user sees data immediately
@@ -2310,8 +2162,6 @@ function resetSessionState() {
   activeCategory = null;
   if (typeof timelineMonthFilter !== 'undefined') timelineMonthFilter = null;
   if (typeof timelineRangeFilter !== 'undefined') timelineRangeFilter = null;
-  if (typeof ribbonExpanded !== 'undefined') ribbonExpanded = false;
-  if (typeof _techstackExpanded !== 'undefined') _techstackExpanded.clear();
   findingsPage = 0;
 }
 
@@ -2323,33 +2173,6 @@ function resetSessionState() {
 // appear, so the user never sees a permanently-empty results page.
 
 
-
-// ──────────────────────────────────────────────────────────────────
-// Inline timeline ribbon
-// ──────────────────────────────────────────────────────────────────
-
-// Categories that read most clearly on a timeline (changes over time
-// matter for these). The ribbon falls back to "all categories with
-// findings" when none of these are present.
-const RIBBON_PREFERRED_CATEGORIES = [
-  'endpoints', 'subdomains', 'emails', 'social_profiles',
-  'technologies', 'analytics_trackers', 'api_keys', 'cloud_buckets',
-  'verification_tags', 'github_repos', 'pgp_keys', 'rss_feeds',
-];
-const RIBBON_MAX_ROWS = 10;
-// Beyond these counts the cells get too thin to read. We re-bucket
-// progressively: months → quarters → years. The thresholds below
-// are tuned so each cell stays at least ~12 px wide on a 600 px ribbon.
-const RIBBON_MAX_MONTHS = 24;
-const RIBBON_MAX_QUARTERS = 28;
-const RIBBON_MIN_CELL_PX = 6;
-
-function _ymKey(date_ms) {
-  const d = new Date(date_ms);
-  const y = d.getUTCFullYear();
-  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
-  return y + '-' + m;
-}
 
 function _ymToMs(ym) {
   // "YYYY-MM" -> first-of-month UTC ms.
@@ -2369,1037 +2192,6 @@ function findingActiveInMonth(f, ym) {
   return fs <= ms && ms <= ls;
 }
 
-function _enumerateMonths(minMs, maxMs) {
-  // Inclusive month-by-month enumeration between two UTC timestamps.
-  const out = [];
-  const cursor = new Date(minMs);
-  cursor.setUTCDate(1);
-  cursor.setUTCHours(0, 0, 0, 0);
-  const endMs = maxMs;
-  while (cursor.getTime() <= endMs && out.length < 240) {
-    out.push(_ymKey(cursor.getTime()));
-    cursor.setUTCMonth(cursor.getUTCMonth() + 1);
-  }
-  return out;
-}
-
-function buildRibbonModel() {
-  // Per cell we track active count, severity breakdown, AND the number
-  // of findings whose first_seen / last_seen fall in this bucket. The
-  // edges encode the state-change events the user asked to see ("when
-  // did things appear / disappear?"). Pulse + per-cat rows reuse the
-  // same cell shape so the layout stays uniform.
-  // Source = filtered findings when a sev/search filter is active so
-  // the heatmap follows the rest of the UI; raw allFindings otherwise.
-  let findings = allFindings || [];
-  const sevFilter = document.getElementById('filter-severity');
-  const searchFilter = document.getElementById('filter-search');
-  if ((sevFilter && sevFilter.value) || (searchFilter && searchFilter.value)) {
-    findings = getTimelineSourceFindings();
-  }
-  if (findings.length === 0) return null;
-
-  let minMs = Infinity, maxMs = -Infinity;
-  for (const f of findings) {
-    const fs = parseMonth(f.first_seen);
-    const ls = parseMonth(f.last_seen);
-    if (fs != null && fs < minMs) minMs = fs;
-    if (ls != null && ls > maxMs) maxMs = ls;
-  }
-  if (!isFinite(minMs) || !isFinite(maxMs)) return null;
-
-  let months = _enumerateMonths(minMs, maxMs);
-  if (months.length === 0) return null;
-
-  let bucketMode = 'month';
-  if (months.length > RIBBON_MAX_MONTHS) {
-    bucketMode = 'quarter';
-    months = months.filter((_, i) => i % 3 === 0);
-    if (months.length > RIBBON_MAX_QUARTERS) {
-      // Fall through to year buckets when even quarters are too dense.
-      // We start fresh from the original minMs so the year anchors land
-      // on January, not on whatever month minMs happened to start at.
-      bucketMode = 'year';
-      const reEnumerated = _enumerateMonths(minMs, maxMs);
-      months = reEnumerated.filter(ym => ym.endsWith('-01'));
-      if (months.length < 2) months = reEnumerated.filter((_, i) => i % 12 === 0);
-    }
-  }
-
-  const monthSet = new Set(months);
-  const SEVERITY_TIERS = ['LEAK', 'PIVOT', 'CONTEXT', 'BACKGROUND'];
-
-  function _emptyBin() {
-    return {
-      count: 0,
-      sev: { LEAK: 0, PIVOT: 0, CONTEXT: 0, BACKGROUND: 0 },
-      starts: 0,   // findings whose first_seen falls in this bucket
-      ends: 0,     // findings whose last_seen falls in this bucket
-    };
-  }
-
-  // For each finding, walk its [first_seen, last_seen] interval and bump
-  // the bin in (cat, bucketed_month). We compute pivot events (start /
-  // end) on the side so the multi-cat-change marker can light up.
-  const byCat = new Map();   // cat -> { byMonth: Map<ym, bin>, total, sevTotals }
-  const monthCatPivots = new Map();  // ym -> Set<cat that changed state>
-
-  function _ensure(cat) {
-    if (!byCat.has(cat)) {
-      byCat.set(cat, {
-        byMonth: new Map(),
-        total: 0,
-        sevTotals: { LEAK: 0, PIVOT: 0, CONTEXT: 0, BACKGROUND: 0 },
-      });
-    }
-    return byCat.get(cat);
-  }
-  function _bucketed(ym) {
-    if (bucketMode === 'month') return monthSet.has(ym) ? ym : null;
-    // Quarter / year modes both use anchor months. We snap *down* to
-    // the most recent anchor that's <= ym so a finding from "March
-    // 2024" lands in the Jan-2024 bucket (quarter or year).
-    let last = months[0];
-    for (const m of months) {
-      if (m <= ym) last = m;
-      else break;
-    }
-    return last;
-  }
-
-  for (const f of findings) {
-    const cat = f.category;
-    if (!cat) continue;
-    const fs = parseMonth(f.first_seen);
-    const ls = parseMonth(f.last_seen);
-    if (fs == null || ls == null) continue;
-    const sev = osintValue(f) || 'BACKGROUND';
-    const sevKey = SEVERITY_TIERS.includes(sev) ? sev : 'BACKGROUND';
-    const e = _ensure(cat);
-    e.total += 1;
-    e.sevTotals[sevKey] += 1;
-
-    const cursor = new Date(fs);
-    cursor.setUTCDate(1); cursor.setUTCHours(0, 0, 0, 0);
-    while (cursor.getTime() <= ls) {
-      const ym = _ymKey(cursor.getTime());
-      const bucketed = _bucketed(ym);
-      if (bucketed) {
-        if (!e.byMonth.has(bucketed)) e.byMonth.set(bucketed, _emptyBin());
-        const bin = e.byMonth.get(bucketed);
-        bin.count += 1;
-        bin.sev[sevKey] += 1;
-      }
-      cursor.setUTCMonth(cursor.getUTCMonth() + 1);
-    }
-
-    // Pivot bookkeeping + per-cell starts/ends counters.
-    const startBucket = _bucketed(_ymKey(fs));
-    const endBucket = _bucketed(_ymKey(ls));
-    if (startBucket) {
-      if (!monthCatPivots.has(startBucket)) monthCatPivots.set(startBucket, new Set());
-      monthCatPivots.get(startBucket).add(cat);
-      // Bump the cell's "starts" counter (creates the bin lazily; covers
-      // the corner case where the bucketed start sits in a quarter that
-      // didn't get an active-count bump because the finding ended before
-      // the next iteration of the cursor loop).
-      const e = byCat.get(cat);
-      if (!e.byMonth.has(startBucket)) e.byMonth.set(startBucket, _emptyBin());
-      e.byMonth.get(startBucket).starts += 1;
-    }
-    if (endBucket && endBucket !== startBucket) {
-      if (!monthCatPivots.has(endBucket)) monthCatPivots.set(endBucket, new Set());
-      monthCatPivots.get(endBucket).add(cat);
-      const e = byCat.get(cat);
-      if (!e.byMonth.has(endBucket)) e.byMonth.set(endBucket, _emptyBin());
-      e.byMonth.get(endBucket).ends += 1;
-    } else if (endBucket && endBucket === startBucket) {
-      // Same-bucket appearance + disappearance.
-      const e = byCat.get(cat);
-      e.byMonth.get(endBucket).ends += 1;
-    }
-  }
-
-  // Pick which categories to show. Same logic as before but reorder:
-  // preferred-list first, then fill by total. The aggregate "All" row
-  // is computed separately below.
-  const haveCats = new Set(byCat.keys());
-  const ordered = [];
-  for (const c of RIBBON_PREFERRED_CATEGORIES) {
-    if (haveCats.has(c)) { ordered.push(c); haveCats.delete(c); }
-  }
-  const remaining = [...haveCats].map(c => [c, byCat.get(c).total]);
-  remaining.sort((a, b) => b[1] - a[1]);
-  for (const [c] of remaining) ordered.push(c);
-
-  // Single-category mode: when activeCategory is set, the ribbon
-  // collapses to just THAT row plus the global pulse. Showing the
-  // other categories diluted the focused view. the user has chosen,
-  // give them depth on the choice.
-  let rowCats;
-  if (activeCategory && byCat.has(activeCategory)) {
-    rowCats = [activeCategory];
-  } else {
-    if (activeCategory && ordered.includes(activeCategory)) {
-      ordered.splice(ordered.indexOf(activeCategory), 1);
-      ordered.unshift(activeCategory);
-    }
-    rowCats = ordered.slice(0, RIBBON_MAX_ROWS);
-  }
-
-  const rows = rowCats.map(cat => ({
-    cat,
-    byMonth: byCat.get(cat).byMonth,
-    total: byCat.get(cat).total,
-    sevTotals: byCat.get(cat).sevTotals,
-  }));
-
-  // Aggregate "All" row across the SAME displayed categories. Summing
-  // hidden categories too would make the pulse misleading: a single
-  // metadata-heavy month would dwarf everything else.
-  const totalRow = { byMonth: new Map(), total: 0,
-                     sevTotals: { LEAK: 0, PIVOT: 0, CONTEXT: 0, BACKGROUND: 0 } };
-  for (const row of rows) {
-    totalRow.total += row.total;
-    for (const k of SEVERITY_TIERS) totalRow.sevTotals[k] += row.sevTotals[k];
-    for (const [ym, bin] of row.byMonth.entries()) {
-      if (!totalRow.byMonth.has(ym)) totalRow.byMonth.set(ym, _emptyBin());
-      const t = totalRow.byMonth.get(ym);
-      t.count += bin.count;
-      t.starts += bin.starts;
-      t.ends += bin.ends;
-      for (const k of SEVERITY_TIERS) t.sev[k] += bin.sev[k];
-    }
-  }
-
-  // Pivot map keyed by ym -> { mag: # cats that changed }. A single
-  // category churning a lot is interesting; many at once is louder.
-  const pivotMag = new Map();
-  for (const [ym, cats] of monthCatPivots.entries()) {
-    if (cats.size >= 2) pivotMag.set(ym, cats.size);
-  }
-
-  const axisLabels = [];
-  let curYear = months[0].slice(0, 4);
-  let curStart = 0;
-  for (let i = 1; i < months.length; i++) {
-    const yr = months[i].slice(0, 4);
-    if (yr !== curYear) {
-      axisLabels.push({ label: curYear, span: i - curStart });
-      curYear = yr; curStart = i;
-    }
-  }
-  axisLabels.push({ label: curYear, span: months.length - curStart });
-
-  // Peak month: highest total. Surface it in the meta line so the user
-  // knows where to look first.
-  let peakYm = null, peakVal = 0;
-  for (const [ym, bin] of totalRow.byMonth.entries()) {
-    if (bin.count > peakVal) { peakVal = bin.count; peakYm = ym; }
-  }
-
-  return {
-    rows, totalRow, months, monthCount: months.length, bucketMode,
-    axisLabels, pivotMag,
-    peak: peakYm ? { ym: peakYm, count: peakVal } : null,
-  };
-}
-
-function _intensityClass(count, max) {
-  // Map count -> 5-stop intensity. 0 = empty, 1-4 = increasing alpha.
-  if (count === 0 || max === 0) return 0;
-  const ratio = count / max;
-  if (ratio < 0.15) return 1;
-  if (ratio < 0.4) return 2;
-  if (ratio < 0.7) return 3;
-  return 4;
-}
-
-// Hue per severity tier. Each cell picks the dominant severity of the
-// findings active in that bucket and tints accordingly. This puts LEAK
-// signals visually first even when their volume is tiny vs background
-// metadata noise. the OSINT investigator's actual priority.
-const _SEVERITY_HUE = {
-  LEAK:       [220, 64, 64],   // red
-  PIVOT:      [199, 84, 31],   // warm-dark accent (existing)
-  CONTEXT:    [214, 163, 90],  // muted gold
-  BACKGROUND: [120, 120, 130], // grey
-};
-
-function _dominantSeverity(sev) {
-  // sev is { LEAK: n, PIVOT: n, CONTEXT: n, BACKGROUND: n }. Tie-break by
-  // tier priority so LEAK wins over BACKGROUND at equal counts.
-  let best = 'BACKGROUND', bestN = -1;
-  for (const tier of ['LEAK', 'PIVOT', 'CONTEXT', 'BACKGROUND']) {
-    if (sev[tier] > bestN) { best = tier; bestN = sev[tier]; }
-  }
-  return best;
-}
-
-function _cellBg(bin, globalMax) {
-  if (!bin || bin.count === 0) return 'var(--bg)';
-  const level = _intensityClass(bin.count, globalMax);
-  const alphas = [0, 0.22, 0.42, 0.66, 0.95];
-  const dom = _dominantSeverity(bin.sev);
-  const [r, g, b] = _SEVERITY_HUE[dom];
-  return `rgba(${r},${g},${b},${alphas[level]})`;
-}
-
-// Results tabbed block: switch panels; lazy-render the heavier tabs.
-function selectResTab(name) {
-  document.querySelectorAll('#res-tabs .res-tab').forEach(b => {
-    const on = b.dataset.tab === name;
-    b.classList.toggle('active', on);
-    b.setAttribute('aria-selected', String(on));
-  });
-  document.querySelectorAll('#res-tabs .res-tab-panel').forEach(p =>
-    p.style.display = (p.id === 'res-tab-' + name) ? '' : 'none');
-  if (name === 'subs') {
-    renderSubdomainsTab();
-  } else if (name === 'tech') {
-    renderTechInfra();
-  }
-}
-
-// Tech & infra tab: stack, hosting/CDN and original HTTP headers, each with the
-// period the signal was active across the archived history.
-function renderTechInfra() {
-  const host = $('res-tech');
-  if (!host) return;
-  const F = allFindings || [];
-  const period = s => (s.first_seen || '?') + (s.last_seen && s.last_seen !== s.first_seen ? '-' + s.last_seen : '');
-  const m = (f) => f.metadata || {};
-  const byOcc = (a, b) => (b.occurrences || 0) - (a.occurrences || 0);
-  const sections = [];
-  const tech = F.filter(f => f.category === 'technologies').sort(byOcc);
-  if (tech.length) sections.push({ title: 'Tech stack', rows: tech.map(t => ({ name: m(t).technology || t.value, sub: m(t).version || '', period: period(t) })) });
-  const hosting = F.filter(f => f.category === 'hosting').sort(byOcc);
-  if (hosting.length) sections.push({ title: 'Hosting & CDN', rows: hosting.map(h => ({ name: m(h).provider || h.value, sub: m(h).signal || '', period: period(h) })) });
-  const headers = F.filter(f => f.category === 'http_headers').sort(byOcc);
-  if (headers.length) sections.push({ title: 'HTTP headers', rows: headers.map(h => ({ name: m(h).header || h.value, sub: m(h).value || '', period: period(h) })) });
-
-  if (!sections.length) {
-    host.innerHTML = '<div class="ti-empty">No tech or infrastructure signals captured for this domain.</div>';
-    return;
-  }
-  host.innerHTML = sections.map(s => `
-    <div class="ti-section">
-      <div class="ti-title">${esc(s.title)} <span class="ti-count">${s.rows.length}</span></div>
-      <div class="ti-rows">${s.rows.map(r => `
-        <div class="ti-row">
-          <span class="ti-name">${esc(r.name)}</span>
-          <span class="ti-sub" title="${esc(r.sub || '')}">${esc(r.sub || '')}</span>
-          <span class="ti-period">${esc(r.period)}</span>
-        </div>`).join('')}</div>
-    </div>`).join('');
-}
-
-// Subdomains tab: ranked list with occurrences + active period + a mini bar
-// placed on the overall archive timeline. Click a row to filter the table.
-function renderSubdomainsTab() {
-  const host = $('res-subs');
-  if (!host) return;
-  const subs = (allFindings || []).filter(f => f && f.category === 'subdomains');
-  if (!subs.length) {
-    host.innerHTML = '<div class="subs-empty">' + t('No subdomains found in the archive.') + '</div>';
-    return;
-  }
-  const toNum = m => { if (!m) return null; const [y, mo] = m.split('-').map(Number); return y * 12 + (mo || 1); };
-  let lo = Infinity, hi = -Infinity;
-  for (const s of subs) {
-    const a = toNum(s.first_seen), b = toNum(s.last_seen);
-    if (a != null) lo = Math.min(lo, a);
-    if (b != null) hi = Math.max(hi, b);
-  }
-  const span = hi > lo ? hi - lo : 1;
-  const rows = subs.slice().sort((a, b) => (b.occurrences || 0) - (a.occurrences || 0));
-  const cap = 400;
-  const shown = rows.slice(0, cap);
-  let html = `<div class="subs-head"><span>${subs.length} subdomain${subs.length > 1 ? 's' : ''}</span>`
-    + `<span class="subs-span">ranked by occurrences</span></div><div class="subs-list">`;
-  for (const s of shown) {
-    const a = toNum(s.first_seen), b = toNum(s.last_seen);
-    const left = a != null ? (a - lo) / span * 100 : 0;
-    const width = (a != null && b != null) ? Math.max(2, (b - a) / span * 100) : 2;
-    html += `<div class="subs-row" onclick="selectCategory('subdomains')" title="${esc(s.value)}">`
-      + `<span class="subs-host">${esc(s.value)}</span>`
-      + `<span class="subs-occ">${s.occurrences || 0}×</span>`
-      + `<span class="subs-period">${esc(s.first_seen || '?')}-${esc(s.last_seen || '?')}</span>`
-      + `<span class="subs-bar"><span class="subs-bar-fill" style="left:${left}%;width:${width}%"></span></span>`
-      + `</div>`;
-  }
-  html += '</div>';
-  if (rows.length > cap) html += `<div class="subs-more">+${rows.length - cap} more</div>`;
-  host.innerHTML = html;
-}
-
-// Pivots relationship graph: radial hub-and-spoke, deterministic, pure SVG.
-// Center = root domain. Spokes = pivot categories. Leaves = top findings.
-(function () {
-  const SVG_NS = "http://www.w3.org/2000/svg";
-  const CATS = [
-    ["subdomains", "Subdomains"],
-    ["emails", "Emails"],
-    ["persons", "Persons"],
-    ["organizations", "Orgs"],
-    ["social_profiles", "Social"],
-    ["github_repos", "GitHub"],
-    ["analytics_trackers", "Trackers"],
-    ["favicons", "Favicons"],
-    ["hosting", "Hosting"],
-  ];
-  const PER_CAT_CAP = 10, TOTAL_CAP = 60, LABEL_MAX = 18;
-  const VB_W = 1000, VB_H = 700, CX = VB_W / 2, CY = VB_H / 2;
-  const CLUSTER_R = 235, LEAF_R = 92;
-
-  function sev(s) {
-    switch (s) {
-      case "LEAK": return "var(--red)";
-      case "PIVOT": return "var(--orange)";
-      case "CONTEXT": return "var(--yellow, var(--pivot))";
-      default: return "var(--text-faint)";
-    }
-  }
-  function trunc(s) {
-    s = String(s == null ? "" : s);
-    return s.length > LABEL_MAX ? s.slice(0, LABEL_MAX - 1) + "…" : s;
-  }
-  function el(name, attrs, parent) {
-    const n = document.createElementNS(SVG_NS, name);
-    if (attrs) for (const k in attrs) n.setAttribute(k, attrs[k]);
-    if (parent) parent.appendChild(n);
-    return n;
-  }
-  const SEV_RANK = ["LEAK", "PIVOT", "CONTEXT", "BACKGROUND"];
-  function worstSev(items) {
-    let best = "BACKGROUND";
-    for (const it of items)
-      if (SEV_RANK.indexOf(it.severity) < SEV_RANK.indexOf(best)) best = it.severity;
-    return best;
-  }
-
-  function renderPivots(containerId) {
-    const host = document.getElementById(containerId);
-    if (!host) return;
-    host.innerHTML = "";
-    host.classList.add("pivots");
-    const findings = Array.isArray(window.allFindings) ? window.allFindings : [];
-    const root = (typeof window.scopeDomain === "string" && window.scopeDomain) || "scope";
-
-    const buckets = [];
-    let totalLeaves = 0;
-    for (const [cat, label] of CATS) {
-      const items = findings.filter((f) => f && f.category === cat)
-        .sort((a, b) => (b.occurrences || 0) - (a.occurrences || 0));
-      if (!items.length) continue;
-      const shown = items.slice(0, PER_CAT_CAP);
-      buckets.push({ cat, label, items, shown, extra: items.length - shown.length });
-      totalLeaves += shown.length;
-    }
-    if (!buckets.length) {
-      const msg = document.createElement("div");
-      msg.className = "pivots-empty";
-      msg.textContent = t('No pivots to graph yet');
-      host.appendChild(msg);
-      return;
-    }
-    while (totalLeaves > TOTAL_CAP) {
-      let big = buckets[0];
-      for (const b of buckets) if (b.shown.length > big.shown.length) big = b;
-      if (big.shown.length <= 1) break;
-      big.shown.pop();
-      big.extra = big.items.length - big.shown.length;
-      totalLeaves--;
-    }
-
-    const svg = el("svg", {
-      viewBox: "0 0 " + VB_W + " " + VB_H, width: "100%",
-      preserveAspectRatio: "xMidYMid meet", role: "img",
-      "aria-label": "Pivots relationship graph",
-    }, host);
-    const gEdges = el("g", { class: "edges" }, svg);
-    const gNodes = el("g", { class: "nodes" }, svg);
-
-    const n = buckets.length;
-    buckets.forEach((b, i) => {
-      const ang = -Math.PI / 2 + (i * 2 * Math.PI) / n;
-      b.x = CX + CLUSTER_R * Math.cos(ang);
-      b.y = CY + CLUSTER_R * Math.sin(ang);
-      b.ang = ang;
-    });
-
-    const nodes = [];
-    function addNode(x, y, r, fill, labelText, fullText, opts) {
-      opts = opts || {};
-      const g = el("g", { class: "node" + (opts.cls ? " " + opts.cls : "") }, gNodes);
-      el("circle", { cx: x, cy: y, r: r, fill: fill }, g);
-      el("title", null, g).textContent = fullText;
-      const tx = el("text", { x: x, y: y + r + 13, "text-anchor": "middle", class: opts.labelCls || "lbl" }, g);
-      tx.textContent = labelText;
-      el("title", null, tx).textContent = fullText;
-      if (opts.onClick) { g.style.cursor = "pointer"; g.addEventListener("click", opts.onClick); }
-      return { g: g, edges: [] };
-    }
-    function addEdge(x1, y1, x2, y2) {
-      return el("line", { x1: x1, y1: y1, x2: x2, y2: y2, class: "edge" }, gEdges);
-    }
-    function callSelect(cat) {
-      if (typeof window.selectCategory === "function") window.selectCategory(cat);
-    }
-
-    const centerNode = addNode(CX, CY, 26, "var(--accent)", trunc(root), root, {
-      cls: "center", labelCls: "lbl lbl-center",
-    });
-
-    buckets.forEach((b) => {
-      const eHub = addEdge(CX, CY, b.x, b.y);
-      const hubLabel = b.label + " (" + b.items.length + ")";
-      const hubNode = addNode(b.x, b.y, 15, sev(worstSev(b.shown)), hubLabel, hubLabel, {
-        cls: "hub", labelCls: "lbl lbl-hub", onClick: () => callSelect(b.cat),
-      });
-      hubNode.edges.push(eHub);
-      nodes.push(hubNode);
-
-      const m = b.shown.length + (b.extra > 0 ? 1 : 0);
-      const spread = Math.min(Math.PI * 1.1, 0.42 * m);
-      const start = b.ang - spread / 2;
-      const step = m > 1 ? spread / (m - 1) : 0;
-      const leafEntries = b.shown.slice();
-      if (b.extra > 0) leafEntries.push({ __more: true, occurrences: 0, severity: "BACKGROUND" });
-
-      leafEntries.forEach((f, j) => {
-        const a = m > 1 ? start + j * step : b.ang;
-        const rr = LEAF_R + (j % 2 ? 26 : 0);
-        const lx = b.x + rr * Math.cos(a), ly = b.y + rr * Math.sin(a);
-        const e = addEdge(b.x, b.y, lx, ly);
-        if (f.__more) {
-          const moreNode = addNode(lx, ly, 7, "var(--text-faint)", "+" + b.extra + " more",
-            "+" + b.extra + " more in " + b.label,
-            { cls: "leaf leaf-more", labelCls: "lbl lbl-leaf", onClick: () => callSelect(b.cat) });
-          moreNode.edges.push(e); nodes.push(moreNode);
-        } else {
-          const full = String(f.value) + "  • " + (f.occurrences || 0) + "x" +
-            (f.first_seen ? "  • " + f.first_seen : "") +
-            (f.last_seen && f.last_seen !== f.first_seen ? "-" + f.last_seen : "");
-          const leafNode = addNode(lx, ly, 8, sev(f.severity), trunc(f.value), full,
-            { cls: "leaf", labelCls: "lbl lbl-leaf", onClick: () => callSelect(b.cat) });
-          leafNode.edges.push(e); nodes.push(leafNode);
-        }
-      });
-    });
-
-    nodes.forEach((nd) => {
-      nd.g.addEventListener("mouseenter", () => {
-        nd.g.classList.add("hot");
-        nd.edges.forEach((e) => e.classList.add("hot"));
-        host.classList.add("dim");
-      });
-      nd.g.addEventListener("mouseleave", () => {
-        nd.g.classList.remove("hot");
-        nd.edges.forEach((e) => e.classList.remove("hot"));
-        host.classList.remove("dim");
-      });
-    });
-  }
-  window.renderPivots = renderPivots;
-})();
-
-// Activity timeline v2: legible per-category lanes on a shared year axis,
-// with a clear hover tooltip and click-to-filter. Replaces the old heatmap
-// (which was unreadable on hover). Reads allFindings directly.
-function renderActivityTimeline(host) {
-  if (!host) return;
-  let findings = allFindings || [];
-  const sevF = document.getElementById('filter-severity');
-  const seaF = document.getElementById('filter-search');
-  if ((sevF && sevF.value) || (seaF && seaF.value)) {
-    if (typeof getTimelineSourceFindings === 'function') findings = getTimelineSourceFindings();
-  }
-  if (!findings.length) { host.innerHTML = '<div class="atl-empty">No findings to plot on the timeline.</div>'; return; }
-
-  const toM = (s) => parseMonth(s);
-  let lo = Infinity, hi = -Infinity;
-  for (const f of findings) {
-    const a = toM(f.first_seen), b = toM(f.last_seen);
-    if (a != null && a < lo) lo = a;
-    if (b != null && b > hi) hi = b;
-  }
-  if (!isFinite(lo) || !isFinite(hi)) { host.innerHTML = '<div class="atl-empty">No dated findings on the timeline.</div>'; return; }
-  if (hi <= lo) hi = lo + 31 * 24 * 3600 * 1000;
-  const span = hi - lo;
-  const pos = (ms) => Math.max(0, Math.min(100, ((ms - lo) / span) * 100));
-  // Stash the bounds so the per-value gantt (atlToggleGantt) aligns its bars
-  // with the same year axis the category curves use.
-  _atlBounds = { lo, hi, span };
-
-  const SEVRANK = { LEAK: 0, PIVOT: 1, CONTEXT: 2, BACKGROUND: 3 };
-  // Per-category monthly series: number of findings active that month (a finding
-  // is active from first_seen to last_seen). The curve rises as findings appear
-  // and falls as they vanish, so its shape reads as appearances/disappearances.
-  const d0 = new Date(lo); const baseY = d0.getUTCFullYear(), baseM = d0.getUTCMonth();
-  const mIdx = (ms) => { const d = new Date(ms); return (d.getUTCFullYear() - baseY) * 12 + (d.getUTCMonth() - baseM); };
-  const nb = Math.max(1, mIdx(hi) + 1);
-  const cats = new Map();
-  for (const f of findings) {
-    const c = f.category; if (!c) continue;
-    const a = toM(f.first_seen), b = toM(f.last_seen); if (a == null || b == null) continue;
-    let e = cats.get(c);
-    if (!e) { e = { cat: c, first: a, last: b, count: 0, sev: { LEAK: 0, PIVOT: 0, CONTEXT: 0, BACKGROUND: 0 }, series: new Array(nb).fill(0) }; cats.set(c, e); }
-    e.first = Math.min(e.first, a); e.last = Math.max(e.last, b);
-    e.count += (f.occurrences || 1);
-    const s = osintValue(f) || 'BACKGROUND'; e.sev[s] = (e.sev[s] || 0) + 1;
-    let ia = Math.max(0, Math.min(nb - 1, mIdx(a))), ib = Math.max(0, Math.min(nb - 1, mIdx(b)));
-    if (ib < ia) ib = ia;
-    for (let i = ia; i <= ib; i++) e.series[i]++;
-  }
-  const domSev = (e) => { let best = 'BACKGROUND'; for (const k in e.sev) if (e.sev[k] > 0 && SEVRANK[k] < SEVRANK[best]) best = k; return best; };
-  const rows = [...cats.values()].sort((x, y) => {
-    const d = SEVRANK[domSev(x)] - SEVRANK[domSev(y)];
-    return d !== 0 ? d : y.count - x.count;
-  });
-
-  const fmt = (ms) => { const d = new Date(ms); return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0'); };
-  const monthMs = (i) => Date.UTC(baseY, baseM + i, 1);
-  const label = (c) => (typeof catLabel === 'function' ? catLabel(c) : c.replace(/_/g, ' '));
-  const y0 = new Date(lo).getUTCFullYear(), y1 = new Date(hi).getUTCFullYear();
-  let axis = '', grid = '';
-  for (let y = y0; y <= y1; y++) {
-    const ms = Date.UTC(y, 0, 1);
-    if (ms < lo - 31536000000 || ms > hi + 31536000000) continue;
-    const p = pos(Math.max(lo, Math.min(hi, ms)));
-    axis += `<span class="atl-year" style="left:${p}%">${y}</span>`;
-    grid += `<span class="atl-gridline" style="left:${p}%"></span>`;
-  }
-
-  const lanes = rows.map((e) => {
-    const sev = domSev(e);
-    const max = Math.max(1, ...e.series);
-    let peak = 0, peakI = 0;
-    for (let i = 0; i < e.series.length; i++) if (e.series[i] > peak) { peak = e.series[i]; peakI = i; }
-    const X = (i) => (nb <= 1 ? 0 : (i / (nb - 1)) * 100);
-    const Y = (v) => 96 - (v / max) * 92;  // 4% padding top + bottom
-    const line = e.series.map((v, i) => `${X(i).toFixed(2)},${Y(v).toFixed(2)}`).join(' ');
-    const area = `0,100 ${line} 100,100`;
-    const tip = `${label(e.cat)}  ·  ${e.count} finding${e.count > 1 ? 's' : ''}\n${fmt(e.first)} → ${fmt(e.last)}\npeak ${peak} active in ${fmt(monthMs(peakI))}`;
-    return `<div class="atl-lane sev-${sev}" data-cat="${esc(e.cat)}" tabindex="0" role="button"
-        aria-label="${esc(label(e.cat))}: ${e.count} findings, peak ${peak} in ${fmt(monthMs(peakI))}. Click to expand the per-value timeline."
-        data-tip="${esc(tip)}" onclick="atlToggleGantt('${e.cat}', this)"
-        onmouseenter="atlTip(event,this)" onmousemove="atlTip(event,this)" onmouseleave="atlTipHide()"
-        onfocus="atlTip(event,this)" onblur="atlTipHide()">
-        <span class="atl-lane-label"><span class="atl-lane-caret">▸</span>${esc(label(e.cat))}<span class="atl-lane-count">${e.count}</span></span>
-        <span class="atl-track">
-          <svg class="atl-curve" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-            <polygon class="atl-curve-area" points="${area}"></polygon>
-            <polyline class="atl-curve-line" points="${line}"></polyline>
-          </svg>
-        </span>
-      </div>`;
-  }).join('');
-
-  host.innerHTML = `
-    <div class="atl">
-      <div class="atl-head">
-        <span class="atl-title">Activity over time</span>
-        <span class="atl-sub">${rows.length} categories · ${fmt(lo)} → ${fmt(hi)} · each curve is findings active per month. Click a category to expand its per-value timeline (when each value appeared and was replaced).</span>
-      </div>
-      <div class="atl-axis"><span class="atl-axis-gutter"></span><span class="atl-axis-track">${axis}</span></div>
-      <div class="atl-lanes">
-        <span class="atl-gridlines">${grid}</span>
-        ${lanes}
-      </div>
-      <div id="atl-tooltip" class="atl-tooltip" hidden></div>
-    </div>`;
-}
-
-// Shared timeline bounds, set by renderActivityTimeline so the per-value gantt
-// aligns with the category curves' year axis.
-let _atlBounds = null;
-const _ATL_GANTT_MAX = 60;
-
-// Expand/collapse a per-value gantt directly under a category lane. Boris asked
-// for the "usage overlap" view: for analytics trackers (and any category) show
-// each distinct value as a bar spanning first_seen -> last_seen, so replacements
-// and overlaps over time are obvious at a glance.
-function atlToggleGantt(cat, laneEl) {
-  if (!laneEl) return;
-  const next = laneEl.nextElementSibling;
-  if (next && next.classList.contains('atl-gantt') && next.dataset.cat === cat) {
-    next.remove();
-    laneEl.classList.remove('atl-lane-open');
-    return;
-  }
-  // Close any other open gantt so only one is expanded at a time.
-  const wrap = laneEl.closest('.atl-lanes');
-  if (wrap) wrap.querySelectorAll('.atl-gantt').forEach((g) => g.remove());
-  if (wrap) wrap.querySelectorAll('.atl-lane-open').forEach((l) => l.classList.remove('atl-lane-open'));
-  const html = atlGanttHTML(cat);
-  laneEl.insertAdjacentHTML('afterend', html);
-  laneEl.classList.add('atl-lane-open');
-}
-
-function atlGanttHTML(cat) {
-  const b = _atlBounds || { lo: 0, hi: 1, span: 1 };
-  const span = b.span || (b.hi - b.lo) || 1;
-  const pos = (ms) => Math.max(0, Math.min(100, ((ms - b.lo) / span) * 100));
-  const toM = (s) => parseMonth(s);
-  const label = (c) => (typeof catLabel === 'function' ? catLabel(c) : c.replace(/_/g, ' '));
-  const fmt = (ms) => { const d = new Date(ms); return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0'); };
-
-  // Collapse to one row per distinct value, widening the span across occurrences.
-  const byVal = new Map();
-  for (const f of (allFindings || [])) {
-    if (f.category !== cat) continue;
-    const a = toM(f.first_seen), z = toM(f.last_seen);
-    if (a == null || z == null) continue;
-    const v = String(f.value || '').trim();
-    if (!v) continue;
-    let e = byVal.get(v);
-    if (!e) { e = { v, first: a, last: z, occ: 0, sev: f.severity }; byVal.set(v, e); }
-    e.first = Math.min(e.first, a); e.last = Math.max(e.last, z);
-    e.occ += (f.occurrences || 1);
-  }
-  let rows = [...byVal.values()].sort((x, y) => x.first - y.first || y.occ - x.occ);
-  const total = rows.length;
-  const truncated = total > _ATL_GANTT_MAX;
-  rows = rows.slice(0, _ATL_GANTT_MAX);
-  if (!rows.length) {
-    return `<div class="atl-gantt" data-cat="${esc(cat)}"><div class="atl-gantt-empty">No dated values to plot for ${esc(label(cat))}.</div></div>`;
-  }
-
-  const bars = rows.map((e) => {
-    const left = pos(e.first);
-    const right = pos(e.last);
-    const w = Math.max(1.2, right - left);
-    const sev = (typeof osintValue === 'function' ? osintValue({ severity: e.sev }) : '') || 'BACKGROUND';
-    const tip = `${e.v}\n${fmt(e.first)} → ${fmt(e.last)} · ${e.occ}×`;
-    const vEsc = esc(e.v.length > 48 ? e.v.slice(0, 47) + '…' : e.v);
-    return `<div class="atl-gantt-row" data-tip="${esc(tip)}"
-        onmouseenter="atlTip(event,this)" onmousemove="atlTip(event,this)" onmouseleave="atlTipHide()"
-        onclick="atlGanttPick(${JSON.stringify(e.v).replace(/"/g, '&quot;')})">
-        <span class="atl-gantt-label" title="${esc(e.v)}">${vEsc}</span>
-        <span class="atl-gantt-track">
-          <span class="atl-gantt-bar sev-${sev}" style="left:${left.toFixed(2)}%;width:${w.toFixed(2)}%"></span>
-        </span>
-      </div>`;
-  }).join('');
-
-  const note = truncated ? `<div class="atl-gantt-note">showing ${_ATL_GANTT_MAX} of ${total} values (most recent appearances first)</div>` : '';
-  const filterBtn = `<button class="atl-gantt-filter" onclick="selectCategory('${cat}')">Filter table to ${esc(label(cat))}</button>`;
-  return `<div class="atl-gantt" data-cat="${esc(cat)}">
-      <div class="atl-gantt-head"><span>${esc(label(cat))} · per-value timeline</span>${filterBtn}</div>
-      <div class="atl-gantt-rows">${bars}</div>
-      ${note}
-    </div>`;
-}
-
-// Clicking a gantt bar narrows the findings table to that exact value.
-function atlGanttPick(value) {
-  const s = document.getElementById('filter-search');
-  if (s) { s.value = value; if (typeof applyFilters === 'function') applyFilters(); }
-  const t = document.getElementById('res-table');
-  if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-
-function atlTip(e, el) {
-  const t = document.getElementById('atl-tooltip');
-  if (!t) return;
-  t.textContent = el.getAttribute('data-tip') || '';
-  t.hidden = false;
-  const wrap = el.closest('.atl');
-  if (!wrap) return;
-  const r = wrap.getBoundingClientRect();
-  const x = (e.clientX != null ? e.clientX - r.left : 40);
-  const y = (e.clientY != null ? e.clientY - r.top : 40);
-  t.style.left = Math.max(8, Math.min(x + 14, r.width - 280)) + 'px';
-  t.style.top = (y + 16) + 'px';
-}
-function atlTipHide() { const t = document.getElementById('atl-tooltip'); if (t) t.hidden = true; }
-
-function renderTimelineRibbon() {
-  const host = $('res-timeline-ribbon');
-  if (!host) return;
-  return renderActivityTimeline(host);
-  const model = buildRibbonModel();
-  if (!model || model.rows.length === 0) { host.innerHTML = ''; return; }
-  if (model.monthCount < 2) { host.innerHTML = ''; return; }
-
-  // Find the global max-count for intensity normalisation. Use the
-  // total row max so per-row intensities stay comparable to the pulse.
-  let globalMax = 0;
-  for (const bin of model.totalRow.byMonth.values()) {
-    if (bin.count > globalMax) globalMax = bin.count;
-  }
-
-  const axisHtml = model.axisLabels.map(({ label, span }) =>
-    `<span style="--tl-axis-span:${span}">${esc(label)}</span>`
-  ).join('');
-
-  function _cellHtml(rowCat, ym, bin) {
-    const count = bin ? bin.count : 0;
-    const starts = bin ? bin.starts : 0;
-    const ends = bin ? bin.ends : 0;
-    const isActive = _cellInActiveFilter(rowCat, ym);
-    const pivotMag = (rowCat === '_total') ? (model.pivotMag.get(ym) || 0) : 0;
-    const isPivot = pivotMag >= 2;
-    const klass = 'tl-ribbon-cell'
-      + (count === 0 ? ' empty' : '')
-      + (isActive ? ' active' : '')
-      + (isPivot ? ' pivot' : '')
-      + (starts > 0 ? ' has-start' : '')
-      + (ends > 0 ? ' has-end' : '');
-    const startW = starts > 0 ? Math.min(3, 1 + Math.floor((starts - 1) / 2)) : 0;
-    const endW = ends > 0 ? Math.min(3, 1 + Math.floor((ends - 1) / 2)) : 0;
-    const pivotPx = isPivot ? Math.min(7, 3 + (pivotMag - 2)) : 3;
-    const styleParts = [`background:${_cellBg(bin, globalMax)}`];
-    if (startW) styleParts.push(`--start-w:${startW}px`);
-    if (endW) styleParts.push(`--end-w:${endW}px`);
-    if (isPivot) styleParts.push(`--pivot-size:${pivotPx}px`);
-    const style = styleParts.join(';');
-    const tip = `${rowCat}|${ym}|${count}|${starts}|${ends}|${pivotMag}`;
-    // In-cell count: rendered for every cell but shown only when CSS
-    // says we have room (solo-mode tall cells). Hidden text is
-    // accessible to assistive tech via aria-label still.
-    const countLabel = count > 0
-      ? `<span class="tl-cell-count">${count}</span>`
-      : '';
-    return `<button type="button" class="${klass}"
-                    style="${style}"
-                    data-cat="${esc(rowCat)}" data-ym="${ym}" data-count="${count}"
-                    onmouseenter="ribbonCellEnter(event,'${esc(tip)}')"
-                    onmouseleave="ribbonCellLeave(event)"
-                    onmousedown="ribbonDragStart(event,'${esc(rowCat)}','${ym}')"
-                    onmouseover="ribbonDragMove(event,'${esc(rowCat)}','${ym}')"
-                    onmouseup="ribbonDragEnd(event,'${esc(rowCat)}','${ym}')"
-                    aria-label="${esc(rowCat)} ${ym}: ${count} active">${countLabel}</button>`;
-  }
-
-  // ── SVG pulse row ───────────────────────────────────────────────
-  // viewBox is monthCount wide × 100 tall; bars are positioned at
-  // x = i + 0.15 with width 0.7 so there's a 0.3-unit gap between bars.
-  // Heights normalise to globalMax for the entire ribbon (so per-cat
-  // heatmap intensity stays comparable to the pulse bar height).
-  function _pulseColor(bin) {
-    if (!bin || bin.count === 0) return 'rgba(255,255,255,.05)';
-    const dom = _dominantSeverity(bin.sev);
-    const [r, g, b] = _SEVERITY_HUE[dom];
-    return `rgba(${r},${g},${b},.85)`;
-  }
-  const yearBoundsX = [];
-  let _seenYr = null;
-  model.months.forEach((ym, i) => {
-    const yr = ym.slice(0, 4);
-    if (yr !== _seenYr) {
-      if (_seenYr !== null) yearBoundsX.push(i);
-      _seenYr = yr;
-    }
-  });
-  // Now-line: project today's YYYY-MM into the bar grid.
-  const today = new Date();
-  const todayYm = today.getUTCFullYear() + '-'
-    + String(today.getUTCMonth() + 1).padStart(2, '0');
-  const todayIdx = model.months.indexOf(todayYm);
-  // If today is past the last bucket, place the marker just past the end.
-  const nowX = todayIdx >= 0 ? todayIdx + 0.5 : (todayYm > model.months[model.months.length-1] ? model.monthCount + 0.2 : -1);
-
-  const bars = model.months.map((ym, i) => {
-    const bin = model.totalRow.byMonth.get(ym);
-    const count = bin ? bin.count : 0;
-    const h = globalMax > 0 ? (count / globalMax) * 92 : 0;
-    const y = 100 - Math.max(h, count > 0 ? 6 : 0);
-    const isActive = _cellInActiveFilter('_total', ym);
-    const inRange = (timelineRangeFilter
-      && ym >= timelineRangeFilter.start && ym <= timelineRangeFilter.end);
-    const isPivot = (model.pivotMag.get(ym) || 0) >= 2;
-    const klass = 'bar'
-      + (count === 0 ? ' empty' : '')
-      + (isActive ? ' active' : '')
-      + (inRange ? ' in-range' : '')
-      + (isPivot ? ' pivot' : '');
-    const tip = `_total|${ym}|${count}|${bin ? bin.starts : 0}|${bin ? bin.ends : 0}|${model.pivotMag.get(ym) || 0}`;
-    return `<rect class="${klass}"
-                  x="${(i + 0.15).toFixed(2)}" y="${y.toFixed(2)}"
-                  width=".70" height="${(100 - y).toFixed(2)}"
-                  fill="${_pulseColor(bin)}"
-                  data-cat="_total" data-ym="${ym}"
-                  onmouseenter="ribbonCellEnter(event,'${esc(tip)}')"
-                  onmouseleave="ribbonCellLeave(event)"
-                  onmousedown="ribbonDragStart(event,'_total','${ym}')"
-                  onmouseover="ribbonDragMove(event,'_total','${ym}')"
-                  onmouseup="ribbonDragEnd(event,'_total','${ym}')"
-                  ><title>${esc(ym)}: ${count}</title></rect>`;
-  }).join('');
-  const yearGuides = yearBoundsX.map(x =>
-    `<line class="year-guide" x1="${x}" y1="0" x2="${x}" y2="100"/>`
-  ).join('');
-  const nowLine = nowX >= 0
-    ? `<line class="now-line" x1="${nowX.toFixed(2)}" y1="0" x2="${nowX.toFixed(2)}" y2="100"/>`
-    : '';
-  const pulseSvg = `
-    <svg class="tl-pulse-bars" viewBox="0 0 ${model.monthCount} 100"
-         preserveAspectRatio="none">
-      ${yearGuides}
-      ${bars}
-      ${nowLine}
-    </svg>`;
-
-  function _domSev(sev) {
-    return _dominantSeverity(sev);
-  }
-
-  const rowsHtml = model.rows.map(row => {
-    const cells = model.months.map(ym =>
-      _cellHtml(row.cat, ym, row.byMonth.get(ym))
-    ).join('');
-    // tl-ribbon-cat-cat / tl-row-cells classes let the CSS hide these rows
-    // when the ribbon is collapsed (the pulse row keeps its own classes).
-    // tl-active-cat highlights the row when a category filter is on.
-    const activeMod = (activeCategory === row.cat) ? ' tl-active-cat' : '';
-    const sevMod = ' sev-row-' + _domSev(row.sevTotals);
-    return `
-      <div class="tl-ribbon-cat tl-ribbon-cat-row tl-ribbon-cat-cat${activeMod}${sevMod}"
-           data-cat="${esc(row.cat)}"
-           title="${esc(row.cat)}. ${row.total} total · click to filter row"
-           onclick="ribbonRowClicked('${esc(row.cat)}')"
-           style="cursor:pointer">
-        <span class="tl-row-name">${esc(row.cat.replace(/_/g, ' '))}</span>
-        <span class="tl-row-total">${row.total}</span>
-      </div>
-      <div class="tl-ribbon-cells tl-row-cells${activeMod}" data-cat="${esc(row.cat)}" style="--tl-cols:${model.monthCount}">${cells}</div>
-    `;
-  }).join('');
-
-  // Compute solo-mode flag here so the soloRowHtml block below can
-  // branch on it before the broader effectiveExpanded / expandedClass
-  // declarations further down.
-  const isSolo = !!activeCategory && model.rows.length === 1;
-
-  // Pulse row label + SVG bar chart (aggregate of all displayed cats).
-  const totalSevMod = ' sev-row-' + _dominantSeverity(model.totalRow.sevTotals);
-  const totalRowHtml = `
-    <div class="tl-ribbon-cat tl-ribbon-cat-row tl-ribbon-cat-total${totalSevMod}"
-         title="All ${model.rows.length} categories">
-      <span class="tl-row-name" style="color:var(--text-bright);font-weight:600">all</span>
-      <span class="tl-row-total">${model.totalRow.total}</span>
-    </div>
-    ${pulseSvg}`;
-
-  // Solo-mode dedicated bar chart: re-uses the pulse SVG markup but
-  // sources data from the single visible category row, so the ribbon
-  // only renders ONE timeline strip when a filter is active.
-  let soloRowHtml = '';
-  if (isSolo) {
-    const soloRow = model.rows[0];
-    let soloMax = 0;
-    for (const bin of soloRow.byMonth.values()) {
-      if (bin.count > soloMax) soloMax = bin.count;
-    }
-    const soloBars = model.months.map((ym, i) => {
-      const bin = soloRow.byMonth.get(ym);
-      const count = bin ? bin.count : 0;
-      const h = soloMax > 0 ? (count / soloMax) * 92 : 0;
-      const y = 100 - Math.max(h, count > 0 ? 6 : 0);
-      const isActive = _cellInActiveFilter(soloRow.cat, ym);
-      const inRange = (timelineRangeFilter
-        && ym >= timelineRangeFilter.start && ym <= timelineRangeFilter.end);
-      const klass = 'bar'
-        + (count === 0 ? ' empty' : '')
-        + (isActive ? ' active' : '')
-        + (inRange ? ' in-range' : '');
-      const tip = `${soloRow.cat}|${ym}|${count}|${bin ? bin.starts : 0}|${bin ? bin.ends : 0}|0`;
-      return `<rect class="${klass}"
-                    x="${(i + 0.15).toFixed(2)}" y="${y.toFixed(2)}"
-                    width=".70" height="${(100 - y).toFixed(2)}"
-                    fill="${_pulseColor(bin)}"
-                    data-cat="${esc(soloRow.cat)}" data-ym="${ym}"
-                    onmouseenter="ribbonCellEnter(event,'${esc(tip)}')"
-                    onmouseleave="ribbonCellLeave(event)"
-                    onmousedown="ribbonDragStart(event,'${esc(soloRow.cat)}','${ym}')"
-                    onmouseover="ribbonDragMove(event,'${esc(soloRow.cat)}','${ym}')"
-                    onmouseup="ribbonDragEnd(event,'${esc(soloRow.cat)}','${ym}')"
-                    ><title>${esc(ym)}: ${count}</title></rect>`;
-    }).join('');
-    const soloSevMod = ' sev-row-' + _dominantSeverity(soloRow.sevTotals);
-    soloRowHtml = `
-      <div class="tl-ribbon-cat tl-ribbon-cat-row${soloSevMod}"
-           title="${esc(soloRow.cat)}. ${soloRow.total} total"
-           onclick="ribbonRowClicked('${esc(soloRow.cat)}')"
-           style="cursor:pointer">
-        <span class="tl-row-name" style="color:var(--accent);font-weight:600">${esc(soloRow.cat.replace(/_/g, ' '))}</span>
-        <span class="tl-row-total">${soloRow.total}</span>
-      </div>
-      <svg class="tl-solo-bars" viewBox="0 0 ${model.monthCount} 100"
-           preserveAspectRatio="none">
-        ${yearGuides}
-        ${soloBars}
-        ${nowLine}
-      </svg>`;
-  }
-
-  // Meta line: show peak month, current filter, drag-range or clear link.
-  let metaParts = [];
-  if (timelineRangeFilter) {
-    metaParts.push(`Range <strong>${esc(timelineRangeFilter.start)} → ${esc(timelineRangeFilter.end)}</strong>`);
-  } else if (timelineMonthFilter) {
-    metaParts.push(`Filtered to <strong>${esc(timelineMonthFilter)}</strong>`);
-  } else {
-    metaParts.push(
-      `${model.monthCount} ${model.bucketMode === 'year' ? 'years' : (model.bucketMode === 'quarter' ? 'quarters' : 'months')}`
-      + (model.peak ? ` · peak ${esc(model.peak.ym)} (${model.peak.count})` : '')
-      + ` · click or drag to filter`
-    );
-  }
-  if (timelineMonthFilter || timelineRangeFilter) {
-    metaParts.push(`<button type="button" class="tl-ribbon-clear" onclick="ribbonClearFilter()">clear</button>`);
-  }
-
-  // Auto-expand on category filter; solo-mode (declared above) = only
-  // one row to show anyway, so the toggle disappears in that case.
-  const effectiveExpanded = ribbonExpanded || isSolo || !!activeCategory;
-  const expandedClass = (effectiveExpanded ? ' expanded' : '')
-                      + (isSolo ? ' solo-mode' : '');
-  // Hide the show/hide toggle when in solo mode. there's only one row
-  // and the user already chose to focus on it.
-  const toggleHtml = isSolo ? '' : `
-        <button type="button" class="tl-ribbon-toggle"
-                onclick="ribbonToggleExpanded()"
-                aria-pressed="${effectiveExpanded}">
-          <span class="chev">▸</span>
-          ${effectiveExpanded ? 'hide' : 'show'} ${model.rows.length} categor${model.rows.length === 1 ? 'y' : 'ies'}
-        </button>`;
-  host.innerHTML = `
-    <div class="tl-ribbon-container${expandedClass}">
-      <div class="tl-ribbon-header">
-        <span class="tl-ribbon-title">Activity${activeCategory ? ' · ' + esc(activeCategory.replace(/_/g, ' ')) : ''}</span>
-        <span class="tl-ribbon-meta">${metaParts.join(' ')}</span>
-        ${toggleHtml}
-      </div>
-      <div class="tl-ribbon-grid" id="tl-ribbon-grid">
-        ${isSolo ? soloRowHtml : `
-          <div></div>
-          <div class="tl-ribbon-axis-cells" style="--tl-cols:${model.monthCount}">${axisHtml}</div>
-          ${totalRowHtml}
-          <div class="tl-rows-scroll">${rowsHtml}</div>
-        `}
-      </div>
-    </div>`;
-  // Cache the model on the host so drag-end can resolve months without
-  // recomputing from scratch.
-  host._ribbonModel = model;
-}
-
-function _cellInActiveFilter(cat, ym) {
-  if (timelineRangeFilter) {
-    const inRange = ym >= timelineRangeFilter.start && ym <= timelineRangeFilter.end;
-    if (cat === '_total') return inRange;
-    return inRange && (!activeCategory || activeCategory === cat);
-  }
-  if (timelineMonthFilter) {
-    if (cat === '_total') return timelineMonthFilter === ym;
-    return timelineMonthFilter === ym && activeCategory === cat;
-  }
-  return false;
-}
-
 function findingActiveInRange(f, range) {
   // range = {start: "YYYY-MM", end: "YYYY-MM"} (inclusive)
   const fs = parseMonth(f.first_seen);
@@ -3413,212 +2205,6 @@ function findingActiveInRange(f, range) {
   const endMsInclusive = endMs + 31 * 24 * 60 * 60 * 1000;
   return fs <= endMsInclusive && ls >= startMs;
 }
-
-function _commitFilter({ cat, ym, range }) {
-  // Single source of truth for setting ribbon filters. Resets the other
-  // filter type so the two never coexist, syncs activeCategory and the
-  // cat-grid, and re-renders the table + ribbon.
-  timelineMonthFilter = null;
-  timelineRangeFilter = null;
-  if (range) {
-    timelineRangeFilter = range;
-    if (cat && cat !== '_total') activeCategory = cat;
-    else activeCategory = null;
-  } else if (ym) {
-    timelineMonthFilter = ym;
-    activeCategory = (cat === '_total' ? null : cat);
-  }
-  applyFilters();
-  // Re-render the category grid from the in-memory scan, not a /api/domains
-  // fetch (which was a no-op in the public flow and 404s now).
-  if (_v2DomainInfoCache) renderCategoryGrid(_v2DomainInfoCache, activeCategory);
-}
-
-function ribbonCellClicked(cat, ym) {
-  // Toggle: clicking the active cell again clears the filter.
-  if (timelineMonthFilter === ym && (cat === '_total' ? !activeCategory : activeCategory === cat)) {
-    ribbonClearFilter();
-    return;
-  }
-  _commitFilter({ cat, ym });
-}
-
-function ribbonRowClicked(cat) {
-  // Click the category label to filter to that category across all time.
-  // Re-clicking the same active row clears.
-  if (activeCategory === cat && !timelineMonthFilter && !timelineRangeFilter) {
-    activeCategory = null;
-  } else {
-    activeCategory = cat;
-  }
-  timelineMonthFilter = null;
-  timelineRangeFilter = null;
-  applyFilters();
-  if (_v2DomainInfoCache) renderCategoryGrid(_v2DomainInfoCache, activeCategory);
-}
-
-function ribbonClearFilter() {
-  timelineMonthFilter = null;
-  timelineRangeFilter = null;
-  applyFilters();
-}
-
-function ribbonToggleExpanded() {
-  ribbonExpanded = !ribbonExpanded;
-  renderTimelineRibbon();
-}
-
-// ── Drag-to-range ─────────────────────────────────────────────────
-// Press on a cell, drag to another, release: the two cells anchor a
-// month range (sorted), filtering findings whose interval overlaps it.
-// A click without movement falls through to ribbonCellClicked.
-
-const _DRAG_THRESHOLD_PX = 4;
-
-function ribbonDragStart(event, cat, ym) {
-  if (event.button !== 0) return;
-  _ribbonDrag = {
-    cat, startYm: ym, endYm: ym,
-    sx: event.clientX, sy: event.clientY,
-    moved: false,
-  };
-  event.preventDefault();
-}
-
-function ribbonDragMove(event, cat, ym) {
-  if (!_ribbonDrag) return;
-  if (cat !== _ribbonDrag.cat && cat !== '_total' && _ribbonDrag.cat !== '_total') return;
-  _ribbonDrag.endYm = ym;
-  // Mark "moved" once we've crossed a small threshold so a noisy click
-  // doesn't accidentally engage range mode.
-  const dx = Math.abs(event.clientX - _ribbonDrag.sx);
-  if (dx > _DRAG_THRESHOLD_PX) _ribbonDrag.moved = true;
-  _renderDragOverlay();
-}
-
-function ribbonDragEnd(event, cat, ym) {
-  if (!_ribbonDrag) return;
-  const drag = _ribbonDrag;
-  _ribbonDrag = null;
-  _clearDragOverlay();
-  if (!drag.moved || drag.startYm === drag.endYm) {
-    ribbonCellClicked(cat, ym);
-    return;
-  }
-  const [a, b] = [drag.startYm, drag.endYm].sort();
-  _commitFilter({ cat: drag.cat, range: { start: a, end: b } });
-}
-
-function _renderDragOverlay() {
-  // While dragging we live-mark cells AND pulse bars in the candidate
-  // range with the .in-range class.
-  if (!_ribbonDrag) return;
-  const [a, b] = [_ribbonDrag.startYm, _ribbonDrag.endYm].sort();
-  const rows = document.querySelectorAll('#tl-ribbon-grid .tl-ribbon-cells');
-  rows.forEach(row => {
-    const rowCat = row.getAttribute('data-cat');
-    if (_ribbonDrag.cat !== '_total' && rowCat !== _ribbonDrag.cat && rowCat !== '_total') return;
-    row.querySelectorAll('.tl-ribbon-cell').forEach(cell => {
-      const ym = cell.getAttribute('data-ym');
-      cell.classList.toggle('in-range', ym >= a && ym <= b);
-    });
-  });
-  // Pulse SVG. rects are not in .tl-ribbon-cells, target them directly.
-  document.querySelectorAll('#tl-ribbon-grid .tl-pulse-bars rect.bar')
-    .forEach(rect => {
-      const ym = rect.getAttribute('data-ym');
-      rect.classList.toggle('in-range', ym >= a && ym <= b);
-    });
-}
-
-function _clearDragOverlay() {
-  document.querySelectorAll('#tl-ribbon-grid .in-range')
-    .forEach(c => c.classList.remove('in-range'));
-}
-
-// ── Hover row+column highlight + tooltip ──────────────────────────
-
-let _ribbonTipEl = null;
-function ribbonCellEnter(event, payload) {
-  // Tooltip card layout: head (cat · ym) / row (count + event chips) /
-  // sample preview at the bottom in a tinted block.
-  if (!_ribbonTipEl) {
-    _ribbonTipEl = document.createElement('div');
-    _ribbonTipEl.className = 'tl-ribbon-tooltip';
-    document.body.appendChild(_ribbonTipEl);
-  }
-  const [cat, ym, count, starts, ends, pivotMag] = payload.split('|');
-  const sampleSrc = cat === '_total'
-    ? (allFindings || []).filter(f => findingActiveInMonth(f, ym))
-    : (allFindings || []).filter(f => f.category === cat && findingActiveInMonth(f, ym));
-  const sampleHtml = sampleSrc.slice(0, 3)
-    .map(f => `<div>${esc(String(f.value || '').slice(0, 60))}</div>`)
-    .join('');
-  const label = cat === '_total' ? 'all categories' : cat.replace(/_/g, ' ');
-  const chips = [];
-  if (parseInt(starts) > 0) chips.push(`<span class="tip-chip up">+${starts} appeared</span>`);
-  if (parseInt(ends) > 0) chips.push(`<span class="tip-chip down">−${ends} gone</span>`);
-  if (parseInt(pivotMag) >= 2) chips.push(`<span class="tip-chip pivot">${pivotMag}-cat pivot</span>`);
-
-  _ribbonTipEl.innerHTML = `
-    <div class="tip-head">
-      <strong>${esc(label)}</strong>
-      <span class="tip-ym">${esc(ym)}</span>
-    </div>
-    <div class="tip-row">
-      <span style="font-weight:600;color:var(--text-bright)">${count}</span>&nbsp;active
-      ${chips.length ? '· ' + chips.join(' ') : ''}
-    </div>
-    ${sampleHtml ? `<div class="tip-sample">${sampleHtml}</div>` : ''}`;
-  _ribbonTipEl.classList.add('visible');
-  // Position with flip: if the cursor is too close to the right or
-  // bottom edge of the viewport, anchor the tooltip on the opposite
-  // side so it never gets clipped. We measure after assigning content
-  // because the box height depends on whether chips/sample render.
-  const tw = _ribbonTipEl.offsetWidth || 280;
-  const th = _ribbonTipEl.offsetHeight || 100;
-  let x = event.clientX + 12;
-  let y = event.clientY + 12;
-  if (x + tw + 8 > window.innerWidth) x = event.clientX - tw - 12;
-  if (y + th + 8 > window.innerHeight) y = event.clientY - th - 12;
-  if (x < 8) x = 8;
-  if (y < 8) y = 8;
-  _ribbonTipEl.style.left = x + 'px';
-  _ribbonTipEl.style.top = y + 'px';
-
-  // Row + column highlight
-  const grid = document.getElementById('tl-ribbon-grid');
-  if (grid) {
-    grid.classList.add('has-hover');
-    grid.querySelectorAll('.row-hover').forEach(el => el.classList.remove('row-hover'));
-    grid.querySelectorAll('.col-hover').forEach(el => el.classList.remove('col-hover'));
-    grid.querySelectorAll(`.tl-ribbon-cells[data-cat="${CSS.escape(cat)}"], .tl-ribbon-cat[data-cat="${CSS.escape(cat)}"]`)
-      .forEach(el => el.classList.add('row-hover'));
-    grid.querySelectorAll(`.tl-ribbon-cell[data-ym="${ym}"]`)
-      .forEach(el => el.classList.add('col-hover'));
-  }
-}
-
-function ribbonCellLeave(event) {
-  if (_ribbonTipEl) _ribbonTipEl.classList.remove('visible');
-  const grid = document.getElementById('tl-ribbon-grid');
-  if (grid) {
-    grid.classList.remove('has-hover');
-    grid.querySelectorAll('.row-hover, .col-hover')
-      .forEach(el => el.classList.remove('row-hover', 'col-hover'));
-  }
-}
-
-// Reset drag state if the user mouses up outside the ribbon (e.g. drags
-// off the grid).
-window.addEventListener('mouseup', () => {
-  if (_ribbonDrag) {
-    _ribbonDrag = null;
-    _clearDragOverlay();
-  }
-});
-
-
 function renderResultsHeader(info) {
   $('res-domain').textContent = info.name;
   const el = $('res-meta');
@@ -3685,48 +2271,6 @@ const OSINT_VALUE_LABELS = {
 function osintValue(f) {
   const raw = (f && f.severity) || '';
   return OSINT_VALUE_LEGACY[raw] || raw;
-}
-
-function focusSeverity(sev) {
-  const s = $('filter-severity');
-  if (s) { s.value = sev; applyFilters(); }
-  const t = $('res-table');
-  if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-
-function renderHighlights(findings) {
-  const leaks = findings.filter(f => osintValue(f) === 'LEAK');
-  const pivots = findings.filter(f => osintValue(f) === 'PIVOT');
-  const host = $('res-highlights');
-  if (!host) return;
-  if (!leaks.length && !pivots.length) { host.innerHTML = ''; return; }
-
-  const card = (cls, label, f) => `
-    <div class="highlight ${cls}" role="button" tabindex="0"
-         onclick="selectCategory('${f.category}')"
-         onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}"
-         title="${t('Filter the table to')} ${esc(catLabel(f.category))}">
-      <div class="highlight-severity">${label}</div>
-      <div class="highlight-title">${esc(catLabel(f.category))}</div>
-      <div class="highlight-detail">${esc(String(f.value).slice(0, 100))}</div>
-    </div>`;
-  const more = (n, sev) =>
-    `<button class="signals-more" type="button" onclick="focusSeverity('${sev}')">+${n} ${t('more')}</button>`;
-
-  let html = '';
-  if (leaks.length) {
-    html += '<div class="signals-row signals-leaks">'
-      + leaks.slice(0, 3).map(f => card('leak', t('Leak'), f)).join('')
-      + (leaks.length > 3 ? more(leaks.length - 3, 'LEAK') : '')
-      + '</div>';
-  }
-  if (pivots.length) {
-    html += '<div class="signals-row signals-pivots">'
-      + pivots.slice(0, 4).map(f => card('pivot', t('Pivot'), f)).join('')
-      + (pivots.length > 4 ? more(pivots.length - 4, 'PIVOT') : '')
-      + '</div>';
-  }
-  host.innerHTML = html;
 }
 
 // OSINT-priority ordering for the category grid. Categories that are
@@ -3907,18 +2451,6 @@ function renderCategoryGrid(info, activeKey) {
       desc.className = 'cat-desc cat-desc-all';
       desc.innerHTML = `<span class="cat-desc-text">${esc(t('Every signal extracted across the archived history. Pick a category above to see what each pivot is and focus the table.'))}</span>`;
     }
-  }
-}
-
-function toggleEmptyCats() {
-  const g = $('cat-empty'), t = $('cat-empty-toggle');
-  if (!g || !t) return;
-  if (g.hasAttribute('hidden')) {
-    g.removeAttribute('hidden');
-    t.textContent = '- hide empty categories';
-  } else {
-    g.setAttribute('hidden', '');
-    t.textContent = '+ ' + g.querySelectorAll('.cat-tile').length + ' searched, nothing found';
   }
 }
 
@@ -4270,6 +2802,18 @@ function _r2Pivots() {
   return out;
 }
 
+// Keyboard nav in the category rail: Enter/Space opens, Up/Down move focus to the
+// adjacent category link (keeps the rail operable without a mouse).
+function report2RailKey(ev, cat) {
+  if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); report2OpenCat(cat); return; }
+  if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+    ev.preventDefault();
+    const links = Array.from(document.querySelectorAll('#r2-rail .r2-rlink'));
+    const i = links.indexOf(ev.currentTarget);
+    const next = links[i + (ev.key === 'ArrowDown' ? 1 : -1)];
+    if (next) next.focus();
+  }
+}
 function report2SetView(v) { report2State.view = v; report2Render(); }
 function report2OpenCat(c) { report2State.openCat = c; report2State.filter = ''; report2State.view = 'cats'; report2Render(); }
 function report2ToggleEmpty() { report2State.showEmpty = !report2State.showEmpty; report2Render(); }
@@ -4344,10 +2888,10 @@ function report2RenderRail() {
   // Categories view rail
   const link = (c) => {
     const on = report2State.openCat === c;
-    return `<div class="r2-rlink${on ? ' on' : ''}" onclick="report2OpenCat('${c}')">
+    return `<div class="r2-rlink${on ? ' on' : ''}" role="button" tabindex="0" onclick="report2OpenCat('${c}')" onkeydown="report2RailKey(event,'${c}')">
       <span>${esc(catLabel(c))}</span><span class="r2-c">${_r2.byCat.get(c).length}</span></div>`;
   };
-  const emptyLink = (c) => `<div class="r2-rlink zero${report2State.openCat === c ? ' on' : ''}" onclick="report2OpenCat('${c}')">
+  const emptyLink = (c) => `<div class="r2-rlink zero${report2State.openCat === c ? ' on' : ''}" role="button" tabindex="0" onclick="report2OpenCat('${c}')" onkeydown="report2RailKey(event,'${c}')">
       <span>${esc(catLabel(c))}</span><span class="r2-c">0</span></div>`;
   rail.innerHTML =
     `<div class="r2-rt"><span>${t('Found')}</span><span>${_r2.found.length}</span></div>` +
@@ -4362,15 +2906,39 @@ function report2RenderRail() {
 function report2RenderMain() {
   const main = document.getElementById('r2-main');
   if (!main) return;
-  if (report2State.view === 'activity') { main.innerHTML = report2ActivityHTML(); return; }
+  if (report2State.view === 'activity') { main.innerHTML = report2ActivityHTML(); _r2Fade(main); return; }
+
+  // Whole-scan empty state: nothing was found in any category. Say so plainly
+  // (with the scope that was searched) rather than showing a blank panel.
+  if (!_r2.found.length) {
+    const m = (_r2.info && _r2.info.scanMeta) || {};
+    const ana = m.snapshots_analyzed || m.pages_scraped || 0;
+    main.innerHTML =
+      `<div class="r2-noresults">
+        <div class="r2-noresults-title">${t('No findings')}</div>
+        <div class="r2-noresults-sub">${t('WayTrace searched all 43 categories across {n} archived pages and found nothing to extract.').replace('{n}', ana)}</div>
+      </div>`;
+    _r2Fade(main);
+    return;
+  }
 
   const cat = report2State.openCat;
   if (cat === '__all__') {
     main.innerHTML = _r2.found.map(c => report2CatBlock(c, false)).join('');
+    _r2Fade(main);
     return;
   }
   const isEmpty = !_r2.byCat.has(cat) || !_r2.byCat.get(cat).length;
   main.innerHTML = report2CatBlock(cat, true, isEmpty);
+  _r2Fade(main);
+}
+
+// Retrigger a short fade-in on the freshly-rendered panel content (respects
+// prefers-reduced-motion via the CSS).
+function _r2Fade(main) {
+  main.classList.remove('r2-anim');
+  void main.offsetWidth;   // force reflow so the animation replays
+  main.classList.add('r2-anim');
 }
 
 function _r2Rows(list) {
@@ -4398,7 +2966,7 @@ function report2CatBlock(cat, withActivity, isEmpty) {
   const desc = CAT_DESCRIPTIONS[cat] ? t(CAT_DESCRIPTIONS[cat]) : '';
   const filtered = q && list.length !== all.length ? `<span class="r2-filtered">${list.length} ${t('shown')}</span>` : '';
   const head = `<div class="r2-dhead"><span class="r2-name">${esc(catLabel(cat))}</span><span class="r2-cnt">${all.length}</span>${filtered}
-    <span class="r2-copycol" onclick="report2CopyCol('${cat}')">${t('copy column')}</span></div>
+    <span class="r2-copycol" onclick="report2CopyCol('${cat}', event)">${t('copy column')}</span></div>
     ${desc ? `<p class="r2-ddesc">${esc(desc)}</p>` : ''}`;
 
   if (isEmpty) {
@@ -4520,12 +3088,20 @@ function report2Copy(ev) {
     }
   }).catch(() => {});
 }
-function report2CopyCol(cat) {
+function report2CopyCol(cat, ev) {
   const all = _r2.byCat.get(cat) || [];
   const q = report2State.filter.toLowerCase();
   const list = q ? all.filter(f => f.value.toLowerCase().includes(q)) : all;
+  const btn = ev && ev.currentTarget;
   navigator.clipboard.writeText(list.map(f => f.value).join('\n'))
-    .then(() => showToast(t('Copied') + ' ' + list.length + ' ' + t('values'))).catch(() => {});
+    .then(() => {
+      showToast(t('Copied') + ' ' + list.length + ' ' + t('values'));
+      if (btn) {
+        const prev = btn.textContent;
+        btn.classList.add('copied'); btn.textContent = '✓ ' + list.length;
+        setTimeout(() => { btn.classList.remove('copied'); btn.textContent = prev; }, 1100);
+      }
+    }).catch(() => {});
 }
 
 window.report2SetView = report2SetView;
@@ -4537,6 +3113,7 @@ window.report2TogglePivot = report2TogglePivot;
 window.report2Copy = report2Copy;
 window.report2CopyCol = report2CopyCol;
 window.report2PivotFilter = report2PivotFilter;
+window.report2RailKey = report2RailKey;
 window.renderReport2 = renderReport2;
 
 
@@ -4632,13 +3209,6 @@ function _debounce(fn, ms = 150) {
 // filter pass through; everything else is filtered out.
 let timelineMonthFilter = null;
 let timelineRangeFilter = null;
-// Drag state. populated on mousedown on a cell, mutated on mousemove,
-// committed on mouseup. While dragging we draw an in-range overlay.
-let _ribbonDrag = null;
-// Collapsed by default so the ribbon stays under ~52 px tall and never
-// pushes the findings table off-screen. User opens the full per-row
-// breakdown via the chevron toggle in the header.
-let ribbonExpanded = false;
 
 function applyFilters() {
   // The old tabbed findings table was replaced by the two-view report (report2).
@@ -4673,13 +3243,6 @@ function applyFilters() {
   });
 
   renderFindingsTable();
-
-  // Re-render severity stats (reflects active filter state)
-  renderSeverityStats(allFindings);
-
-  // Inline ribbon reflects the active selection (cells highlighted, meta
-  // line shows current scope). Cheap to re-render. small DOM.
-  renderTimelineRibbon();
 
   // Re-render side-drawer timeline if open and in synced mode
   if (timelineOpen && timelineSynced) {
@@ -4826,431 +3389,6 @@ function onSort(col) {
     sortDir = (col === 'value' || col === 'category') ? 'asc' : 'desc';
   }
   applyFilters();
-}
-
-/* ===== RESULTS ACTIONS ===== */
-
-function copyAll() {
-  const values = filteredFindings.map(f => f.value).join('\n');
-  navigator.clipboard.writeText(values).then(() => showToast('Copied ' + filteredFindings.length + ' values'));
-}
-
-/* ===== DASHBOARD. OSINT-VALUE STATS =====
-   Counts findings per OSINT-value tier (LEAK / PIVOT / CONTEXT / BACKGROUND).
-   Clicking a tile toggles the filter-severity dropdown value. Data comes via
-   osintValue() so legacy scans keep rendering on the new tiles. */
-
-function renderSeverityStats(findings) {
-  const container = document.getElementById('res-sevstats');
-  if (!container) return;
-  const counts = { LEAK: 0, PIVOT: 0, CONTEXT: 0, BACKGROUND: 0 };
-  for (const f of findings || []) {
-    const v = osintValue(f);
-    if (counts.hasOwnProperty(v)) counts[v]++;
-  }
-  const currentSev = document.getElementById('filter-severity').value;
-  const levels = [
-    { key: 'LEAK', label: 'Leak', hint: 'Sensitive exposure' },
-    { key: 'PIVOT', label: 'Pivot', hint: 'Next breadcrumb' },
-    { key: 'CONTEXT', label: 'Context', hint: 'Target profile' },
-    { key: 'BACKGROUND', label: 'Background', hint: 'Noise-tier' },
-  ];
-  container.innerHTML = levels.map(l => {
-    const active = currentSev === l.key ? ' active' : '';
-    // A 0-count tier shouldn't carry the alarm color. Otherwise scanning a
-    // clean domain (0 LEAK, 0 PIVOT) still draws the eye to those cards
-    // as if something were urgent there.
-    const empty = counts[l.key] === 0 ? ' is-empty' : '';
-    return `
-      <button class="sev-stat sev-${l.key.toLowerCase()}${active}${empty}"
-              onclick="toggleSeverityFilter('${l.key}')"
-              type="button"
-              title="${l.hint}"
-              aria-label="${l.label}: ${counts[l.key]} findings. ${l.hint}.">
-        <div class="sev-stat-count">${counts[l.key]}</div>
-        <div class="sev-stat-label">${l.label}</div>
-      </button>
-    `;
-  }).join('');
-}
-
-function toggleSeverityFilter(sev) {
-  const input = document.getElementById('filter-severity');
-  input.value = (input.value === sev) ? '' : sev;
-  applyFilters();
-  renderSeverityStats(allFindings);
-}
-
-/* ===== FAVICON GALLERY ===== */
-
-/* ===== TECH STACK ===== */
-
-// Per-section expand state. Lives for the page lifetime; cleared on a fresh
-// scan via the cross-scan reset path.
-const _techstackExpanded = new Set();
-let _techstackLastFindings = null;
-
-function toggleTechstackSection(key) {
-  if (_techstackExpanded.has(key)) _techstackExpanded.delete(key);
-  else _techstackExpanded.add(key);
-  if (_techstackLastFindings) renderTechStack(_techstackLastFindings);
-}
-
-function renderTechStack(findings) {
-  const container = document.getElementById('res-techstack');
-  if (!container) return;
-
-  _techstackLastFindings = findings;
-  const groups = computeTechStack(findings || []);
-  const total = Object.values(groups).reduce((s, arr) => s + arr.length, 0);
-
-  if (total === 0) {
-    container.innerHTML = '';
-    return;
-  }
-
-  const order = [
-    { key: 'hosting', label: 'Hosting & CDN', cls: 'accent' },
-    { key: 'cms', label: 'CMS & Generator', cls: 'green' },
-    { key: 'framework', label: 'Framework & Runtime', cls: 'yellow' },
-    { key: 'analytics', label: 'Analytics & Ads', cls: 'pivot' },
-    { key: 'security', label: 'Security Headers', cls: 'purple' },
-    { key: 'verification', label: 'Account Verification', cls: 'purple' },
-  ];
-
-  const TECHSTACK_CAP = 12;
-  const sections = order
-    .filter(o => groups[o.key] && groups[o.key].length > 0)
-    .map(o => {
-      const items = groups[o.key];
-      const expanded = _techstackExpanded.has(o.key);
-      const visible = expanded ? items : items.slice(0, TECHSTACK_CAP);
-      const overflow = items.length - visible.length;
-      const tags = visible.map(t => {
-        const clsPart = o.cls ? ` ${o.cls}` : '';
-        const versions = Array.isArray(t.versions) && t.versions.length ? t.versions : null;
-        // When a tag groups multiple versions, the title shows them all and
-        // the visible label gets a small "Nv" suffix so the user knows the
-        // single tag is hiding several version strings underneath.
-        const titleStr = versions
-          ? `${t.label} (${versions.length} version${versions.length === 1 ? '' : 's'})\n${versions.join(', ')}`
-          : (t.detail || t.label);
-        const versionBadge = versions && versions.length > 1
-          ? ` <span class="techstack-tag-vcount">${versions.length}v</span>`
-          : '';
-        return `<span class="techstack-tag${clsPart}" title="${esc(titleStr)}">${esc(t.label)}${versionBadge}</span>`;
-      }).join('');
-      const moreBtn = overflow > 0
-        ? `<button class="techstack-more" onclick="toggleTechstackSection('${esc(o.key)}')" type="button">+ ${overflow} more</button>`
-        : (expanded && items.length > TECHSTACK_CAP
-            ? `<button class="techstack-more" onclick="toggleTechstackSection('${esc(o.key)}')" type="button">show less</button>`
-            : '');
-      return `
-        <div class="techstack-group">
-          <div class="techstack-group-label">${esc(o.label)}<span class="techstack-group-count">${items.length}</span></div>
-          <div class="techstack-tags">${tags}${moreBtn}</div>
-        </div>
-      `;
-    }).join('');
-
-  container.innerHTML = `
-    <div class="techstack">
-      <div class="techstack-header">
-        <div class="techstack-title">Tech Stack Fingerprint</div>
-        <div class="techstack-title" style="color:var(--text-dim);font-weight:400">${total} signals</div>
-      </div>
-      <div class="techstack-groups">${sections}</div>
-    </div>
-  `;
-}
-
-function computeTechStack(findings) {
-  const groups = {
-    hosting: [],
-    cms: [],
-    framework: [],
-    analytics: [],
-    security: [],
-    verification: [],
-  };
-  const seen = new Set();
-  // For groups where the same product gets archived under dozens of distinct
-  // version strings (CMS plugins on a long-history WordPress site, PHP/X.Y.Z
-  // headers across years), bucket entries by their base name and keep the
-  // version list aside. The UI renders one tag per base name with a version
-  // count badge instead of 166 visually-identical lines.
-  const baseIndex = {};
-
-  const push = (group, label, detail) => {
-    const key = `${group}:${(label || '').toLowerCase()}`;
-    if (seen.has(key)) return;
-    seen.add(key);
-    groups[group].push({ label, detail: detail || label });
-  };
-
-  const pushVersioned = (group, raw, detail) => {
-    const text = String(raw || '').trim();
-    if (!text) return;
-    // Split on the first space-or-slash-followed-by-digit. Everything after
-    // (including parenthesised variants like "(Unix) (Red-Hat/Linux)" or
-    // composite headers like "Apache/2.2.9 (Debian) mod_ssl/2.2.9") becomes
-    // the version string; the base name groups cleanly. A bare "Webflow"
-    // with no digits falls back to push() and stays a single tag.
-    const m = text.match(/^(.+?)[\s/](\d.*)$/);
-    if (!m) { push(group, text.slice(0, 40), detail || text); return; }
-    const baseName = m[1].trim().slice(0, 40);
-    const version = m[2].trim();
-    const key = `${group}:${baseName.toLowerCase()}`;
-    if (!baseIndex[key]) {
-      const entry = { label: baseName, detail: detail || text, versions: [] };
-      baseIndex[key] = entry;
-      groups[group].push(entry);
-      seen.add(key);
-    }
-    const entry = baseIndex[key];
-    if (!entry.versions.includes(version)) entry.versions.push(version);
-  };
-
-  for (const f of findings) {
-    if (!f) continue;
-    const value = String(f.value || '');
-    const lower = value.toLowerCase();
-    const meta = f.metadata || {};
-
-    // Hosting
-    if (f.category === 'hosting') {
-      const provider = meta.provider || value;
-      if (provider) push('hosting', provider, `${provider} (${meta.signal || 'detected'})`);
-    }
-
-    // CMS / Generator from meta_info. detect via metadata.property,
-    // not the value string (which is the raw content, unprefixed).
-    // Versions are grouped: 'WordPress 6.9.4' / 'WordPress 6.8.1' / ... all
-    // collapse into a single 'WordPress' tag with a versions list.
-    if (f.category === 'meta_info' && meta.property === 'generator') {
-      const generator = (meta.content || value || '').trim();
-      if (generator) pushVersioned('cms', generator, generator);
-    }
-
-    // Tech signals from http_headers. metadata holds {type, header}
-    // but NOT value (excluded from JSON dump). The finding's own value
-    // column contains "<type>: <raw value>", so we strip the type prefix.
-    if (f.category === 'http_headers') {
-      const htype = meta.type || '';
-      const colonIdx = (value || '').indexOf(':');
-      const hval = (colonIdx > 0 ? value.slice(colonIdx + 1) : value || '').trim();
-      if (!hval) continue;
-
-      if (htype === 'server') {
-        // Server header values like "Apache/2.2.22 (Debian)" or "nginx/1.18"
-        // version-churn the same way generators do; group by product.
-        pushVersioned('hosting', hval, `Server: ${hval}`);
-      } else if (htype === 'x_powered_by') {
-        pushVersioned('framework', hval, `X-Powered-By: ${hval}`);
-      } else if (htype === 'aspnet_version' || htype === 'aspnetmvc_version') {
-        pushVersioned('framework', `ASP.NET ${hval}`, `${htype}: ${hval}`);
-      } else if (htype === 'cf_ray') {
-        push('hosting', 'Cloudflare', `cf-ray: ${hval}`);
-      } else if (htype === 'cf_cache') {
-        push('hosting', 'Cloudflare Cache', `cf-cache-status: ${hval}`);
-      } else if (htype === 'vercel_id') {
-        push('hosting', 'Vercel', `x-vercel-id: ${hval}`);
-      } else if (htype === 'netlify_id') {
-        push('hosting', 'Netlify', `x-nf-request-id: ${hval}`);
-      } else if (htype === 'github_req') {
-        push('hosting', 'GitHub Pages', `x-github-request-id: ${hval}`);
-      } else if (htype === 'akamai') {
-        push('hosting', 'Akamai', `x-akamai-transformed: ${hval}`);
-      } else if (htype === 'drupal_cache' || htype === 'drupal_dynamic') {
-        push('cms', 'Drupal', `${htype}: ${hval}`);
-      } else if (htype === 'hsts') {
-        push('security', 'HSTS', `Strict-Transport-Security: ${hval}`);
-      } else if (htype === 'csp') {
-        push('security', 'CSP', `Content-Security-Policy: ${hval.slice(0, 60)}…`);
-      } else if (htype === 'x_frame') {
-        push('security', 'X-Frame-Options', `X-Frame-Options: ${hval}`);
-      } else if (htype === 'x_content_type') {
-        push('security', 'X-Content-Type-Options', `X-Content-Type-Options: ${hval}`);
-      } else if (htype === 'referrer') {
-        push('security', 'Referrer-Policy', `Referrer-Policy: ${hval}`);
-      } else if (htype === 'permissions') {
-        push('security', 'Permissions-Policy', `Permissions-Policy: ${hval.slice(0, 60)}…`);
-      }
-    }
-
-    // Analytics / Ads
-    if (f.category === 'analytics_trackers') {
-      const type = meta.type || '';
-      if (type) push('analytics', type.replace(/_/g, ' '), `${type}: ${value}`);
-    }
-    if (f.category === 'adsense_ids') {
-      push('analytics', 'Google Adsense', `${meta.type || 'adsense'}: ${value}`);
-    }
-
-    // Verification (domain ownership)
-    if (f.category === 'verification_tags') {
-      const service = meta.service || '';
-      if (service) push('verification', service, `${service}: ${value}`);
-    }
-  }
-
-  return groups;
-}
-
-// Inline marker shown when archive.org can't serve the favicon asset.
-// Returns markup so it can drop into the template literal below AND be
-// reused from the inline onerror/onload handler via outerHTML. The
-// .favicon-item already displays the URL and date range as a tooltip,
-// so this fallback owns explaining *why* there's no thumbnail: the
-// asset was listed in the archived HTML but Wayback never crawled
-// the file itself (very common: HTML pages get archived, but the
-// linked .ico / .png assets are skipped on a best-effort basis).
-function _faviconFallbackHTML(md5) {
-  // If the icon image can't be rendered but we hashed its bytes, show the MD5
-  // instead of a generic "not archived" box: the hash is the actual pivot the
-  // analyst wants (Shodan/Censys), so a non-renderable favicon becomes signal,
-  // not noise.
-  if (md5) {
-    return (
-      '<span class="favicon-fallback favicon-fallback--hash" '
-      + 'title="Favicon bytes hashed (image not re-servable by archive.org). MD5 ' + esc(md5) + '">'
-      + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" '
-      + 'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
-      + '<path d="M4 7h16M4 12h16M4 17h10"/></svg>'
-      + '<em class="favicon-fallback-hash">' + esc(md5.slice(0, 10)) + '</em>'
-      + '</span>'
-    );
-  }
-  return (
-    '<span class="favicon-fallback" '
-    + 'title="Listed in archived HTML but the favicon file itself was never crawled by archive.org">'
-    + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
-    + 'stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
-    + '<rect x="3" y="3" width="18" height="18" rx="2"/>'
-    + '<line x1="3" y1="3" x2="21" y2="21"/>'
-    + '</svg>'
-    + '<em>not archived</em>'
-    + '</span>'
-  );
-}
-
-// Walk the data-srcs source chain on each load failure. The favicon thumbnail
-// tries the Wayback capture first, then a live fallback; only once every
-// candidate has failed do we swap in the "not archived" marker. Called from
-// the inline onerror handler, so it has to live at module scope.
-function _faviconNextSrc(img) {
-  let list = [];
-  try { list = JSON.parse(img.getAttribute('data-srcs') || '[]'); } catch (e) {}
-  const i = (parseInt(img.getAttribute('data-i'), 10) || 0) + 1;
-  if (i < list.length) {
-    img.setAttribute('data-i', String(i));
-    img.src = list[i];
-    return;
-  }
-  img.onerror = null;
-  img.onload = null;
-  img.outerHTML = _faviconFallbackHTML(img.getAttribute('data-md5') || '');
-}
-
-// archive.org (and occasionally the fallback) answer 200 with a 1 px sentinel
-// for an asset they do not really hold; treat anything below 8x8 as a miss and
-// advance down the chain rather than rendering a blank square.
-function _faviconChk(img) {
-  if (img.naturalWidth < 8 || img.naturalHeight < 8) _faviconNextSrc(img);
-}
-
-function renderFaviconGallery(findings, domainName) {
-  const container = document.getElementById('res-favicons');
-  if (!container) return;
-  const favicons = (findings || []).filter(f => f.category === 'favicons');
-  if (favicons.length === 0) { container.innerHTML = ''; return; }
-
-  // Sort by first_seen descending (most recent first), then dedupe by URL.
-  // The same favicon URL is often archived dozens of times across years; the
-  // gallery only needs one preview tile per distinct asset.
-  const seen = new Set();
-  const sorted = [...favicons]
-    .sort((a, b) => (b.first_seen || '').localeCompare(a.first_seen || ''))
-    .filter(f => {
-      const k = (f.value || '').trim();
-      if (!k || seen.has(k)) return false;
-      seen.add(k); return true;
-    });
-
-  const items = sorted.slice(0, 12).map(f => {
-    const rawUrl = f.value || '';
-    const meta = f.metadata || {};
-    const sourceUrl = meta.source_url || '';
-    // Absolute form of the favicon URL; relative favicons (rare) are rebuilt
-    // from the scanned domain.
-    let abs = '';
-    if (/^https?:\/\//i.test(rawUrl)) abs = rawUrl;
-    else if (rawUrl.startsWith('/') && domainName) abs = `https://${domainName}${rawUrl}`;
-    // Archive.org serves any archived resource at
-    //   https://web.archive.org/web/{ts}im_/{ABSOLUTE_URL}
-    // and redirects to the capture closest to {ts}, so a single well-formed
-    // URL finds the asset whenever it was crawled at all. Build a 14-digit ts
-    // from source_url, falling back to first_seen - which can be YYYY-MM or
-    // YYYY-MM-DD, hence stripping every non-digit (the old single .replace('-')
-    // mangled day-precision dates and silently produced "not archived").
-    const tsMatch = sourceUrl.match(/\/web\/(\d+)\//);
-    const fsDigits = (f.first_seen || '').replace(/\D/g, '');
-    const ts = (tsMatch && tsMatch[1])
-      || (fsDigits.length >= 6 ? (fsDigits + '01000000').slice(0, 14) : '');
-    const host = domainName || (abs.match(/^https?:\/\/([^/]+)/) || [])[1] || '';
-    // Only the archived (Wayback) capture is used. A Google favicon fallback
-    // was removed on purpose: querying google.com/s2/favicons?domain=<target>
-    // would leak the investigated domain to Google, which contradicts the
-    // tool's passive, archive-only promise. If the icon isn't re-servable, the
-    // tile shows its hash instead (real OSINT signal), not a third-party fetch.
-    const cands = [];
-    if (abs && ts) cands.push(`https://web.archive.org/web/${ts}im_/${abs}`);
-    // Date shown directly under the tile (no click needed). Range when the
-    // icon spans more than one month, otherwise the single date.
-    const fsL = (f.first_seen || '').replace(/^(\d{4})-(\d{2})$/, '$1/$2');
-    const lsL = (f.last_seen || '').replace(/^(\d{4})-(\d{2})$/, '$1/$2');
-    const label = (lsL && lsL !== fsL) ? `${fsL} - ${lsL}` : fsL;
-    const fmeta = f.metadata || {};
-    const hashLine = fmeta.md5 ? `\nMD5 ${fmeta.md5}` : '';
-    const shaLine = fmeta.sha256 ? `\nSHA256 ${fmeta.sha256}` : '';
-    const shodanLine = (fmeta.shodan !== undefined && fmeta.shodan !== null && fmeta.shodan !== '') ? `\nShodan ${fmeta.shodan}` : '';
-    const title = `${rawUrl}\n${f.first_seen || ''} -> ${f.last_seen || ''}${hashLine}${shaLine}${shodanLine}`;
-    // Click opens the live asset the analyst expects to inspect.
-    const clickUrl = abs || rawUrl;
-    return `
-      <div class="favicon-item" title="${esc(title)}" role="button" tabindex="0"
-           aria-label="${esc((f.value || rawUrl) + ' favicon')}"
-           onclick="window.open('${esc(clickUrl)}','_blank','noopener')"
-           onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.open('${esc(clickUrl)}','_blank','noopener')}">
-        ${cands.length
-          ? `<img src="${esc(cands[0])}" data-srcs='${esc(JSON.stringify(cands))}' data-i="0" data-md5="${esc(fmeta.md5 || '')}" alt="favicon" loading="lazy" referrerpolicy="no-referrer" onerror="_faviconNextSrc(this)" onload="_faviconChk(this)">`
-          : _faviconFallbackHTML()}
-        <span class="favicon-item-label">${esc(label)}</span>
-        ${(fmeta.md5 || fmeta.sha256) ? `<span class="favicon-item-hash" onclick="event.stopPropagation()">
-          ${fmeta.md5 ? `<span class="fh" title="MD5 ${esc(fmeta.md5)}">md5 ${esc(fmeta.md5.slice(0, 12))}…</span>` : ''}
-          ${fmeta.sha256 ? `<span class="fh" title="SHA-256 ${esc(fmeta.sha256)}">sha256 ${esc(fmeta.sha256.slice(0, 12))}…</span>` : ''}
-        </span>` : ''}
-      </div>
-    `;
-  }).join('');
-
-  const distinctCount = sorted.length;
-  const totalCount = favicons.length;
-  const dW = t('distinct'), aW = t('archived'), ofW = t('of');
-  const meta = distinctCount > 12
-    ? `12 ${ofW} ${distinctCount} ${dW} (${totalCount} ${aW})`
-    : (distinctCount < totalCount
-        ? `${distinctCount} ${dW} (${totalCount} ${aW})`
-        : `${distinctCount} ${aW}`);
-  container.innerHTML = `
-    <div class="favicon-gallery">
-      <div class="favicon-gallery-header">
-        <div class="favicon-gallery-title">Favicons</div>
-        <div class="favicon-gallery-meta">${esc(meta)}</div>
-      </div>
-      <div class="favicon-grid">${items}</div>
-    </div>
-  `;
 }
 
 /* ===== EXPORT DRAWER ===== */
@@ -6562,8 +4700,6 @@ async function deleteMyScan(urlId, ev) {
   }
 }
 
-// Debounced wrappers (wired to search inputs).
-const debouncedApplyFilters = _debounce(() => applyFilters(), 150);
 
 // Full-text search across the scanned page CONTENT (not just the pivots).
 // Snippets come from the server wrapped in <mark>; the underlying page text is

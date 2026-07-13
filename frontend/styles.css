@@ -886,55 +886,6 @@
       text-transform: uppercase;
     }
 
-    /* Highlights. OSINT-value taxonomy (LEAK / PIVOT / CONTEXT / BACKGROUND) */
-    .highlights { display: flex; flex-direction: column; gap: 10px; margin-bottom: 24px; }
-    .signals-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: stretch; }
-    .highlight {
-      flex: 1; min-width: 220px; padding: 12px 14px 12px 15px;
-      border-radius: var(--radius-lg);
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-left: 3px solid var(--border);
-      cursor: pointer;
-      transition: border-color .15s var(--ease-out), box-shadow .15s var(--ease-out), transform .12s var(--ease-out);
-    }
-    .highlight:hover { box-shadow: var(--shadow-sm, var(--shadow-xs)); transform: translateY(-1px); }
-    .highlight:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-    /* Leaks are the headline finding: give them a tinted ground, a heavier
-       rule, and more room than the pivots row below. */
-    .highlight.leak {
-      border-left: 4px solid var(--red);
-      background: var(--red-dim, rgba(232,112,96,.10));
-      min-width: 300px; flex-basis: 320px;
-    }
-    .highlight.pivot { border-left-color: var(--orange); }
-    .highlight.context { border-left-color: var(--pivot); }
-    .highlight.background { border-left-color: var(--text-faint); }
-    .highlight-severity {
-      font-size: 10px; font-weight: 700; text-transform: uppercase;
-      letter-spacing: .09em; margin-bottom: 6px;
-    }
-    .highlight.leak .highlight-severity { color: var(--red); }
-    .highlight.pivot .highlight-severity { color: var(--orange); }
-    .highlight.context .highlight-severity { color: var(--pivot); }
-    .highlight.background .highlight-severity { color: var(--text-dim); }
-    .highlight-title {
-      font-size: 13px; font-weight: 600; color: var(--text-bright);
-      margin-bottom: 3px; text-transform: capitalize;
-    }
-    .highlight.leak .highlight-title { font-size: 15px; }
-    .highlight-detail {
-      font-size: 12px; color: var(--text-dim); font-family: var(--mono);
-      word-break: break-all; line-height: 1.45;
-    }
-    .highlight.leak .highlight-detail { color: var(--text); }
-    .signals-more {
-      align-self: center; background: none; border: 1px solid var(--border);
-      color: var(--text-dim); font: inherit; font-size: 12px;
-      padding: 7px 13px; border-radius: 7px; cursor: pointer; white-space: nowrap;
-      transition: color .12s var(--ease-out), border-color .12s var(--ease-out);
-    }
-    .signals-more:hover { color: var(--text); border-color: var(--border-hover); }
 
     /* Category grid. hairline tiles, tier hinted by a 3px left rule only
        (not a full top stripe). Lifts on hover, flips to accent on active. */
@@ -1441,23 +1392,6 @@
     .ps-hit-snippet { margin-top: 5px; font-size: 12.5px; line-height: 1.5; color: var(--text-dim); }
     .ps-hit-snippet mark { background: var(--accent-glow); color: var(--text-bright); padding: 0 2px; border-radius: 2px; }
 
-    .res-tabs { margin: 10px 0 16px; }
-    .res-tabs-head {
-      display: flex; gap: 4px; border-bottom: 1px solid var(--border);
-      margin-bottom: 14px;
-    }
-    .res-tab {
-      background: none; border: none; border-bottom: 2px solid transparent;
-      color: var(--text-dim); font: inherit; font-size: 13px; font-weight: 600;
-      padding: 9px 16px; cursor: pointer; margin-bottom: -1px;
-      transition: color .12s var(--ease-out), border-color .12s var(--ease-out);
-    }
-    .res-tab:hover { color: var(--text); }
-    .res-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
-    .res-tab-panel {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius-lg); padding: 16px 18px; min-height: 140px;
-    }
     /* Activity tab: legible timeline (taller rows, wider labels, always open). */
     #res-tab-activity .tl-ribbon-container { background: none; border: none; padding: 0; }
     #res-tab-activity .tl-ribbon-cells { height: 22px; }
@@ -1503,35 +1437,6 @@
     .pivots .node.hot .lbl { fill: var(--text-bright); }
     .pivots .node.hub, .pivots .node.leaf { cursor: pointer; }
 
-    /* ===== Subdomains tab ===== */
-    .subs-head {
-      display: flex; justify-content: space-between; align-items: baseline;
-      font-size: 12px; color: var(--text-dim); margin-bottom: 12px;
-    }
-    .subs-span { color: var(--text-faint); font-size: 11px; }
-    .subs-list { display: flex; flex-direction: column; gap: 4px; }
-    .subs-row {
-      display: grid; grid-template-columns: minmax(150px, 1fr) 52px 132px 1.5fr;
-      align-items: center; gap: 12px; padding: 7px 9px; border-radius: 7px;
-      cursor: pointer; border: 1px solid transparent;
-      transition: background .12s var(--ease-out), border-color .12s var(--ease-out);
-    }
-    .subs-row:hover { background: var(--surface2); border-color: var(--border); }
-    .subs-host {
-      font-family: var(--mono); font-size: 13px; color: var(--text-bright);
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    }
-    .subs-occ {
-      font-family: var(--mono); font-size: 12px; color: var(--accent);
-      text-align: right; font-variant-numeric: tabular-nums;
-    }
-    .subs-period { font-family: var(--mono); font-size: 11px; color: var(--text-faint); }
-    .subs-bar { position: relative; height: 8px; background: var(--surface3); border-radius: 4px; }
-    .subs-bar-fill { position: absolute; top: 0; bottom: 0; background: var(--accent); border-radius: 4px; opacity: .8; }
-    .subs-empty, .subs-more {
-      padding: 22px; text-align: center; color: var(--text-faint); font-size: 13px;
-    }
-    .subs-more { padding: 8px; }
     /* The aggregate "all categories" row at the top of the ribbon is
        rendered as an SVG bar chart (heights ∝ count) rather than a
        heatmap row. vertical extent communicates volume more directly
@@ -1847,13 +1752,6 @@
       0%,100% { opacity: .35 } 50% { opacity: 1 }
     }
 
-    /* Filters bar */
-    .filters-bar {
-      display: flex; gap: 8px; align-items: center;
-      margin-bottom: 0; padding: 8px 0;
-      flex-wrap: wrap;
-      border-bottom: 1px solid var(--border);
-    }
     .filter-select, .filter-input {
       height: 30px; padding: 0 10px;
       background: var(--surface); border: 1px solid var(--border);
@@ -1879,48 +1777,6 @@
     }
     .btn-sm:hover { border-color: var(--border-hover); color: var(--text); }
 
-    /* Data table. hairline investigation register. 32px rows, tight
-       horizontal padding, tabular-nums, mono for identifiers, faint zebra
-       + subtle hover overlay. No heavy borders; typography carries it. */
-    .data-table {
-      width: 100%; border-collapse: collapse; font-size: 12px;
-      font-variant-numeric: tabular-nums;
-    }
-    .data-table th {
-      text-align: left; padding: 8px 12px;
-      background: var(--surface2);
-      font-size: 10px; font-weight: 600; color: var(--text-dim);
-      text-transform: uppercase; letter-spacing: .08em;
-      border-bottom: 1px solid var(--border);
-      cursor: pointer; user-select: none; white-space: nowrap;
-      transition: color .15s var(--ease-out);
-    }
-    .data-table th:hover { color: var(--text-bright); }
-    .data-table th.sorted { color: var(--accent); }
-    .data-table th .sort-arrow {
-      display: inline-block; margin-left: 4px; font-size: 8px;
-      opacity: 0; transition: opacity .15s;
-    }
-    .data-table th.sorted .sort-arrow { opacity: 1; }
-    .data-table td {
-      padding: 6px 12px; height: 32px;
-      border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
-      color: var(--text); font-family: var(--mono); font-size: 12px;
-      vertical-align: middle;
-    }
-    .data-table tbody tr { transition: background .1s var(--ease-out); }
-    /* Zebra: subtle but actually visible on the warm-dark surface. The
-       previous .012 alpha read as no zebra at all on this palette. */
-    .data-table tbody tr:nth-child(even) td {
-      background: rgba(255,255,255,.018);
-    }
-    .data-table tr:hover td { background: rgba(199,84,31,.08) !important; }
-    .data-table .col-sev { width: 12px; padding-right: 0; }
-    .data-table .col-occ { width: 50px; text-align: right; }
-    .data-table .col-date { width: 80px; }
-    .data-table td.val {
-      color: var(--text-bright); word-break: break-all;
-    }
     /* Platform/prefix chip shown before ad + tracker id values. */
     .ad-chip {
       display: inline-block; vertical-align: baseline;
@@ -2337,62 +2193,6 @@
       .tl-track { grid-template-columns: 100px 1fr; }
     }
 
-    /* ===== DASHBOARD. SEVERITY STATS ===== */
-    .sev-stats {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 10px;
-      margin-bottom: 32px;
-    }
-    .sev-stat {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-left: 3px solid var(--border);
-      border-radius: var(--radius-lg);
-      padding: 16px 18px;
-      cursor: pointer;
-      transition: border-color .15s var(--ease-out), background .15s var(--ease-out), transform .15s var(--ease-out), box-shadow .15s var(--ease-out);
-      text-align: left;
-      font-family: var(--font);
-    }
-    .sev-stat:hover { border-color: var(--border-hover); transform: translateY(-1px); box-shadow: var(--shadow-xs); }
-    .sev-stat.active { background: var(--surface2); }
-    .sev-stat-count {
-      font-size: 22px; font-weight: 600;
-      font-family: var(--mono);
-      font-variant-numeric: tabular-nums;
-      color: var(--text-bright);
-      line-height: 1;
-      letter-spacing: -0.02em;
-    }
-    .sev-stat-label {
-      font-size: 11px; font-weight: 600;
-      text-transform: uppercase; letter-spacing: .08em;
-      color: var(--text-dim);
-      margin-top: 8px;
-    }
-    /* New OSINT taxonomy. LEAK / PIVOT / CONTEXT / BACKGROUND */
-    .sev-stat.sev-leak { border-left-color: var(--red); }
-    .sev-stat.sev-leak .sev-stat-label { color: var(--red); }
-    .sev-stat.sev-leak.active { background: var(--red-dim); }
-    .sev-stat.sev-pivot { border-left-color: var(--orange); }
-    .sev-stat.sev-pivot .sev-stat-label { color: var(--orange); }
-    .sev-stat.sev-pivot.active { background: var(--orange-dim); }
-    .sev-stat.sev-context { border-left-color: var(--pivot); }
-    .sev-stat.sev-context .sev-stat-label { color: var(--pivot); }
-    .sev-stat.sev-context.active { background: var(--pivot-soft); }
-    .sev-stat.sev-background { border-left-color: var(--text-dim); }
-    .sev-stat.sev-background .sev-stat-label { color: var(--text); }
-    .sev-stat.sev-background.active { background: var(--surface3); }
-    /* Empty tier (count = 0) drops the colored stripe so a clean domain
-       doesn't flash the user with red/orange alarms over zeroes. */
-    .sev-stat.is-empty { border-left-color: var(--border); }
-    .sev-stat.is-empty .sev-stat-count { color: var(--text-dim); }
-    .sev-stat.is-empty .sev-stat-label { color: var(--text-dim); }
-
-    @media (max-width: 767px) {
-      .sev-stats { grid-template-columns: repeat(2, 1fr); }
-    }
 
     /* ===== KEYBOARD SHORTCUTS HELP ===== */
     .kb-overlay {
@@ -2445,14 +2245,6 @@
       border-top: 1px solid var(--border);
       font-size: 11px; color: var(--text-dim);
       text-align: center;
-    }
-
-    /* ===== SEARCH HIGHLIGHT ===== */
-    .data-table .val mark {
-      background: var(--accent-glow2);
-      color: var(--accent);
-      padding: 0 1px;
-      border-radius: 2px;
     }
 
     /* ===== TECH STACK CARD ===== */
@@ -2898,7 +2690,6 @@
       border-radius: 6px; vertical-align: middle;
       opacity: .35; transition: opacity .12s, color .12s, background .12s, border-color .12s;
     }
-    .data-table tr:hover .row-copy-btn { opacity: .85; }
     .row-copy-btn:hover, .row-copy-btn:focus-visible {
       opacity: 1; color: var(--accent);
       background: var(--accent-glow); border-color: var(--border);
@@ -2911,25 +2702,7 @@
        horizontally scrollable inside its panel instead of overflowing
        the whole viewport, and bumping interactive sizes to ≥44px on
        coarse pointers (touch). All additive. does not override desktop. */
-    .data-table { /* The table itself stays full-width on desktop. */
-      max-width: 100%;
-    }
     @media (max-width: 767px) {
-      /* Make the table its own scroll container so the rest of the page
-         doesn't pan when a long URL appears in a row. */
-      .data-table {
-        display: block;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-        scrollbar-width: thin;
-      }
-      .data-table thead, .data-table tbody, .data-table tr { display: table; width: 100%; table-layout: fixed; }
-      .data-table td, .data-table th {
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        max-width: 60vw;
-      }
       /* Stack severity stats 2-up below the existing 4-up grid; the prior
          767 rule already does this. kept here as a safety net. */
       .navbar { padding: 0 12px; gap: 8px; height: 48px; }
@@ -2939,14 +2712,8 @@
       .home-hero { padding: 0 16px; }
     }
     @media (max-width: 480px) {
-      .sev-stats { grid-template-columns: repeat(2, 1fr); }
-      .sev-stat { padding: 10px 12px; }
-      .sev-stat-count { font-size: 18px; }
       .nav-input { font-size: 12px; padding: 0 8px; }
       .nav-scan-btn { padding: 0 10px; font-size: 11px; }
-      .data-table td, .data-table th {
-        padding: 6px 8px; font-size: 11px; max-width: 70vw;
-      }
     }
     @media (max-width: 360px) {
       /* Smallest realistic phone (e.g. iPhone SE 1st gen). Hide the
@@ -3039,30 +2806,6 @@
     .myscans-pub.off { color: var(--text-faint); }
     .myscans-date { font-family: var(--mono); font-size: 12px; color: var(--text-faint); text-align: right; }
 
-    /* Tech & infra tab */
-    .ti-empty { padding: 26px; text-align: center; color: var(--text-faint); font-size: 13px; }
-    .ti-section { margin-bottom: 18px; }
-    .ti-section:last-child { margin-bottom: 0; }
-    .ti-title {
-      font-size: 12px; font-weight: 600; text-transform: uppercase;
-      letter-spacing: .07em; color: var(--text-dim); margin-bottom: 10px;
-    }
-    .ti-count { color: var(--text-faint); font-family: var(--mono); margin-left: 4px; }
-    .ti-rows { display: flex; flex-direction: column; gap: 4px; }
-    .ti-row {
-      display: grid; grid-template-columns: minmax(140px, 1fr) 1.4fr 116px;
-      align-items: center; gap: 12px; padding: 8px 10px; border-radius: 7px;
-      border: 1px solid var(--border); background: var(--surface);
-    }
-    .ti-name {
-      font-family: var(--mono); font-size: 13px; color: var(--text-bright);
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    }
-    .ti-sub {
-      font-size: 12px; color: var(--text-dim);
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    }
-    .ti-period { font-family: var(--mono); font-size: 11px; color: var(--text-faint); text-align: right; }
 
     /* ===== Activity timeline v2 (lanes) ===== */
     .atl { position: relative; --atl-gutter: 168px; }
@@ -3646,6 +3389,7 @@
       font-size: 12.5px; color: var(--text-dim); cursor: pointer; border-left: 2px solid transparent;
     }
     .r2-rlink:hover { background: var(--surface2); color: var(--text); }
+    .r2-rlink:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; color: var(--text); }
     .r2-rlink.on { background: var(--accent-soft); color: var(--text); border-left-color: var(--accent); font-weight: 550; }
     .r2-rlink .r2-c { margin-left: auto; font-family: var(--mono); font-size: 11.5px; color: var(--accent); font-weight: 600; }
     .r2-rlink.zero { opacity: .55; }
@@ -3702,8 +3446,19 @@
     .r2-dhead .r2-name { font-size: 17px; font-weight: 640; }
     .r2-dhead .r2-cnt { font-family: var(--mono); font-size: 13px; color: var(--accent); font-weight: 600; }
     .r2-filtered { font-family: var(--mono); font-size: 11px; color: var(--text-faint); }
-    .r2-copycol { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--text-faint); cursor: pointer; border: 1px solid var(--border); border-radius: 6px; padding: 5px 9px; }
+    .r2-copycol { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--text-faint); cursor: pointer; border: 1px solid var(--border); border-radius: 6px; padding: 5px 9px; transition: color .12s, border-color .12s, background .12s; }
     .r2-copycol:hover { color: var(--accent); border-color: var(--accent); }
+    .r2-copycol.copied { color: var(--accent-text); background: var(--green); border-color: var(--green); }
+    /* Fade-in on the freshly-rendered report panel (category open / view switch). */
+    .r2-anim > .r2-catblock, .r2-anim > .r2-composer, .r2-anim > .r2-noresults {
+      animation: r2-fadein .18s var(--ease-out, ease-out);
+    }
+    @keyframes r2-fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+    @media (prefers-reduced-motion: reduce) { .r2-anim > * { animation: none; } }
+    /* Whole-scan empty state */
+    .r2-noresults { padding: 48px 16px; text-align: center; }
+    .r2-noresults-title { font-size: 17px; font-weight: 640; color: var(--text-dim); margin-bottom: 8px; }
+    .r2-noresults-sub { font-size: 13.5px; color: var(--text-faint); max-width: 52ch; margin: 0 auto; line-height: 1.55; }
     .r2-ddesc { color: var(--text-faint); font-size: 12.5px; margin: 0 0 12px; max-width: 78ch; }
     .r2-emptystate { color: var(--text-faint); font-size: 13px; padding: 18px 8px; border: 1px dashed var(--border); border-radius: var(--radius); }
 

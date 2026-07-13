@@ -285,3 +285,33 @@ def test_applyfilters_is_null_safe_without_the_old_table(live_server, page):
         catch (e) { return String(e); }
     }""")
     assert err is None, f"applyFilters threw: {err}"
+
+
+def test_empty_scan_shows_a_no_findings_state(live_server, page):
+    _open_with(page, live_server, [])   # a scan that found nothing
+    assert page.locator("#r2-main .r2-noresults").count() == 1
+    assert "43" in page.locator("#r2-main .r2-noresults").inner_text()
+
+
+def test_rail_keyboard_navigation(live_server, page):
+    _open_report(page, live_server)
+    links = page.locator("#r2-rail .r2-rlink")
+    links.first.focus()
+    page.keyboard.press("ArrowDown")
+    # Focus moved to the 2nd rail link.
+    idx = page.evaluate("() => Array.from(document.querySelectorAll('#r2-rail .r2-rlink')).indexOf(document.activeElement)")
+    assert idx == 1
+    page.keyboard.press("Enter")   # opens the focused category
+    # The opened category's detail is now shown (its name is the 2nd found cat).
+    assert page.locator("#r2-main .r2-dhead .r2-name").count() == 1
+
+
+def test_copy_column_shows_confirmation(live_server, page):
+    page.context.grant_permissions(["clipboard-read", "clipboard-write"])
+    _open_report(page, live_server)
+    page.locator(".r2-rlink", has_text="Emails").first.click()
+    btn = page.locator("#r2-main .r2-copycol").first
+    btn.click()
+    page.wait_for_selector("#r2-main .r2-copycol.copied", timeout=2000)
+    clip = page.evaluate("() => navigator.clipboard.readText()")
+    assert "@oteria.fr" in clip
