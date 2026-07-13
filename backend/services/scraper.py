@@ -197,6 +197,18 @@ async def scrape_snapshots(
             # is bounded to max_concurrent_scrapes while the aggregate across
             # all scans never exceeds archive_global_concurrency.
             async with semaphore, _get_global_sem():
+                # Re-check the hard block AFTER acquiring the slot. All page tasks
+                # are created up front; with low concurrency, hundreds of them can
+                # be queued here having passed the pre-semaphore check BEFORE the
+                # breaker opened. Without this re-check they'd each still fire a
+                # doomed request (errno 111) at the rate-limit cadence for minutes,
+                # so the scan looked stuck and kept hammering a refusing IP.
+                if archive_health.is_hard_block():
+                    result = {
+                        "timestamp": snap["timestamp"], "url": snap["url"],
+                        "html": None, "error": "blocked",
+                    }
+                    break
                 try:
                     # Process-wide rate ceiling: spaces requests so a burst
                     # never exceeds archive.org's tolerance (IP-block guard).

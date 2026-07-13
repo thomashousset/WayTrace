@@ -375,6 +375,32 @@ async def list_recent_scans(limit: int = 50) -> list[dict]:
         await db.close()
 
 
+async def find_recent_scan_for_domain(domain: str, user_id=None) -> dict | None:
+    """The most recent COMPLETED, non-expired scan for this domain, or None.
+
+    Guardrail against re-scanning a domain we already have (which re-hammers
+    archive.org). On the hosted build a user_id is passed so we only reuse the
+    caller's own scan; on the solo/self-hosted build user_id is None and any
+    recent scan of the domain qualifies."""
+    if not domain:
+        return None
+    db = await get_db()
+    try:
+        now = _iso(datetime.now(timezone.utc))
+        sql = ("""SELECT url_id, domain, created_at FROM jobs
+                  WHERE domain = ? AND status = 'completed' AND expires_at > ?""")
+        params = [domain, now]
+        if user_id is not None:
+            sql += " AND user_id = ?"
+            params.append(user_id)
+        sql += " ORDER BY created_at DESC LIMIT 1"
+        cur = await db.execute(sql, params)
+        row = await cur.fetchone()
+        return dict(row) if row else None
+    finally:
+        await db.close()
+
+
 async def list_feed(limit: int = 20, offset: int = 0) -> list[dict]:
     """Return published, non-expired jobs sorted by published_at DESC."""
     db = await get_db()

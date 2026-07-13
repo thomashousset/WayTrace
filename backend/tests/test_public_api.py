@@ -253,3 +253,49 @@ async def test_local_scans_lists_all_published_and_private():
     scans = await list_recent_scans()
     ids = {s["url_id"] for s in scans}
     assert {"pubd", "priv"} <= ids          # both, published or not
+
+
+@pytest.mark.anyio
+async def test_scan_reuses_existing_recent_scan(client):
+    # Guardrail: a completed, non-expired scan for the domain already exists, so
+    # POST /api/scan returns it (reused=True) instead of launching a new one.
+    now = datetime.now(timezone.utc)
+    await save_job(
+        url_id="reuse_me", domain="reuse.com", client_ip="1.1.1.1",
+        created_at=now, expires_at=now + timedelta(days=7),
+        status="completed", meta={"snapshots_analyzed": 3}, results={"emails": []},
+    )
+    r = await client.post("/api/scan", json={"domain": "reuse.com"})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["reused"] is True
+    assert data["url_id"] == "reuse_me"
+    assert data["status"] == "completed"
+
+
+@pytest.mark.anyio
+async def test_scan_force_bypasses_the_guardrail(client):
+    now = datetime.now(timezone.utc)
+    await save_job(
+        url_id="reuse_me2", domain="fresh.com", client_ip="2.2.2.2",
+        created_at=now, expires_at=now + timedelta(days=7),
+        status="completed", meta={}, results={"emails": []},
+    )
+    r = await client.post("/api/scan", json={"domain": "fresh.com", "force": True})
+    assert r.status_code == 200
+    data = r.json()
+    assert data.get("reused") in (False, None)
+    assert data["url_id"] != "reuse_me2"   # a brand-new scan
+
+
+@pytest.mark.anyio
+async def test_scan_does_not_reuse_a_different_domain(client):
+    now = datetime.now(timezone.utc)
+    await save_job(
+        url_id="other_dom", domain="a.com", client_ip="3.3.3.3",
+        created_at=now, expires_at=now + timedelta(days=7),
+        status="completed", meta={}, results={"emails": []},
+    )
+    r = await client.post("/api/scan", json={"domain": "b.com"})
+    assert r.status_code == 200
+    assert r.json().get("reused") in (False, None)

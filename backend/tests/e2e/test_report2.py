@@ -209,3 +209,50 @@ def test_show_all_lists_every_found_category(live_server, page):
 def test_copy_column_button_present_per_category(live_server, page):
     _open_report(page, live_server)
     assert page.locator("#r2-main .r2-copycol").count() >= 1
+
+
+def test_copy_click_shows_a_confirmation_animation(live_server, page):
+    page.context.grant_permissions(["clipboard-read", "clipboard-write"])
+    _open_report(page, live_server)
+    page.locator(".r2-rlink", has_text="Emails").first.click()
+    btn = page.locator("#r2-main .r2-row .r2-copy").first
+    btn.click()
+    # In-place confirmation: the button gets the .copied class and shows a check.
+    page.wait_for_selector("#r2-main .r2-copy.copied", timeout=2000)
+    assert "✓" in btn.inner_text()
+    # And the value actually reached the clipboard.
+    clip = page.evaluate("() => navigator.clipboard.readText()")
+    assert "@oteria.fr" in clip
+
+
+def test_pivots_derive_from_ticked_categories(live_server, page):
+    _open_report(page, live_server)
+    page.locator("#r2-vbtn-activity").click()
+    # Subdomains is checked by default (a top category) -> its values are pivots.
+    assert page.locator("#r2-rail .r2-chk.pv", has_text="www.oteria.fr").count() == 1
+    # Untick Subdomains -> its pivots disappear from the list.
+    page.locator("#r2-rail .r2-chk", has_text="Subdomains").first.click()
+    assert page.locator("#r2-rail .r2-chk.pv", has_text="www.oteria.fr").count() == 0
+
+
+def test_pivot_search_filters_the_list(live_server, page):
+    _open_report(page, live_server)
+    page.locator("#r2-vbtn-activity").click()
+    before = page.locator("#r2-rail .r2-chk.pv").count()
+    assert before >= 2
+    page.fill("#r2-pivfilter", "www")
+    after = page.locator("#r2-rail .r2-chk.pv").count()
+    assert after < before
+    assert page.locator("#r2-rail .r2-chk.pv", has_text="www.oteria.fr").count() == 1
+
+
+def test_no_pivots_hint_when_no_category_ticked(live_server, page):
+    _open_report(page, live_server)
+    page.locator("#r2-vbtn-activity").click()
+    # Untick every category -> the pivot section shows the guidance note.
+    for _ in range(40):
+        on = page.locator("#r2-rail .r2-chk:not(.pv).on")
+        if on.count() == 0:
+            break
+        on.first.click()
+    assert page.locator("#r2-rail .r2-pivnote").count() >= 1

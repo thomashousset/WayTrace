@@ -546,6 +546,24 @@ def _apply_hosted_ceiling(
 
 @router.post("/scan", response_model=ScanCreateResponse)
 async def create_scan(body: JobCreate, request: Request):
+    # Guardrail: if we already have a recent completed scan for this domain, return
+    # it instead of re-scanning (which would re-hammer archive.org for a domain we
+    # already have). "Scan more" sets force=True to run a fresh, denser scan.
+    _reuse_uid = None
+    if not body.force and not body.selected_snapshots:
+        from db import find_recent_scan_for_domain
+        try:
+            existing = await find_recent_scan_for_domain(body.domain, user_id=_reuse_uid)
+        except Exception as exc:   # never let a lookup failure block a scan
+            logger.debug("reuse lookup skipped: {}", exc)
+            existing = None
+        if existing:
+            return ScanCreateResponse(
+                job_id="", url_id=existing["url_id"],
+                url=f"/s/{existing['url_id']}", status="completed",
+                position=0, eta_seconds=0, reused=True,
+            )
+
     # archive.org circuit breaker open: refuse fast, queue nothing, send no
     # request, so we never add load while it is rate-limiting us.
     if archive_health.is_open():

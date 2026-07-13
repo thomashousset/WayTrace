@@ -529,13 +529,13 @@
     /* Wayback Machine source credit — the logo is black+red, so on the dark
        default theme we flip it to white; on the light theme it keeps its colours.
        No background, per design. */
-    .home-wayback { margin: 20px 0 8px; text-align: center; line-height: 1; }
+    .home-wayback { margin: 22px 0 8px; text-align: center; line-height: 1; display: flex; align-items: center; justify-content: center; gap: 11px; }
     .home-wayback span {
-      font-family: var(--mono); font-size: 9.5px; letter-spacing: .12em;
-      text-transform: uppercase; color: var(--text-faint); margin-right: 9px; vertical-align: middle;
+      font-family: var(--font); font-size: 13px; letter-spacing: 0;
+      text-transform: none; color: var(--text-dim); vertical-align: middle;
     }
-    .wb-logo { height: 17px; vertical-align: middle; opacity: .72; filter: brightness(0) invert(1); }
-    [data-theme="light"] .wb-logo { filter: none; opacity: .8; }
+    .wb-logo { height: 26px; vertical-align: middle; opacity: .85; filter: brightness(0) invert(1); }
+    [data-theme="light"] .wb-logo { filter: none; opacity: .9; }
     .home-wayback a:hover .wb-logo { opacity: 1; }
 
     /* v1.6 — present categories neutrally: provenance (first/last-seen,
@@ -3334,7 +3334,7 @@
     .pub-phase.now .d { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
     /* live findings during extraction */
     .pub-live { margin-top: 20px; max-width: 440px; }
-    .pub-live-head { font-family: var(--mono); font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--text-faint); margin-bottom: 9px; }
+    .pub-live-head { font-family: var(--font); font-size: 12.5px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--text-dim); margin-bottom: 9px; }
     .pub-live-chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
     .pub-live-chip {
       font-family: var(--mono); font-size: 11.5px; color: var(--text-dim);
@@ -3344,9 +3344,9 @@
     .pub-live-chip b { color: var(--accent); }
     @keyframes pub-live-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
     @media (prefers-reduced-motion: reduce) { .pub-live-chip { animation: none; } }
-    .pub-run-wb { margin-top: 20px; display: flex; align-items: center; justify-content: center; gap: 9px; }
-    .pub-run-wb span { font-family: var(--mono); font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-faint); }
-    .pub-run-wb .wb-logo { height: 16px; opacity: .8; }
+    .pub-run-wb { margin-top: 22px; display: flex; align-items: center; justify-content: center; gap: 11px; }
+    .pub-run-wb span { font-family: var(--font); font-size: 13px; letter-spacing: 0; text-transform: none; color: var(--text-dim); }
+    .pub-run-wb .wb-logo { height: 24px; opacity: .9; }
 
     /* Homepage feed */
     .home-feed { max-width: 1100px; margin: 32px auto 80px; padding: 0 24px; }
@@ -3637,8 +3637,8 @@
       position: sticky; top: 8px; align-self: start; max-height: calc(100vh - 40px); overflow: auto;
     }
     .r2-rt, .r2-rt2 {
-      font-family: var(--mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
-      color: var(--text-faint); padding: 0 8px 8px; display: flex; justify-content: space-between;
+      font-family: var(--font); font-size: 11.5px; font-weight: 600; letter-spacing: 0; text-transform: none;
+      color: var(--text-dim); padding: 0 8px 8px; display: flex; justify-content: space-between;
     }
     .r2-rt2 { padding: 14px 8px 6px; margin-top: 8px; border-top: 1px solid var(--surface3); }
     .r2-rlink {
@@ -3680,7 +3680,14 @@
     .r2-chk.on .r2-box { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
     .r2-chk.pv.on .r2-box { background: var(--green); border-color: var(--green); }
     .r2-chk .r2-c { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--accent); font-weight: 600; }
-    .r2-chk .r2-pv { font-family: var(--mono); font-size: 12px; }
+    .r2-chk .r2-pv { font-family: var(--mono); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .r2-pivsearch { padding: 4px 6px 8px; }
+    .r2-pivsearch input {
+      width: 100%; font-family: var(--mono); font-size: 12px; color: var(--text);
+      background: var(--bg); border: 1px solid var(--border); border-radius: 7px; padding: 7px 10px;
+    }
+    .r2-pivsearch input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+    .r2-pivnote { padding: 8px 10px 4px; font-size: 12px; color: var(--text-faint); line-height: 1.4; }
 
     .r2-main { padding: 16px 4px 24px 22px; min-width: 0; }
     @media (max-width: 820px) {
@@ -3700,7 +3707,7 @@
     .r2-ddesc { color: var(--text-faint); font-size: 12.5px; margin: 0 0 12px; max-width: 78ch; }
     .r2-emptystate { color: var(--text-faint); font-size: 13px; padding: 18px 8px; border: 1px dashed var(--border); border-radius: var(--radius); }
 
-    .r2-colhead { display: grid; grid-template-columns: 1fr 62px 168px 62px; gap: 14px; padding: 0 8px 6px; font-family: var(--mono); font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: var(--text-faint); }
+    .r2-colhead { display: grid; grid-template-columns: 1fr 62px 168px 62px; gap: 14px; padding: 0 8px 6px; font-family: var(--font); font-size: 11px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--text-faint); }
     .r2-colhead .r { text-align: right; }
     .r2-row { display: grid; grid-template-columns: 1fr 62px 168px 62px; gap: 14px; align-items: start; padding: 9px 8px; border-bottom: 1px solid var(--surface3); }
     .r2-row:hover { background: var(--surface2); }
@@ -3710,12 +3717,25 @@
     .r2-val { font-family: var(--mono); font-size: 13px; color: var(--text); display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
     .r2-val-text { min-width: 0; word-break: break-word; overflow-wrap: anywhere; line-height: 1.5; user-select: text; }
     .r2-copy {
-      flex-shrink: 0; opacity: .4; font-size: 12px; cursor: pointer; color: var(--text-faint);
-      background: none; border: 0; padding: 2px 4px; border-radius: 4px; line-height: 1;
+      flex-shrink: 0; opacity: .35; font-size: 12px; cursor: pointer; color: var(--text-faint);
+      background: none; border: 1px solid transparent; padding: 2px 5px; border-radius: 5px; line-height: 1;
+      transition: opacity .12s, color .12s, background .12s, border-color .12s, transform .1s;
     }
-    .r2-row:hover .r2-copy { opacity: .75; }
-    .r2-copy:hover { opacity: 1; color: var(--accent); background: var(--surface2); }
+    /* On row hover the copy control becomes an obvious, clickable pill so it's
+       clear the value can be copied. */
+    .r2-row:hover .r2-copy { opacity: 1; color: var(--text-dim); border-color: var(--border); background: var(--surface2); }
+    .r2-copy:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); transform: translateY(-1px); }
+    .r2-copy:active { transform: translateY(0) scale(.92); }
     .r2-copy:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; opacity: 1; }
+    /* Click confirmation: green check that pulses so the copy is unmistakable. */
+    .r2-copy.copied {
+      opacity: 1; color: var(--accent-text); background: var(--green); border-color: var(--green);
+      animation: r2-copied-pulse .45s var(--ease-out, ease-out);
+    }
+    @keyframes r2-copied-pulse {
+      0% { transform: scale(.8); } 55% { transform: scale(1.18); } 100% { transform: scale(1); }
+    }
+    @media (prefers-reduced-motion: reduce) { .r2-copy, .r2-copy.copied { animation: none; transition: none; } }
     .r2-chip { font-family: var(--mono); font-size: 10px; color: var(--text-dim); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; flex-shrink: 0; }
     .r2-occ { font-family: var(--mono); font-size: 12px; color: var(--text-dim); text-align: right; font-variant-numeric: tabular-nums; }
     .r2-occ b { color: var(--text); }
@@ -3775,7 +3795,7 @@
 
     /* favicon evolution gallery */
     .r2-favstrip { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 14px 16px; border-top: 1px solid var(--surface3); }
-    .r2-favlbl { font-family: var(--mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-faint); }
+    .r2-favlbl { font-family: var(--font); font-size: 11.5px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--text-dim); }
     .r2-favera { display: flex; align-items: center; gap: 9px; }
     .r2-favico { width: 40px; height: 40px; border-radius: 10px; overflow: hidden; display: flex; align-items: center; justify-content: center; background: var(--surface2); box-shadow: inset 0 0 0 1px rgba(0,0,0,.14); }
     .r2-favimg { width: 100%; height: 100%; object-fit: contain; image-rendering: -webkit-optimize-contrast; }

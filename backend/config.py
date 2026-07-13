@@ -64,7 +64,7 @@ class Settings(BaseSettings):
     # archive.org load bounded and scans fast. The selection stays representative
     # (year-proportional). Set to 0 to disable the ceiling entirely — that's the
     # mode for a self-hosted / local install, which can scan a domain in full.
-    hosted_snapshot_ceiling: int = 5000
+    hosted_snapshot_ceiling: int = 3000
     scan_retention_days: int = 7
     cleanup_interval_seconds: int = 3600
 

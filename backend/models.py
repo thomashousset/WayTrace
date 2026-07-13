@@ -164,6 +164,11 @@ class JobCreate(BaseModel):
     # Opt-in: email the signed-in user a link when the scan finishes. Honoured
     # only on the hosted service (needs an account email + Resend).
     notify_on_complete: bool = False
+    # Guardrail bypass: by default, if a recent completed scan already exists for
+    # this domain, the server returns it instead of re-scanning (avoids hammering
+    # archive.org for a domain we already have). "Scan more" sets force=True to
+    # deliberately run a fresh, denser scan.
+    force: bool = False
 
     @field_validator("domain", mode="before")
     @classmethod
@@ -179,6 +184,9 @@ class ScanCreateResponse(BaseModel):
     status: str
     position: int
     eta_seconds: int
+    # True when an existing recent scan for this domain was returned instead of
+    # launching a new one (the guardrail against re-scanning the same domain).
+    reused: bool = False
 
 
 class JobStatus(BaseModel):

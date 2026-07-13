@@ -103,3 +103,38 @@ async def test_budget_keeps_all_when_fast(monkeypatch):
     snaps = [{"url": f"http://x/{i}", "timestamp": "20200101000000"} for i in range(4)]
     results = await scraper.scrape_snapshots(snaps, "job-fast")
     assert len([r for r in results if r.get("html")]) == 4
+
+
+class _CountingSession(_FakeSession):
+    """A fake session that records every .get() so we can assert none fire."""
+    calls = 0
+
+    def get(self, url, *a, **k):
+        _CountingSession.calls += 1
+        return _FakeResp(url)
+
+
+@pytest.mark.anyio
+async def test_hard_block_bails_out_after_the_semaphore(monkeypatch):
+    # Regression: all page tasks are created up front. With low concurrency,
+    # hundreds queue at the semaphore having passed the PRE-semaphore hard-block
+    # check before the breaker opened; without a POST-semaphore re-check they each
+    # still fired a doomed request for minutes. With the breaker hard-open, NO
+    # request must fire and every page must return "blocked".
+    import time as _time
+    from services import archive_health as _ah
+
+    monkeypatch.setattr(settings, "max_concurrent_scrapes", 2)
+    _CountingSession.calls = 0
+    monkeypatch.setattr(scraper.aiohttp, "ClientSession", _CountingSession)
+    # Force the hard block open for a while.
+    with _ah._lock:
+        _ah._tripped_hard = True
+        _ah._open_until = _time.time() + 600
+
+    snaps = [{"url": f"http://x/{i}", "timestamp": "20200101000000"} for i in range(50)]
+    results = await scraper.scrape_snapshots(snaps, "job-hardblock")
+
+    assert _CountingSession.calls == 0, f"fired {_CountingSession.calls} requests while hard-blocked"
+    assert len(results) == 50
+    assert all(r.get("error") == "blocked" and r.get("html") is None for r in results)

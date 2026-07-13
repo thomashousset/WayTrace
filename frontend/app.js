@@ -235,7 +235,10 @@ const I18N = {
     'empty categories (searched)': 'catégories vides (cherchées)',
     'Views': 'Vues',
     'tick': 'coche',
-    'Pivots — tick to track': 'Pivots — cocher pour suivre',
+    'Pivots from ticked categories': 'Pivots des catégories cochées',
+    'Search pivots…': 'Chercher un pivot…',
+    'No pivot matches.': 'Aucun pivot correspondant.',
+    'Tick a category above to pick pivots from its values.': 'Cochez une catégorie ci-dessus pour choisir des pivots parmi ses valeurs.',
     'value': 'valeur',
     'occ.': 'occ.',
     'seen': 'vu de → à',
@@ -264,6 +267,7 @@ const I18N = {
     'Check your connection and try again.': 'Vérifiez votre connexion et réessayez.',
     'Retry': 'Réessayer',
     'Scan complete': 'Scan terminé',
+    'This domain was already scanned recently. Showing that scan.': 'Ce domaine a déjà été scanné récemment, affichage de ce scan.',
     'Filter extracted results': 'Filtrer les résultats extraits',
     'Search the archived pages': 'Chercher dans les pages archivées',
     'Copied': 'Copié',
@@ -683,6 +687,7 @@ function startAdvancedScan() {
   // density and the publish choice are all set on the next (scope) step, which
   // keeps its own defaults (publish pre-checked).
   _pendingScopePrefill = null;
+  _forceRescan = false;   // a fresh homepage scan honours the guardrail
   location.hash = '#/scope/' + encodeURIComponent(raw);
 }
 
@@ -2241,6 +2246,8 @@ async function launchScopedScan() {
     const publish = !!($('scope-publish-on-complete') && $('scope-publish-on-complete').checked);
     publicScanAutoPublish = publish;
     const body = { domain: scopeDomain, publish_on_complete: publish };
+    // "Scan more" (or an explicit re-scan) bypasses the already-scanned guardrail.
+    if (_forceRescan) { body.force = true; _forceRescan = false; }
     if (selected.length > 0) {
       body.selected_snapshots = selected;
     } else {
@@ -2271,6 +2278,9 @@ async function launchScopedScan() {
       throw new Error(err.detail || 'Scan failed');
     }
     const data = await resp.json();
+    // Guardrail: the server returned an existing recent scan for this domain
+    // instead of re-scanning it. Tell the user why they landed on results.
+    if (data.reused) showToast(t('This domain was already scanned recently. Showing that scan.'));
     location.hash = '#/s/' + encodeURIComponent(data.url_id);
   } catch (e) {
     showError('error-scope', e.message);
@@ -4059,8 +4069,12 @@ function v2BuildLegacyDomainInfo(job, findings) {
 // "Scan more": reopen the scope tuner for the same domain so the user can pick
 // a higher density/cap and relaunch. The recent CDX result is cached (~6h) so
 // preflight is instant and the enumeration is not redone from zero.
+// Deliberate re-scan: bypass the "already scanned" guardrail so a denser/fresh
+// scan actually runs even though a scan of this domain already exists.
+let _forceRescan = false;
 function scanMore(domain) {
   if (!domain) return;
+  _forceRescan = true;
   location.hash = '#/scope/' + encodeURIComponent(domain);
 }
 
@@ -4082,6 +4096,7 @@ let report2State = {
   showEmpty: false,    // rail: reveal the empty categories
   checkedCats: null,   // Activity view: Set of category keys shown as lanes
   checkedPivots: null, // Activity view: Set of "cat::value" pivots shown as lanes
+  pivotFilter: '',     // Activity view: search box over the pivot list
 };
 let _r2 = { findings: [], info: null, byCat: new Map(), found: [], empty: [], job: null, lo: 0, hi: 0 };
 
@@ -4202,7 +4217,7 @@ function renderReport2(info, findings, job) {
     report2State.openCat = found[0] || '__all__';
   }
   if (!report2State.checkedCats) report2State.checkedCats = new Set(found.slice(0, 4));
-  if (!report2State.checkedPivots) report2State.checkedPivots = new Set(_r2Pivots().slice(0, 3).map(p => p.key));
+  if (!report2State.checkedPivots) report2State.checkedPivots = new Set();   // opt-in
   _r2SetHeaderFavicon(info && info.name);
   report2Render();
 }
@@ -4226,40 +4241,49 @@ function _r2SetHeaderFavicon(domain) {
 }
 
 /* Candidate pivots for the Activity view: individual high-value values whose
-   timeline is worth overlaying (subdomains, trackers, favicons, people). */
-// Candidate pivots for the Activity view: individual high-value values worth
-// overlaying on the timeline. Pulls generously from every pivot-worthy category
-// so the list is rich (deduped by key, capped so the rail stays usable).
+   timeline is worth overlaying. */
+// Pivots for the Activity view are the individual values of the CHECKED
+// categories: tick a category to include it, then its values become available to
+// break out as their own lanes. ALL of them are offered (no cap); a search box
+// in the rail filters the list. Deduped by key.
 function _r2Pivots() {
   const out = [];
   const seen = new Set();
-  const take = (cat, n) => (_r2.byCat.get(cat) || []).slice(0, n).forEach(f => {
-    const key = cat + '::' + f.value;
-    if (seen.has(key)) return;
-    seen.add(key);
-    out.push({ key, label: f.value, cat, f });
-  });
-  take('subdomains', 12);
-  take('persons', 10);
-  take('analytics_trackers', 8);
-  take('emails', 8);
-  take('technologies', 6);
-  take('favicons', 6);
-  take('organizations', 5);
-  take('github_repos', 5);
-  take('social_profiles', 5);
-  take('hosting', 4);
-  take('api_keys', 4);
-  take('endpoints', 4);
-  return out.slice(0, 60);
+  for (const c of _r2.found) {
+    if (!report2State.checkedCats.has(c)) continue;
+    for (const f of (_r2.byCat.get(c) || [])) {
+      const key = c + '::' + f.value;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ key, label: f.value, cat: c, f });
+    }
+  }
+  return out;
 }
 
 function report2SetView(v) { report2State.view = v; report2Render(); }
 function report2OpenCat(c) { report2State.openCat = c; report2State.filter = ''; report2State.view = 'cats'; report2Render(); }
 function report2ToggleEmpty() { report2State.showEmpty = !report2State.showEmpty; report2Render(); }
 function report2Filter(v) { report2State.filter = v || ''; report2RenderMain(); }
-function report2ToggleCat(c) { const s = report2State.checkedCats; s.has(c) ? s.delete(c) : s.add(c); report2Render(); }
+function report2ToggleCat(c) {
+  const s = report2State.checkedCats;
+  if (s.has(c)) {
+    s.delete(c);
+    // Drop pivots that belonged to this now-unchecked category.
+    for (const k of [...report2State.checkedPivots]) {
+      if (k.startsWith(c + '::')) report2State.checkedPivots.delete(k);
+    }
+  } else { s.add(c); }
+  report2Render();
+}
 function report2TogglePivot(k) { const s = report2State.checkedPivots; s.has(k) ? s.delete(k) : s.add(k); report2Render(); }
+function report2PivotFilter(v) {
+  report2State.pivotFilter = v || '';
+  report2RenderRail();
+  // Re-rendering the rail replaced the input; restore focus + caret to the end.
+  const inp = document.getElementById('r2-pivfilter');
+  if (inp) { inp.focus(); const n = inp.value.length; try { inp.setSelectionRange(n, n); } catch (_) {} }
+}
 
 function report2Render() {
   // Sync the view toggle buttons.
@@ -4279,7 +4303,21 @@ function report2RenderRail() {
   const rail = document.getElementById('r2-rail');
   if (!rail) return;
   if (report2State.view === 'activity') {
-    const pivots = _r2Pivots();
+    const allPivots = _r2Pivots();
+    const pq = (report2State.pivotFilter || '').toLowerCase();
+    const pivots = pq ? allPivots.filter(p => String(p.label).toLowerCase().includes(pq)) : allPivots;
+    const pivotBody = allPivots.length
+      ? (`<div class="r2-pivsearch"><input id="r2-pivfilter" type="text" autocomplete="off" spellcheck="false"
+            placeholder="${esc(t('Search pivots…'))}" value="${esc(report2State.pivotFilter || '')}"
+            oninput="report2PivotFilter(this.value)"></div>`
+         + (pivots.length
+            ? pivots.map(p => {
+                const on = report2State.checkedPivots.has(p.key);
+                return `<div class="r2-chk pv${on ? ' on' : ''}" onclick="report2TogglePivot('${esc(p.key).replace(/'/g, "\\'")}')">
+                  <span class="r2-box">${on ? '✓' : ''}</span><span class="r2-pv" title="${esc(p.label)}">${esc(String(p.label))}</span></div>`;
+              }).join('')
+            : `<div class="r2-pivnote">${t('No pivot matches.')}</div>`))
+      : `<div class="r2-pivnote">${t('Tick a category above to pick pivots from its values.')}</div>`;
     rail.innerHTML =
       `<div class="r2-rt"><span>${t('Categories')}</span><span>${t('tick')}</span></div>` +
       _r2.found.map(c => {
@@ -4288,12 +4326,8 @@ function report2RenderRail() {
           <span class="r2-box">${on ? '✓' : ''}</span><span>${esc(catLabel(c))}</span>
           <span class="r2-c">${_r2.byCat.get(c).length}</span></div>`;
       }).join('') +
-      `<div class="r2-rt2">${t('Pivots — tick to track')}</div>` +
-      pivots.map(p => {
-        const on = report2State.checkedPivots.has(p.key);
-        return `<div class="r2-chk pv${on ? ' on' : ''}" onclick="report2TogglePivot('${esc(p.key).replace(/'/g, "\\'")}')">
-          <span class="r2-box">${on ? '✓' : ''}</span><span class="r2-pv" title="${esc(p.label)}">${esc(String(p.label).slice(0, 26))}</span></div>`;
-      }).join('') +
+      `<div class="r2-rt2">${t('Pivots from ticked categories')}</div>` +
+      pivotBody +
       `<div class="r2-rt2">${t('Views')}</div>
        <div class="r2-nav" onclick="report2SetView('cats')"><span class="i">▤</span> ${t('Categories')}</div>`;
     return;
@@ -4335,7 +4369,7 @@ function _r2Rows(list) {
     list.map(f => {
       const span = (f.first_seen || f.last_seen)
         ? `${esc(f.first_seen || '?')} <span class="r2-arw">→</span> ${_r2Month(f.last_seen) != null && _r2Month(f.last_seen) >= _r2.hi ? `<span class="r2-now">${esc(f.last_seen)}</span>` : `<span class="r2-end">${esc(f.last_seen || '?')}</span>`}`
-        : '<span class="r2-end">—</span>';
+        : '<span class="r2-end">·</span>';
       const jsVal = esc(f.value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
       return `<div class="r2-row">
         <span class="r2-val">
@@ -4375,7 +4409,7 @@ function report2CatActivity(cat, list) {
   const lanes = list.slice(0, 24).map(f => _r2Lane(f.value, f.first_seen, f.last_seen, { faded: _r2Month(f.last_seen) != null && _r2Month(f.last_seen) < _r2.hi })).join('');
   if (!lanes.trim()) return '';
   return `<div class="r2-act">
-    <div class="r2-ah"><span class="i">▚</span> ${t('Activity of')} <b>${esc(catLabel(cat))}</b> — ${t('when each value was visible')}</div>
+    <div class="r2-ah"><span class="i">▚</span> ${t('Activity of')} <b>${esc(catLabel(cat))}</b> · ${t('when each value was visible')}</div>
     <div class="r2-tl"><div class="r2-years">${_r2Years()}</div>${lanes}</div>
     ${_r2Feed(list, 6)}
   </div>`;
@@ -4426,7 +4460,7 @@ function report2ActivityHTML() {
   });
   const laneHTML = lanes.map(l => _r2Lane(l.label, l.first, l.last, { pivot: l.pivot })).join('');
   return `<div class="r2-composer">
-    <div class="r2-ch"><span class="i">▚</span> <b>${t('Composed activity')}</b> — ${nCat} ${t('categories')} + ${nPv} ${t('pivots')}<span class="r2-hint">${t('untick to remove a lane')}</span></div>
+    <div class="r2-ch"><span class="i">▚</span> <b>${t('Composed activity')}</b> · ${nCat} ${t('categories')} + ${nPv} ${t('pivots')}<span class="r2-hint">${t('untick to remove a lane')}</span></div>
     <div class="r2-tl"><div class="r2-years">${_r2Years()}</div>${laneHTML}</div>
     <div class="r2-evleg"><span><i class="up"></i> ${t('category')}</span><span><i class="pv"></i> ${t('pivot')}</span><span><i class="down"></i> ${t('disappeared')}</span></div>
     ${report2Favicons()}
@@ -4454,14 +4488,25 @@ function report2Favicons() {
       ? `<img class="r2-favimg" src="${esc(src)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="r2-favph" style="display:none">◆</span>`
       : `<span class="r2-favph">◆</span>`;
     return `<div class="r2-favera"><div class="r2-favico">${img}</div>
-      <span class="r2-favm"><b>${esc(span || '—')}</b>${hash ? esc(hash) : ''}</span></div>`;
+      <span class="r2-favm"><b>${esc(span || '·')}</b>${hash ? esc(hash) : ''}</span></div>`;
   }).join('<span class="r2-favarr">→</span>');
   return `<div class="r2-favstrip"><span class="r2-favlbl">${t('Favicon over time')}</span>${cells}</div>`;
 }
 
 function report2Copy(ev, val) {
   ev.stopPropagation();
-  navigator.clipboard.writeText(val).then(() => showToast(t('Copied') + ' ✓')).catch(() => {});
+  const btn = ev.currentTarget;
+  navigator.clipboard.writeText(val).then(() => {
+    showToast(t('Copied') + ' ✓');
+    // In-place confirmation so it's obvious the click copied: the icon flips to a
+    // green check and pulses, then reverts.
+    if (btn && btn.classList) {
+      btn.classList.add('copied');
+      const prev = btn.textContent;
+      btn.textContent = '✓';
+      setTimeout(() => { btn.classList.remove('copied'); btn.textContent = prev; }, 1100);
+    }
+  }).catch(() => {});
 }
 function report2CopyCol(cat) {
   const all = _r2.byCat.get(cat) || [];
@@ -4479,6 +4524,7 @@ window.report2ToggleCat = report2ToggleCat;
 window.report2TogglePivot = report2TogglePivot;
 window.report2Copy = report2Copy;
 window.report2CopyCol = report2CopyCol;
+window.report2PivotFilter = report2PivotFilter;
 window.renderReport2 = renderReport2;
 
 
@@ -4546,6 +4592,7 @@ function renderV2InLegacyView(job) {
   report2State.showEmpty = false;
   report2State.checkedCats = null;
   report2State.checkedPivots = null;
+  report2State.pivotFilter = '';
   report2State.view = 'cats';
   renderReport2(info, findings, job);
 
