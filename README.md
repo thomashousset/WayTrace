@@ -25,6 +25,10 @@ The interface is fully bilingual (English / French), switchable from the navbar.
 
 ---
 
+## What's new in v1.6.0
+
+- **Neutral findings, provenance-first.** The report drops the severity "importance" UI (stats bar, filter, per-row dot). Instead every finding carries *first/last-seen*, *occurrences*, and its *archived source* — evidence you judge, not a verdict. The cluttered Pivots graph is gone; co-occurrence stays. The Wayback Machine source is credited with its logo.
+
 ## What's new in v1.5.0
 
 - **Self-governing, IP-safe archive.org access.** Every request goes through a shared, *adaptive* rate governor (AIMD, like TCP congestion control: it creeps up while responses stay clean and halves on the first connection-refusal) plus a shared concurrency limit — so no number of parallel scans or users can push the server IP past archive.org's tolerance. v1.5 pins the ceiling at **80 req/min** (below the point archive.org was measured refusing connections) and makes a hard-block pause **escalate from 2 minutes** instead of a flat 30, so a temporary reject is cheap.

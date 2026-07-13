@@ -25,6 +25,10 @@ L'interface est entièrement bilingue (anglais / français), basculable depuis l
 
 ---
 
+## Nouveautés de la v1.6.0
+
+- **Résultats neutres, la provenance d'abord.** Le rapport retire l'UI de « gravité » (barre de stats, filtre, point par ligne). À la place, chaque résultat porte son *first/last-seen*, ses *occurrences* et sa *page source archivée* : la preuve, c'est vous qui jugez. Le graphe Pivots encombrant disparaît ; la co-occurrence reste. La source Wayback Machine est créditée par son logo.
+
 ## Nouveautés de la v1.5.0
 
 - **Accès archive.org auto-régulé, sûr pour l'IP.** Chaque requête passe par un gouverneur de débit *adaptatif* partagé (AIMD, comme le contrôle de congestion TCP : il monte doucement tant que les réponses restent propres et se divise par deux au premier refus de connexion) plus une limite de concurrence partagée. La v1.5 fixe le plafond à **80 req/min** (sous le seuil où archive.org a été mesuré refusant les connexions) et fait **démarrer une pause de blocage à 2 minutes** au lieu de 30 fixes, escaladant seulement sur refus consécutifs — un refus passager coûte donc peu.

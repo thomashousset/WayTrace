@@ -525,6 +525,23 @@
       text-transform: uppercase;
       font-weight: 500;
     }
+    /* Wayback Machine source credit — the logo is black+red, so on the dark
+       default theme we flip it to white; on the light theme it keeps its colours.
+       No background, per design. */
+    .home-wayback { margin: 20px 0 8px; text-align: center; line-height: 1; }
+    .home-wayback span {
+      font-family: var(--mono); font-size: 9.5px; letter-spacing: .12em;
+      text-transform: uppercase; color: var(--text-faint); margin-right: 9px; vertical-align: middle;
+    }
+    .wb-logo { height: 17px; vertical-align: middle; opacity: .72; filter: brightness(0) invert(1); }
+    [data-theme="light"] .wb-logo { filter: none; opacity: .8; }
+    .home-wayback a:hover .wb-logo { opacity: 1; }
+
+    /* v1.6 — present categories neutrally: provenance (first/last-seen,
+       occurrences, source) is the evidence, so the severity "importance"
+       editorialising is removed from the UI. The filter stays in the DOM at
+       "all values" so findings logic is untouched; it is just not shown. */
+    #res-sevstats, #filter-severity { display: none !important; }
     .home-version {
       margin: 8px 0 0;
       color: var(--text-faint);
@@ -3295,6 +3312,9 @@
     }
     @media (prefers-reduced-motion: reduce) { .pub-run-spinner { animation-duration: 4s; } }
     .pub-run-eta { font-size: 13px; color: var(--text-faint); margin-top: 10px; font-variant-numeric: tabular-nums; }
+    .pub-run-wb { margin-top: 20px; display: flex; align-items: center; justify-content: center; gap: 9px; }
+    .pub-run-wb span { font-family: var(--mono); font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-faint); }
+    .pub-run-wb .wb-logo { height: 15px; }
 
     /* Homepage feed */
     .home-feed { max-width: 1100px; margin: 32px auto 80px; padding: 0 24px; }

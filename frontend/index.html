@@ -87,8 +87,9 @@
       <li><span class="home-cap-label" data-i18n="home.cap.infra">Infrastructure</span><span class="home-cap-desc" data-i18n="home.cap.infra.d">Subdomains, tech stack, endpoints, headers.</span></li>
       <li><span class="home-cap-label" data-i18n="home.cap.timeline">Timeline</span><span class="home-cap-desc" data-i18n="home.cap.timeline.d">When each fact appeared, and when it disappeared.</span></li>
     </ul>
-    <p class="home-caption" data-i18n-html="home.caption">Public data only &middot; Wayback Machine &middot; <a href="https://web.archive.org" target="_blank" rel="noopener">archive.org</a> &middot; <a href="#/legal">Legal &amp; licence</a></p>
-    <p class="home-version" data-i18n-html="home.version">WayTrace v1.3.0 &middot; hosted &middot; <a href="https://github.com/HXLLO/WayTrace" target="_blank" rel="noopener">source</a></p>
+    <p class="home-wayback"><span data-i18n="home.archivedby">Data archived by</span> <a href="https://web.archive.org" target="_blank" rel="noopener"><img class="wb-logo" src="/icons/wayback.svg" alt="Wayback Machine"></a></p>
+    <p class="home-caption" data-i18n-html="home.caption">Public data only &middot; <a href="#/legal">Legal &amp; licence</a></p>
+    <p class="home-version" data-i18n-html="home.version">WayTrace v1.6.0 &middot; hosted &middot; <a href="https://github.com/HXLLO/WayTrace" target="_blank" rel="noopener">source</a></p>
     <p class="home-provenance" data-i18n="home.provenance">Open-source OSINT tool. The hosted build caps snapshots per scan; self-host it from GitHub to scan a domain in full.</p>
   </div>
 
@@ -341,7 +342,6 @@
       <div class="res-tabs-head" role="tablist">
         <button class="res-tab active" role="tab" data-tab="categories" onclick="selectResTab('categories')" data-i18n="Categories">Categories</button>
         <button class="res-tab" role="tab" data-tab="activity" onclick="selectResTab('activity')" data-i18n="Activity">Activity</button>
-        <button class="res-tab" role="tab" data-tab="pivots" onclick="selectResTab('pivots')" data-i18n="Pivots">Pivots</button>
         <button class="res-tab" role="tab" data-tab="subs" onclick="selectResTab('subs')" data-i18n="Subdomains">Subdomains</button>
         <button class="res-tab" role="tab" data-tab="tech" onclick="selectResTab('tech')" data-i18n="Tech &amp; infra">Tech &amp; infra</button>
       </div>
@@ -371,9 +371,6 @@
       </div>
       <div class="res-tab-panel" id="res-tab-activity" role="tabpanel" style="display:none">
         <div id="res-timeline-ribbon"></div>
-      </div>
-      <div class="res-tab-panel" id="res-tab-pivots" role="tabpanel" style="display:none">
-        <div id="res-pivots"></div>
       </div>
       <div class="res-tab-panel" id="res-tab-subs" role="tabpanel" style="display:none">
         <div id="res-subs"></div>

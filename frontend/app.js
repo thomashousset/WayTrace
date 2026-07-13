@@ -217,8 +217,10 @@ const I18N = {
     'home.cap.infra.d': 'Sous-domaines, stack technique, endpoints, en-têtes.',
     'home.cap.timeline': 'Chronologie',
     'home.cap.timeline.d': 'Quand chaque élément est apparu, et quand il a disparu.',
-    'home.caption': 'Données publiques uniquement &middot; Wayback Machine &middot; <a href="https://web.archive.org" target="_blank" rel="noopener">archive.org</a> &middot; <a href="#/legal">Mentions légales</a>',
-    'home.version': 'WayTrace v1.3.0 &middot; hébergé &middot; <a href="https://github.com/HXLLO/WayTrace" target="_blank" rel="noopener">source</a>',
+    'home.caption': 'Données publiques uniquement &middot; <a href="#/legal">Mentions légales</a>',
+    'home.version': 'WayTrace v1.6.0 &middot; hébergé &middot; <a href="https://github.com/HXLLO/WayTrace" target="_blank" rel="noopener">source</a>',
+    'home.archivedby': 'Archives par',
+    'Pages read from': 'Pages lues depuis',
     'home.provenance': "Outil OSINT open source. La version hébergée limite le nombre de snapshots par scan ; auto-hébergez-la depuis GitHub pour analyser un domaine en entier.",
     'home.ethic': "Conçu pour les chercheurs en sécurité, les équipes, les journalistes et les professionnels curieux. Utilisez ce que vous trouvez de façon responsable : signalez les risques aux personnes qui possèdent les données, jamais contre elles.",
     'home.feed.title': 'Scans publiés récemment',
@@ -939,6 +941,7 @@ function renderPublicScan(job) {
           <div class="pub-run-pct"></div>
           <div class="pub-run-bar"><div class="pub-run-bar-fill"></div></div>
           <div class="pub-run-eta"></div>
+          <div class="pub-run-wb"><span>${esc(t('Pages read from'))}</span> <img class="wb-logo" src="/icons/wayback.svg" alt="Wayback Machine"></div>
         </div>
         ${renderPrivacyCard(job)}
       `;
@@ -2507,16 +2510,7 @@ function selectResTab(name) {
   });
   document.querySelectorAll('#res-tabs .res-tab-panel').forEach(p =>
     p.style.display = (p.id === 'res-tab-' + name) ? '' : 'none');
-  if (name === 'pivots') {
-    // Bridge the closure globals to window for the self-contained component.
-    // scopeDomain is set when scanning in-session; when viewing a shared scan
-    // it is empty, so fall back to the domain shown in the results header.
-    window.allFindings = allFindings;
-    window.scopeDomain = (typeof scopeDomain === 'string' && scopeDomain)
-      || ($('res-domain') && $('res-domain').textContent.trim())
-      || 'scope';
-    if (typeof renderPivots === 'function') renderPivots('res-pivots');
-  } else if (name === 'subs') {
+  if (name === 'subs') {
     renderSubdomainsTab();
   } else if (name === 'tech') {
     renderTechInfra();
@@ -4120,7 +4114,6 @@ function renderFindingsTable() {
   const searchFilter = ($('filter-search').value || '').toLowerCase();
 
   const cols = [
-    {key: '_sev', label: '', cls: 'col-sev', sortable: false},
     {key: 'value', label: 'Value', cls: '', sortable: true},
     {key: 'category', label: 'Category', cls: 'col-date', sortable: true},
     {key: 'first_seen', label: 'First', cls: 'col-date', sortable: true},

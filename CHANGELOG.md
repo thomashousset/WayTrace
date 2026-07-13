@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.6.0
+
+- **Neutral findings.** The report no longer editorialises "importance": the severity stats bar, the severity filter, and the per-row severity dot are gone. What replaces them is provenance — every finding shows *when* it was first and last seen, *how often*, and the *archived source page*, so you judge, not the tool.
+- **Pivots tab removed.** The radial pivot graph was cluttered and low-signal; co-occurrence ("seen on the same page") remains where it's actually useful.
+- **Wayback Machine credited.** The data source is shown with the official Wayback Machine logo on the homepage and the loading view (public-domain mark, no background, theme-aware).
+
 ## v1.5.0
 
 - **Rate ceiling pinned below the refusal point.** The adaptive governor's ceiling drops from 150 to **80 req/min** (starting at 75): after a dense scan measured archive.org refusing TCP connections once the self-tuned rate crept to ~105/min, the governor can no longer climb into that zone. The floor/burst behaviour is unchanged.
