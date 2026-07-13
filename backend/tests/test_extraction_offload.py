@@ -41,12 +41,16 @@ async def test_extraction_runs_off_the_event_loop(fresh_db, monkeypatch):
     monkeypatch.setattr(store_module, "store", fresh)
     monkeypatch.setattr(scan_module, "store", fresh)
 
-    # Two fake pages, returned instantly (no network).
-    async def _fake_scrape(selected, job_id, **kw):
-        return [
+    # Two fake pages, streamed to the on_page hook like the real scraper.
+    async def _fake_scrape(selected, job_id, on_page=None):
+        out = [
             {"timestamp": "20200101000000", "url": "http://ex.com/", "html": "<html></html>", "error": None},
             {"timestamp": "20210101000000", "url": "http://ex.com/a", "html": "<html></html>", "error": None},
         ]
+        for p in out:
+            if on_page:
+                await on_page(p)
+        return out
     monkeypatch.setattr(scan_module, "scrape_snapshots", _fake_scrape)
 
     # Deliberately slow, BLOCKING per-page extraction (the streamed path calls
@@ -112,12 +116,16 @@ async def test_live_counts_pushed_during_extraction(fresh_db, monkeypatch):
     monkeypatch.setattr(store_module, "store", fresh)
     monkeypatch.setattr(scan_module, "store", fresh)
 
-    async def _fake_scrape(selected, job_id, **kw):
-        # 60 fake html pages -> multiple extraction batches (BATCH=25).
-        return [
+    async def _fake_scrape(selected, job_id, on_page=None):
+        # 60 fake html pages streamed to on_page -> multiple batches (25 each).
+        out = [
             {"timestamp": f"20{10+i:02d}0101000000", "url": f"http://ex.com/{i}", "html": "<html></html>", "error": None}
             for i in range(60)
         ]
+        for p in out:
+            if on_page:
+                await on_page(p)
+        return out
     monkeypatch.setattr(scan_module, "scrape_snapshots", _fake_scrape)
 
     # process_page adds one distinct email per page into accum["emails"].
@@ -148,3 +156,56 @@ async def test_live_counts_pushed_during_extraction(fresh_db, monkeypatch):
     assert len(seen) >= 2, seen
     email_counts = [c.get("emails", 0) for c in seen]
     assert email_counts == sorted(email_counts) and email_counts[-1] == 60, email_counts
+
+
+@pytest.mark.asyncio
+async def test_extraction_overlaps_download(fresh_db, monkeypatch):
+    """Extraction starts while pages are still downloading — the first batch is
+    processed before the scraper has emitted all its pages."""
+    import store as store_module
+    import routers.scan as scan_module
+
+    fresh = JobStore()
+    monkeypatch.setattr(store_module, "store", fresh)
+    monkeypatch.setattr(scan_module, "store", fresh)
+
+    emitted = {"n": 0}
+
+    async def _slow_scrape(selected, job_id, on_page=None):
+        out = []
+        for i in range(60):
+            p = {"timestamp": f"20{10+i:02d}0101000000", "url": f"http://ex.com/{i}", "html": "<html></html>", "error": None}
+            out.append(p)
+            emitted["n"] += 1
+            if on_page:
+                await on_page(p)
+            await asyncio.sleep(0.003)   # simulate per-page download latency
+        return out
+    monkeypatch.setattr(scan_module, "scrape_snapshots", _slow_scrape)
+
+    def _fake_process(page, domain, accum, cat_set, page_seq):
+        accum["emails"][page["url"]] = {"first_seen": "2020-01"}
+        return True
+    monkeypatch.setattr(scan_module, "process_page", _fake_process)
+    monkeypatch.setattr(scan_module, "mine_subdomains", lambda pages, d, a, c: None)
+    monkeypatch.setattr(scan_module, "finalize_accum", lambda accum, categories=None: {"emails": list(accum["emails"].values())})
+    monkeypatch.setattr(scan_module, "merge_analytics_ids", lambda r: None)
+    monkeypatch.setattr(scan_module, "compute_highlights", lambda r, d: [])
+
+    # Record how many pages the scraper had emitted at the moment of the FIRST
+    # live-count push. If extraction overlaps download, that's well below 60.
+    first_push_emitted = {"v": None}
+    orig_update = fresh.update_job
+    async def _spy(job_id, **kw):
+        if "live_counts" in kw and first_push_emitted["v"] is None:
+            first_push_emitted["v"] = emitted["n"]
+        return await orig_update(job_id, **kw)
+    monkeypatch.setattr(fresh, "update_job", _spy)
+
+    res = await fresh.create_job("ex.com", "7.7.7.7")
+    selected = [{"timestamp": "20200101000000", "url": "http://ex.com/0"}]
+    await scan_module.run_scan(job_id=res["job_id"], config=ScanConfig(), selected_snapshots=selected)
+
+    assert first_push_emitted["v"] is not None, "no live counts pushed"
+    assert first_push_emitted["v"] < 60, (
+        f"extraction only started after all pages downloaded (emitted={first_push_emitted['v']})")

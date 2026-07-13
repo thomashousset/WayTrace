@@ -260,7 +260,55 @@ async def _scan_pipeline(
             step=f"Scraping {len(selected)} archived pages...",
             progress=15,
         )
-        pages = await scrape_snapshots(selected, job_id)
+
+        # Phases 3+4 OVERLAP: extract pages AS they download instead of waiting for
+        # every page first. The scraper (which owns all the anti-block pacing) calls
+        # our on_page hook with each finished page; a single consumer batches them
+        # onto a worker thread and pushes live per-category counts. So findings
+        # appear on the loading page while pages are still downloading, and the
+        # CPU-bound extraction overlaps the (rate-limited, mostly-idle) network wait.
+        cat_set = set(categories) if categories else None
+        accum = new_accum()
+        page_seq: dict = {}
+        _q: asyncio.Queue = asyncio.Queue()
+        _DONE = object()
+
+        async def _on_page(p):
+            await _q.put(p)
+
+        scrape_task = asyncio.ensure_future(scrape_snapshots(selected, job_id, on_page=_on_page))
+        scrape_task.add_done_callback(lambda _t: _q.put_nowait(_DONE))
+
+        def _process_batch(batch):
+            for p in batch:
+                process_page(p, domain, accum, cat_set, page_seq)
+
+        batch: list = []
+        ex_seen = 0
+
+        async def _flush():
+            nonlocal ex_seen
+            if not batch:
+                return
+            chunk, batch[:] = batch[:], []
+            await asyncio.to_thread(_process_batch, chunk)
+            ex_seen += len(chunk)
+            live_counts = {c: len(accum[c]) for c in ALL_CATEGORIES if accum[c]}
+            # Don't fight the scraper's step/progress during the overlap; just
+            # stream the live counts so findings fill in as pages arrive.
+            await store.update_job(job_id, live_counts=live_counts)
+
+        while True:
+            item = await _q.get()
+            if item is _DONE:
+                break
+            if item.get("html") is not None:
+                batch.append(item)
+            if len(batch) >= 25:
+                await _flush()
+        await _flush()  # tail
+
+        pages = scrape_task.result()   # full list (incl. failed pages) for meta/FTS
 
         pages_scraped = sum(1 for p in pages if p["html"] is not None)
         pages_failed = len(pages) - pages_scraped
@@ -269,38 +317,10 @@ async def _scan_pipeline(
         # can explain an empty scan honestly instead of blaming "archive gaps".
         pages_blocked = sum(1 for p in pages if p.get("error") == "blocked")
 
-        # Phase 4: Extraction — STREAMED.
-        # Extraction is CPU-bound (regex + selectolax over every page). It runs in
-        # batches on a worker thread so (a) the event loop stays responsive — a big
-        # scan used to freeze health checks and every other user's polling for
-        # minutes — and (b) live per-category counts are pushed between batches, so
-        # findings visibly fill in on the loading page as they're extracted, no
-        # refresh needed.
-        await store.update_job(job_id, step="Extracting OSINT data...", progress=75)
-        cat_set = set(categories) if categories else None
-        accum = new_accum()
-        mine_subdomains(pages, domain, accum, cat_set)   # cheap, from the CDX URLs
-        html_pages = [p for p in pages if p.get("html") is not None]
-        total_ex = len(html_pages) or 1
-        page_seq: dict = {}
-
-        def _process_batch(batch):
-            for p in batch:
-                process_page(p, domain, accum, cat_set, page_seq)
-
-        BATCH = 25
-        ex_done = 0
-        for i in range(0, len(html_pages), BATCH):
-            batch = html_pages[i:i + BATCH]
-            await asyncio.to_thread(_process_batch, batch)
-            ex_done += len(batch)
-            # 75 -> 96% across extraction; live counts of non-empty categories.
-            prog = 75 + int((ex_done / total_ex) * 21)
-            live_counts = {c: len(accum[c]) for c in ALL_CATEGORIES if accum[c]}
-            await store.update_job(
-                job_id, step=f"Extracting {ex_done}/{total_ex}",
-                progress=prog, live_counts=live_counts,
-            )
+        # Finalize: subdomains from the CDX URLs (cheap), then convert the
+        # accumulator to sorted result lists off the event loop.
+        await store.update_job(job_id, step="Extracting OSINT data...", progress=94)
+        mine_subdomains(pages, domain, accum, cat_set)
         results = await asyncio.to_thread(finalize_accum, accum, categories)
         merge_analytics_ids(results)
         # Best-effort favicon hashing (breaker-gated, capped). Never fatal.

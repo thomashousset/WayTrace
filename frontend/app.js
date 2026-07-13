@@ -989,7 +989,6 @@ function renderPublicScan(job) {
       pctTxt = p + '%';
       fillPct = p;
       _runStats = null;   // the page-rate ETA no longer applies
-      liveHTML = _liveFindingsHTML(job.live_counts);
     } else {
       const m = (job.step || '').match(/(\d+)\s*\/\s*(\d+)/);
       if (m) {
@@ -1016,6 +1015,9 @@ function renderPublicScan(job) {
         stepTxt = job.step || t('Preparing scan…');
       }
     }
+    // Findings stream in as pages download (extraction overlaps the scrape), so
+    // show them from whenever the backend starts pushing live counts.
+    liveHTML = _liveFindingsHTML(job.live_counts);
     // Build the running scaffold ONCE, then patch only the dynamic text/width on
     // every poll. Rebuilding innerHTML each tick recreated the spinner node (its
     // rotation restarted from 0deg -> the visible stutter) and reset the bar's

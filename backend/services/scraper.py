@@ -107,8 +107,14 @@ def _orig_response_headers(headers) -> dict:
 
 
 async def scrape_snapshots(
-    snapshots: list[dict], job_id: str
+    snapshots: list[dict], job_id: str, on_page=None
 ) -> list[dict]:
+    """Scrape the selected archived pages.
+
+    `on_page`, if given, is an async callback invoked with each page result as it
+    completes (best-effort, wrapped so it can never affect scraping). It lets the
+    caller start extraction WHILE pages are still downloading (overlap), for a
+    live-findings scan. It touches none of the anti-block logic below."""
     semaphore = asyncio.Semaphore(settings.max_concurrent_scrapes)
     timeout = aiohttp.ClientTimeout(total=settings.archive_request_timeout)
     connector = aiohttp.TCPConnector(
@@ -336,6 +342,14 @@ async def scrape_snapshots(
         await asyncio.sleep(
             random.uniform(_delay_state["min"], _delay_state["max"])
         )
+
+        # Hand the finished page to the caller (overlapped extraction). Best-effort:
+        # a failing callback must never break the scrape.
+        if on_page is not None:
+            try:
+                await on_page(result)
+            except Exception as exc:
+                logger.debug("on_page callback raised (ignored): {}", exc)
 
         return result
 
