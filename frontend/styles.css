@@ -316,10 +316,11 @@
       border-color: var(--border-hover);
       box-shadow: 0 1px 12px rgba(0,0,0,.18);
     }
-    /* Focus = no visual state change on the pill. The blinking caret
-       inside the input is the only feedback. */
+    /* Keyboard focus on the input must be visible (WCAG 2.4.7): a caret alone is
+       not enough. Show a clear accent halo on the whole search pill. */
     .home-search:focus-within {
-      /* intentionally empty. caret is the affordance */
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
     }
     .home-search-input {
       flex: 1; min-width: 0;
@@ -360,13 +361,13 @@
       box-shadow: inset 0 2px 3px rgba(0,0,0,.22);
       transform: translateY(0);
     }
-    /* Scan button: no focus state change either. Rest shape only. */
-    /* Keep the button minimal on focus. the parent form already shows a halo.
-       Kill outline on both keyboard (:focus-visible) and mouse (:focus) to avoid
-       a second ring fighting the form halo. */
-    .home-search-btn:focus,
+    /* Mouse click: no ring. Keyboard focus (WCAG 2.4.7): a clear ring on the
+       primary action — it must never be invisible to keyboard users. */
+    .home-search-btn:focus { outline: none; }
     .home-search-btn:focus-visible {
-      outline: none;
+      outline: 2px solid var(--text-bright);
+      outline-offset: 2px;
+      box-shadow: 0 0 0 4px var(--accent-soft);
     }
     .home-tagline {
       font-size: clamp(15px, 2.2vw, 19px);
@@ -3385,6 +3386,13 @@
     .feed-empty-title { font-size: 15px; font-weight: 600; color: var(--text-dim); margin-bottom: 5px; text-align: center; }
     .feed-empty-sub { font-size: 13px; color: var(--text-faint); max-width: 360px; line-height: 1.5; margin: 0 auto; }
     .pub-empty { padding: 48px 24px; text-align: center; color: var(--text-faint); font-size: 13px; }
+    .feed-error {
+      display: flex; flex-direction: column; align-items: center; text-align: center;
+      gap: 10px; padding: 40px 24px 48px;
+    }
+    .feed-error-title { font-size: 15px; font-weight: 600; color: var(--text-dim); }
+    .feed-error-sub { font-size: 13px; color: var(--text-faint); }
+    .feed-error .btn { margin-top: 4px; }
 
     /* Privacy + share-link card shown under the queued/running scan state.
        Tells the user the scan is private by default and gives them a one-tap

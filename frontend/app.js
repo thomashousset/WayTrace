@@ -260,6 +260,10 @@ const I18N = {
     'Favicon over time': 'Favicon dans le temps',
     'Tick categories or pivots on the left to build a timeline.': 'Cochez des catégories ou des pivots à gauche pour construire une frise.',
     'Copy': 'Copier',
+    "Couldn't load recent scans": 'Impossible de charger les scans récents',
+    'Check your connection and try again.': 'Vérifiez votre connexion et réessayez.',
+    'Retry': 'Réessayer',
+    'Scan complete': 'Scan terminé',
     'Filter extracted results': 'Filtrer les résultats extraits',
     'Search the archived pages': 'Chercher dans les pages archivées',
     'Copied': 'Copié',
@@ -952,6 +956,7 @@ function renderPublicScan(job) {
   $('public-scan-domain').textContent = job.domain || '';
   const meta = $('public-scan-meta');
   const status = job.status;
+  const prevStatus = publicScanLastStatus;   // to detect the running -> completed moment
   publicScanLastStatus = status;
   const body = $('public-scan-body');
   const actions = $('public-scan-actions');
@@ -1066,6 +1071,19 @@ function renderPublicScan(job) {
     if (body) body.innerHTML = '';
     if (meta) meta.innerHTML = '';
     renderV2InLegacyView(job);
+    // Completion moment: if this scan was running in this session, a brief,
+    // neutral toast on arrival ("Scan complete · N findings, M categories").
+    if (prevStatus === 'running' || prevStatus === 'queued') {
+      try {
+        const res = job.results || {};
+        let nf = 0, nc = 0;
+        for (const k in res) {
+          if (k === 'highlights' || !Array.isArray(res[k])) continue;
+          if (res[k].length) { nf += res[k].length; nc += 1; }
+        }
+        showToast(`${t('Scan complete')} · ${nf} ${t('findings')} · ${nc} ${t('categories')}`);
+      } catch (_) {}
+    }
     return;
   } else if (status === 'failed' || status === 'cancelled') {
     actions.style.display = 'none';
@@ -1409,6 +1427,18 @@ async function cancelPublicScan() {
   location.hash = '#/';
 }
 
+function _feedError(listEl, emptyEl) {
+  // A failed request is NOT the same as "no scans yet" — show an error with a
+  // retry, never the empty state (which would misrepresent a network problem).
+  emptyEl.style.display = 'none';
+  listEl.innerHTML =
+    `<div class="feed-error">
+      <div class="feed-error-title">${esc(t("Couldn't load recent scans"))}</div>
+      <div class="feed-error-sub">${esc(t('Check your connection and try again.'))}</div>
+      <button class="btn" onclick="loadHomeFeed()">${esc(t('Retry'))}</button>
+    </div>`;
+}
+
 async function loadHomeFeed() {
   const listEl = $('home-feed-list');
   const emptyEl = $('home-feed-empty');
@@ -1416,14 +1446,13 @@ async function loadHomeFeed() {
   try {
     const resp = await fetch(API + '/api/feed?limit=20');
     if (!resp.ok) {
-      listEl.innerHTML = '';
-      emptyEl.style.display = 'flex';
+      _feedError(listEl, emptyEl);
       return;
     }
     const data = await resp.json();
     if (!data.items || data.items.length === 0) {
       listEl.innerHTML = '';
-      emptyEl.style.display = 'flex';
+      emptyEl.style.display = 'flex';   // genuine empty 200: "no scans yet"
       return;
     }
     emptyEl.style.display = 'none';
@@ -1440,8 +1469,7 @@ async function loadHomeFeed() {
       `;
     }).join('');
   } catch (e) {
-    listEl.innerHTML = '';
-    emptyEl.style.display = 'flex';
+    _feedError(listEl, emptyEl);
   }
 }
 
