@@ -46,7 +46,7 @@ See [CHANGELOG.md](CHANGELOG.md) for the full history (v1.0 → v1.5).
 - [The guided scan](#the-guided-scan)
 - [Smart snapshot selection](#smart-snapshot-selection)
 - [Extraction categories](#extraction-categories)
-- [Findings & severity](#findings--severity)
+- [Findings & provenance](#findings--provenance)
 - [Results interface](#results-interface)
 - [Sharing & the public feed](#sharing--the-public-feed)
 - [Quick start](#quick-start)
@@ -100,7 +100,6 @@ See [CHANGELOG.md](CHANGELOG.md) for the full history (v1.0 → v1.5).
 |  Parse with selectolax (C-based, ~10x faster than BeautifulSoup)     |
 |  Run 43 extraction categories (regex + DOM + JSON-LD)               |
 |  Aggregate first_seen / last_seen / occurrences, stamp source page   |
-|  Rank findings by severity (LEAK > PIVOT > CONTEXT > BACKGROUND)     |
 +--------------------------------+------------------------------------+
                                  |
                                  v
@@ -183,18 +182,17 @@ Every finding also records the **source page** it came from, so co-occurring ent
 
 ---
 
-## Findings & severity
+## Findings & provenance
 
-WayTrace ranks every result into four tiers and surfaces the important ones automatically:
+WayTrace does **not** tell you what's "important" — it shows you the evidence and lets you judge. Every finding carries:
 
-| Tier | Meaning | Examples |
-|------|---------|----------|
-| **LEAK** | Sensitive exposure the owner didn't mean to publish | live API keys, exposed cloud buckets, connection strings with credentials, JWTs, internal IPs, directory listings |
-| **PIVOT** | A lead worth chasing | named mailboxes, subdomains, admin/auth endpoints, persons, GitHub repos, business IDs, analytics & tracker IDs, favicon hashes |
-| **CONTEXT** | Useful background | tech stack, hosting/CDN, HTTP headers, page titles & meta tags, organisations, linked documents |
-| **BACKGROUND** | Listed for completeness, never highlighted | outgoing links, social profiles, asset files, HTML comments |
+| Field | What it tells you |
+|-------|-------------------|
+| **first seen / last seen** | when the value appeared in the archive and when it was last present (so you see what's live vs. gone) |
+| **occurrences** | how many archived pages it showed up on |
+| **source page** | the exact Wayback capture it came from — one click to verify |
 
-LEAK and PIVOT are promoted to the top of the results; CONTEXT and BACKGROUND stay one click away.
+Categories with findings are surfaced first; the full 43-category scope (including the empty ones) stays visible for transparency, so a clean result reads as "we looked and found nothing", not "we didn't look".
 
 ---
 

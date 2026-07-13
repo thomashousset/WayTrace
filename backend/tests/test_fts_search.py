@@ -75,6 +75,27 @@ async def test_empty_query_returns_nothing():
     assert await search_scan_pages("s5", "   ") == []
 
 
+@pytest.mark.anyio
+async def test_punctuation_queries_do_not_throw():
+    # A raw email / URL / hyphen / bare operator is invalid FTS5 MATCH syntax and
+    # used to raise a 'malformed MATCH' error ("Search failed" in the UI). These
+    # must all run and, where the tokens are present, match.
+    await index_scan_pages("s6", PAGES)
+    for q in ["admin@x.com", "http://x.com/careers", "cyber-sécurité", 'careers "', "AND", "café * ("]:
+        res = await search_scan_pages("s6", q)   # must not raise
+        assert isinstance(res, list)
+    # The email's tokens (admin, x, com) appear on page 1 -> a hit.
+    assert any(r["url"] == "http://x.com/" for r in await search_scan_pages("s6", "admin@x.com"))
+
+
+@pytest.mark.anyio
+async def test_prefix_search_as_you_type():
+    await index_scan_pages("s7", PAGES)
+    # "care" should already match "Careers" via the trailing-token prefix.
+    res = await search_scan_pages("s7", "care")
+    assert any(r["url"].endswith("/careers") for r in res)
+
+
 @pytest_asyncio.fixture
 async def client():
     transport = ASGITransport(app=app)

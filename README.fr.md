@@ -46,7 +46,7 @@ Voir [CHANGELOG.md](CHANGELOG.md) pour l'historique complet (v1.0 → v1.5).
 - [Le scan guidé](#le-scan-guidé)
 - [Sélection intelligente des snapshots](#sélection-intelligente-des-snapshots)
 - [Catégories d'extraction](#catégories-dextraction)
-- [Résultats et sévérité](#résultats-et-sévérité)
+- [Résultats et provenance](#résultats-et-provenance)
 - [Interface des résultats](#interface-des-résultats)
 - [Partage et flux public](#partage-et-flux-public)
 - [Démarrage rapide](#démarrage-rapide)
@@ -100,7 +100,6 @@ Voir [CHANGELOG.md](CHANGELOG.md) pour l'historique complet (v1.0 → v1.5).
 |  Parse avec selectolax (en C, ~10x plus rapide que BeautifulSoup)    |
 |  Exécute 43 catégories d'extraction (regex + DOM + JSON-LD)         |
 |  Agrège first_seen / last_seen / occurrences, marque la page source  |
-|  Classe par sévérité (LEAK > PIVOT > CONTEXT > BACKGROUND)           |
 +--------------------------------+------------------------------------+
                                  |
                                  v
@@ -183,18 +182,17 @@ Chaque résultat enregistre aussi la **page source** dont il provient, pour pivo
 
 ---
 
-## Résultats et sévérité
+## Résultats et provenance
 
-WayTrace classe chaque résultat en quatre niveaux et fait remonter les importants automatiquement :
+WayTrace ne vous dit **pas** ce qui est « important » : il montre la preuve et vous laissez juger. Chaque résultat porte :
 
-| Niveau | Sens | Exemples |
-|--------|------|----------|
-| **LEAK** | Exposition sensible non destinée à la publication | clés API actives, buckets cloud exposés, chaînes de connexion avec identifiants, JWT, IP internes, listings de répertoires |
-| **PIVOT** | Une piste à creuser | boîtes nommées, sous-domaines, endpoints admin/auth, personnes, dépôts GitHub, identifiants d'entreprise, IDs analytics & trackers, hash de favicons |
-| **CONTEXT** | Contexte utile | stack technique, hébergement/CDN, en-têtes HTTP, titres & balises meta, organisations, documents liés |
-| **BACKGROUND** | Listé par exhaustivité, jamais mis en avant | liens sortants, profils sociaux, fichiers d'assets, commentaires HTML |
+| Champ | Ce qu'il vous dit |
+|-------|-------------------|
+| **vu de / à** | quand la valeur est apparue dans l'archive et quand elle était présente pour la dernière fois (ce qui est encore là vs disparu) |
+| **occurrences** | sur combien de pages archivées elle apparaît |
+| **page source** | la capture Wayback exacte d'où elle vient, vérifiable en un clic |
 
-LEAK et PIVOT sont promus en haut des résultats ; CONTEXT et BACKGROUND restent à un clic.
+Les catégories avec résultats remontent en premier ; le périmètre complet des 43 catégories (y compris les vides) reste visible pour la transparence, pour qu'un résultat propre se lise « on a cherché et rien trouvé », pas « on n'a pas cherché ».
 
 ---
 

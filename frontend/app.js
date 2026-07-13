@@ -258,6 +258,8 @@ const I18N = {
     'disappeared': 'disparu',
     'last capture': 'dernière capture',
     'Favicon over time': 'Favicon dans le temps',
+    'Tick categories or pivots on the left to build a timeline.': 'Cochez des catégories ou des pivots à gauche pour construire une frise.',
+    'Copy': 'Copier',
     'Filter extracted results': 'Filtrer les résultats extraits',
     'Search the archived pages': 'Chercher dans les pages archivées',
     'Copied': 'Copié',
@@ -4078,6 +4080,20 @@ function _r2Bounds() {
   if (!isFinite(lo)) { lo = 0; hi = 0; }
   _r2.lo = lo; _r2.hi = hi;
 }
+
+// Set the timeline bounds from a SPECIFIC set of findings, so the axis always
+// spans exactly what's shown (an open category, or the checked lanes) instead of
+// the whole scan — no dead years. Called right before rendering each timeline.
+function _r2SetBoundsFrom(findings) {
+  let lo = Infinity, hi = -Infinity;
+  for (const f of findings) {
+    const a = _r2Month(f.first_seen), b = _r2Month(f.last_seen);
+    if (a != null) { lo = Math.min(lo, a); hi = Math.max(hi, a); }
+    if (b != null) { hi = Math.max(hi, b); lo = Math.min(lo, b); }
+  }
+  if (!isFinite(lo)) { lo = _r2.lo; hi = _r2.hi; }   // fallback to global
+  _r2.lo = lo; _r2.hi = hi;
+}
 function _r2Pct(mi) {                        // month index -> 0..100 across the span
   const span = Math.max(1, _r2.hi - _r2.lo);
   return Math.max(0, Math.min(100, ((mi - _r2.lo) / span) * 100));
@@ -4183,24 +4199,39 @@ function _r2SetHeaderFavicon(domain) {
 
 /* Candidate pivots for the Activity view: individual high-value values whose
    timeline is worth overlaying (subdomains, trackers, favicons, people). */
+// Candidate pivots for the Activity view: individual high-value values worth
+// overlaying on the timeline. Pulls generously from every pivot-worthy category
+// so the list is rich (deduped by key, capped so the rail stays usable).
 function _r2Pivots() {
   const out = [];
-  const take = (cat, n) => (_r2.byCat.get(cat) || []).slice(0, n).forEach(f =>
-    out.push({ key: cat + '::' + f.value, label: f.value, cat, f }));
-  take('subdomains', 4);
-  take('analytics_trackers', 3);
-  take('favicons', 2);
-  take('persons', 3);
-  take('technologies', 2);
-  return out;
+  const seen = new Set();
+  const take = (cat, n) => (_r2.byCat.get(cat) || []).slice(0, n).forEach(f => {
+    const key = cat + '::' + f.value;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({ key, label: f.value, cat, f });
+  });
+  take('subdomains', 12);
+  take('persons', 10);
+  take('analytics_trackers', 8);
+  take('emails', 8);
+  take('technologies', 6);
+  take('favicons', 6);
+  take('organizations', 5);
+  take('github_repos', 5);
+  take('social_profiles', 5);
+  take('hosting', 4);
+  take('api_keys', 4);
+  take('endpoints', 4);
+  return out.slice(0, 60);
 }
 
 function report2SetView(v) { report2State.view = v; report2Render(); }
 function report2OpenCat(c) { report2State.openCat = c; report2State.filter = ''; report2State.view = 'cats'; report2Render(); }
 function report2ToggleEmpty() { report2State.showEmpty = !report2State.showEmpty; report2Render(); }
 function report2Filter(v) { report2State.filter = v || ''; report2RenderMain(); }
-function report2ToggleCat(c) { const s = report2State.checkedCats; s.has(c) ? s.delete(c) : s.add(c); report2RenderMain(); }
-function report2TogglePivot(k) { const s = report2State.checkedPivots; s.has(k) ? s.delete(k) : s.add(k); report2RenderMain(); }
+function report2ToggleCat(c) { const s = report2State.checkedCats; s.has(c) ? s.delete(c) : s.add(c); report2Render(); }
+function report2TogglePivot(k) { const s = report2State.checkedPivots; s.has(k) ? s.delete(k) : s.add(k); report2Render(); }
 
 function report2Render() {
   // Sync the view toggle buttons.
@@ -4277,8 +4308,12 @@ function _r2Rows(list) {
       const span = (f.first_seen || f.last_seen)
         ? `${esc(f.first_seen || '?')} <span class="r2-arw">→</span> ${_r2Month(f.last_seen) != null && _r2Month(f.last_seen) >= _r2.hi ? `<span class="r2-now">${esc(f.last_seen)}</span>` : `<span class="r2-end">${esc(f.last_seen || '?')}</span>`}`
         : '<span class="r2-end">—</span>';
+      const jsVal = esc(f.value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
       return `<div class="r2-row">
-        <span class="r2-val" title="${esc(f.value)}">${esc(f.value)} ${_r2Chip(f)}<span class="r2-copy" onclick="report2Copy(event,'${esc(f.value).replace(/'/g, "\\'")}')">⧉</span></span>
+        <span class="r2-val">
+          <button class="r2-copy" title="${esc(t('Copy'))}: ${esc(f.value)}" onclick="report2Copy(event,'${jsVal}')" aria-label="${esc(t('Copy'))}">⧉</button>
+          <span class="r2-val-text" title="${esc(f.value)}">${esc(f.value)}</span>${_r2Chip(f)}
+        </span>
         <span class="r2-occ"><b>${f.occurrences || 1}</b></span>
         <span class="r2-span">${span}</span>
         <span class="r2-src">${makeSourceLink(f)}</span>
@@ -4307,6 +4342,8 @@ function report2CatBlock(cat, withActivity, isEmpty) {
 }
 
 function report2CatActivity(cat, list) {
+  // Axis spans exactly this category's findings (no dead years).
+  _r2SetBoundsFrom(list);
   const lanes = list.slice(0, 24).map(f => _r2Lane(f.value, f.first_seen, f.last_seen, { faded: _r2Month(f.last_seen) != null && _r2Month(f.last_seen) < _r2.hi })).join('');
   if (!lanes.trim()) return '';
   return `<div class="r2-act">
@@ -4317,28 +4354,56 @@ function report2CatActivity(cat, list) {
 }
 
 function report2ActivityHTML() {
-  // lanes for checked categories (as a category-level span) + checked pivots
-  const catLanes = _r2.found.filter(c => report2State.checkedCats.has(c)).map(c => {
+  // Build lane descriptors first (checked categories as a category-level span,
+  // checked pivots as their own finding span), so we can set the axis bounds to
+  // exactly the union of what's shown before rendering — the timeline changes
+  // with every tick, never showing dead years.
+  const lanes = [];       // {label, first, last, pivot}
+  const shownFindings = [];
+  for (const c of _r2.found) {
+    if (!report2State.checkedCats.has(c)) continue;
     const arr = _r2.byCat.get(c);
     let lo = Infinity, hi = -Infinity;
-    for (const f of arr) { const a = _r2Month(f.first_seen), b = _r2Month(f.last_seen); if (a != null) lo = Math.min(lo, a); if (b != null) hi = Math.max(hi, b); if (a != null) hi = Math.max(hi, a); }
-    if (!isFinite(lo)) return '';
-    const fs = _r2.lo === lo ? arr[0].first_seen : null;
-    return _r2Lane(catLabel(c), firstMonthStr(lo), firstMonthStr(hi), {});
-  }).join('');
+    for (const f of arr) {
+      const a = _r2Month(f.first_seen), b = _r2Month(f.last_seen);
+      if (a != null) { lo = Math.min(lo, a); hi = Math.max(hi, a); }
+      if (b != null) { hi = Math.max(hi, b); lo = Math.min(lo, b); }
+      shownFindings.push(f);
+    }
+    if (isFinite(lo)) lanes.push({ label: catLabel(c), first: firstMonthStr(lo), last: firstMonthStr(hi), pivot: false });
+  }
   const pivots = _r2Pivots();
-  const pvLanes = pivots.filter(p => report2State.checkedPivots.has(p.key)).map(p =>
-    _r2Lane(p.label, p.f.first_seen, p.f.last_seen, { pivot: true })).join('');
+  for (const p of pivots) {
+    if (!report2State.checkedPivots.has(p.key)) continue;
+    lanes.push({ label: p.label, first: p.f.first_seen, last: p.f.last_seen, pivot: true });
+    shownFindings.push(p.f);
+  }
 
   const nCat = report2State.checkedCats.size, nPv = report2State.checkedPivots.size;
-  const composer = `<div class="r2-composer">
+  if (!lanes.length) {
+    return `<div class="r2-composer">
+      <div class="r2-ch"><span class="i">▚</span> <b>${t('Composed activity')}</b></div>
+      <div class="r2-empty-compose">${t('Tick categories or pivots on the left to build a timeline.')}</div>
+    </div>`;
+  }
+
+  _r2SetBoundsFrom(shownFindings);   // axis spans exactly the checked lanes
+  // Dedupe for the change feed: a value can be both a checked category finding
+  // and a checked pivot, which would list its appeared/disappeared event twice.
+  const feedSeen = new Set();
+  const feedFindings = shownFindings.filter(f => {
+    const k = f.category + '::' + f.value;
+    if (feedSeen.has(k)) return false;
+    feedSeen.add(k); return true;
+  });
+  const laneHTML = lanes.map(l => _r2Lane(l.label, l.first, l.last, { pivot: l.pivot })).join('');
+  return `<div class="r2-composer">
     <div class="r2-ch"><span class="i">▚</span> <b>${t('Composed activity')}</b> — ${nCat} ${t('categories')} + ${nPv} ${t('pivots')}<span class="r2-hint">${t('untick to remove a lane')}</span></div>
-    <div class="r2-tl"><div class="r2-years">${_r2Years()}</div>${catLanes}${pvLanes || ''}</div>
+    <div class="r2-tl"><div class="r2-years">${_r2Years()}</div>${laneHTML}</div>
     <div class="r2-evleg"><span><i class="up"></i> ${t('category')}</span><span><i class="pv"></i> ${t('pivot')}</span><span><i class="down"></i> ${t('disappeared')}</span></div>
     ${report2Favicons()}
-    ${_r2Feed(_r2.findings, 8)}
+    ${_r2Feed(feedFindings, 8)}
   </div>`;
-  return composer;
 }
 
 function firstMonthStr(mi) {                 // month index -> "YYYY-MM"

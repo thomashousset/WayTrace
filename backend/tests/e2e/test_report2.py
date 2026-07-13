@@ -103,3 +103,109 @@ def test_filter_narrows_the_open_category(live_server, page):
     page.fill("#r2-filter", "rh")
     assert page.locator("#r2-main .r2-row", has_text="rh@oteria.fr").count() >= 1
     assert page.locator("#r2-main .r2-row", has_text="contact@oteria.fr").count() == 0
+
+
+# --- regression tests for reported UI bugs (fixed) ---
+
+LONG_VAL = "https://cdn.oteria.fr/assets/js/vendor/analytics.bundle.min.js?v=8f3a9c2e1b7d4f60a1c2e3b4d5f6a7b8&ts=1699999999"
+
+# Two categories with DISJOINT date ranges, to prove the timeline axis adapts.
+DATED = [
+    {"id": 1, "category": "emails", "value": "old@x.com", "first_seen": "2005-01", "last_seen": "2008-06", "occurrences": 5, "metadata": {}},
+    {"id": 2, "category": "subdomains", "value": "new.x.com", "first_seen": "2021-01", "last_seen": "2024-06", "occurrences": 9, "metadata": {}},
+    {"id": 3, "category": "js_urls", "value": LONG_VAL, "first_seen": "2019-05", "last_seen": "2020-02", "occurrences": 3, "metadata": {}},
+]
+
+
+def _open_with(page, live_server, findings):
+    page.goto(live_server + "/", wait_until="networkidle")
+    page.evaluate(
+        """([findings]) => {
+            if (window.setLang) window.setLang('en');
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.getElementById('view-results').classList.add('active');
+            window.renderReport2({name: 'x.com'}, findings, {url_id: 't', domain: 'x.com'});
+        }""",
+        [findings],
+    )
+
+
+def test_long_value_shown_in_full_not_truncated(live_server, page):
+    _open_with(page, live_server, DATED)
+    page.locator(".r2-rlink", has_text="JavaScript URLs").first.click()
+    # The full long URL is present in the DOM (no ellipsis truncation of content).
+    txt = page.locator("#r2-main .r2-val-text").first.inner_text()
+    assert LONG_VAL in txt
+
+
+def test_copy_button_is_reachable_on_a_long_row(live_server, page):
+    _open_with(page, live_server, DATED)
+    page.locator(".r2-rlink", has_text="JavaScript URLs").first.click()
+    btn = page.locator("#r2-main .r2-row", has_text="analytics.bundle").locator(".r2-copy")
+    assert btn.count() == 1
+    box = btn.first.bounding_box()
+    main_box = page.locator("#r2-main").bounding_box()
+    # The copy button sits within the visible main column (not clipped off-row).
+    assert box is not None and box["x"] >= main_box["x"] - 1
+    btn.first.click()   # must not throw
+
+
+def test_per_category_timeline_axis_adapts_to_that_category(live_server, page):
+    _open_with(page, live_server, DATED)
+    # Open the 2005-2008 emails category: its axis years should be around 2005-2008,
+    # NOT the global 2005-2024 span.
+    page.locator(".r2-rlink", has_text="Emails").first.click()
+    years = page.locator("#r2-main .r2-act .r2-years").first.inner_text()
+    assert "2005" in years
+    assert "2021" not in years and "2024" not in years
+
+
+def test_activity_checkbox_state_updates_in_the_rail(live_server, page):
+    _open_report(page, live_server)
+    page.locator("#r2-vbtn-activity").click()
+    first = page.locator("#r2-rail .r2-chk").first
+    was_on = "on" in (first.get_attribute("class") or "")
+    first.click()
+    now_on = "on" in (page.locator("#r2-rail .r2-chk").first.get_attribute("class") or "")
+    assert now_on != was_on, "rail checkbox visual did not update on toggle"
+
+
+def test_activity_offers_many_pivots(live_server, page):
+    _open_report(page, live_server)
+    page.locator("#r2-vbtn-activity").click()
+    # Rich pivot list (subdomains, persons, trackers, emails, tech, favicons…).
+    assert page.locator("#r2-rail .r2-chk.pv").count() >= 4
+
+
+def test_composed_feed_has_no_duplicate_events(live_server, page):
+    _open_report(page, live_server)
+    page.locator("#r2-vbtn-activity").click()
+    # staging.oteria.fr is both a subdomain (checked category) and a pivot; its
+    # events must appear once, not twice.
+    rows = page.locator(".r2-composer .r2-ev", has_text="staging.oteria.fr")
+    texts = rows.all_inner_texts()
+    assert len(texts) == len(set(texts)), f"duplicate change-feed events: {texts}"
+
+
+def test_unticking_everything_shows_a_compose_hint(live_server, page):
+    _open_report(page, live_server)
+    page.locator("#r2-vbtn-activity").click()
+    # Untick every checked category and pivot.
+    for _ in range(40):
+        on = page.locator("#r2-rail .r2-chk.on")
+        if on.count() == 0:
+            break
+        on.first.click()
+    assert page.locator(".r2-empty-compose").count() == 1
+
+
+def test_show_all_lists_every_found_category(live_server, page):
+    _open_report(page, live_server)
+    page.locator(".r2-rall", has_text="Show all").click()
+    # Every found category's detail block is rendered at once.
+    assert page.locator("#r2-main .r2-catblock").count() >= 4
+
+
+def test_copy_column_button_present_per_category(live_server, page):
+    _open_report(page, live_server)
+    assert page.locator("#r2-main .r2-copycol").count() >= 1

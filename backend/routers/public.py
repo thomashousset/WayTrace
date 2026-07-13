@@ -243,9 +243,12 @@ async def export_scan_json(url_id: str):
 
 @router.get("/s/{url_id}/export.csv")
 async def export_scan_csv(url_id: str):
-    """Flat CSV of every finding: category, value, dates, occurrences, severity."""
+    """Flat CSV of every finding: category, value, dates, occurrences, source.
+
+    Provenance-first (matches the neutral report): each row carries the archived
+    source page rather than a severity verdict."""
     # Imported here to avoid a circular import at module load.
-    from routers.analyze import _item_value, _item_severity
+    from routers.analyze import _item_value
     persisted = await get_job_by_url_id(url_id)
     if persisted is None:
         raise HTTPException(status_code=404, detail="Scan not found")
@@ -254,7 +257,7 @@ async def export_scan_csv(url_id: str):
     results = persisted.get("results") or {}
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["category", "value", "first_seen", "last_seen", "occurrences", "severity"])
+    writer.writerow(["category", "value", "first_seen", "last_seen", "occurrences", "source"])
     for cat in sorted(results):
         items = results[cat]
         if not isinstance(items, list):
@@ -269,7 +272,7 @@ async def export_scan_csv(url_id: str):
                 cat, value,
                 item.get("first_seen", ""), item.get("last_seen", ""),
                 item.get("occurrences", 1),
-                _item_severity(cat, item) or item.get("severity", ""),
+                item.get("source_url", ""),
             ])
     return Response(
         content=output.getvalue(), media_type="text/csv; charset=utf-8",

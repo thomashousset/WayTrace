@@ -227,7 +227,7 @@ async def test_export_csv_flattens_findings(client):
     assert r.status_code == 200
     assert "text/csv" in r.headers["content-type"]
     text = r.text
-    assert "category,value,first_seen,last_seen,occurrences,severity" in text
+    assert "category,value,first_seen,last_seen,occurrences,source" in text
     assert "emails,a@ex.com" in text
 
 

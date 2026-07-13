@@ -323,6 +323,17 @@ async def search_scan_pages(url_id: str, query: str, limit: int = 50) -> list[di
     q = (query or "").strip()
     if not q:
         return []
+    # Sanitize for FTS5 MATCH: a raw user query with punctuation (an email, a URL,
+    # a hyphen, quotes, or bare operators like AND/OR/NEAR) is invalid MATCH syntax
+    # and throws. Split on whitespace and wrap each token as a double-quoted string
+    # (escaping internal quotes) so any characters are treated as literal terms;
+    # a trailing "*" on the last token gives prefix search as the user types.
+    tokens = q.split()
+    if not tokens:
+        return []
+    parts = ['"' + tok.replace('"', '""') + '"' for tok in tokens]
+    parts[-1] = parts[-1] + "*"   # prefix-match the final (in-progress) token
+    match = " ".join(parts)
     limit = max(1, min(limit, 200))
     db = await get_db()
     try:
@@ -333,7 +344,7 @@ async def search_scan_pages(url_id: str, query: str, limit: int = 50) -> list[di
                 WHERE url_id = ? AND scan_pages_fts MATCH ?
                 ORDER BY bm25(scan_pages_fts)
                 LIMIT ?""",
-            (url_id, q, limit),
+            (url_id, match, limit),
         )
         rows = await cur.fetchall()
         return [
