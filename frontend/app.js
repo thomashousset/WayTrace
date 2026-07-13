@@ -58,6 +58,11 @@ const TIMELINE_CATEGORY_LABELS = {
 /* ===== HELPERS ===== */
 const $ = id => document.getElementById(id);
 const esc = s => { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; };
+// Attribute-safe escape: esc() only handles & < > (text context); inside a
+// double-quoted attribute a " in the value would end the attribute early, so
+// also entity-escape the quotes. Use for any value interpolated into an
+// attribute (title="...", etc.).
+const escAttr = s => esc(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
 function highlightMatch(value, query) {
   // Wrap case-insensitive matches of query in <mark>. Done on the raw string
@@ -239,6 +244,10 @@ const I18N = {
     'Search pivots…': 'Chercher un pivot…',
     'No pivot matches.': 'Aucun pivot correspondant.',
     'Tick a category above to pick pivots from its values.': 'Cochez une catégorie ci-dessus pour choisir des pivots parmi ses valeurs.',
+    'email, subdomain, tech…': 'email, sous-domaine, techno…',
+    'any word in the archived HTML…': "n'importe quel mot du HTML archivé…",
+    'Loading your scans…': 'Chargement de vos scans…',
+    'public': 'public',
     'value': 'valeur',
     'occ.': 'occ.',
     'seen': 'vu de → à',
@@ -1358,8 +1367,8 @@ function wireCopyShareLink() {
     const v = input ? input.value : '';
     try {
       await navigator.clipboard.writeText(v);
-      btn.textContent = 'Copied ✓';
-      setTimeout(() => { btn.textContent = 'Copy link'; }, 1400);
+      btn.textContent = t('Copied ✓');
+      setTimeout(() => { btn.textContent = t('Copy link'); }, 1400);
     } catch (_) {
       input?.select();
       flashMsg('Press Ctrl/Cmd-C to copy');
@@ -4370,11 +4379,10 @@ function _r2Rows(list) {
       const span = (f.first_seen || f.last_seen)
         ? `${esc(f.first_seen || '?')} <span class="r2-arw">→</span> ${_r2Month(f.last_seen) != null && _r2Month(f.last_seen) >= _r2.hi ? `<span class="r2-now">${esc(f.last_seen)}</span>` : `<span class="r2-end">${esc(f.last_seen || '?')}</span>`}`
         : '<span class="r2-end">·</span>';
-      const jsVal = esc(f.value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
       return `<div class="r2-row">
         <span class="r2-val">
-          <button class="r2-copy" title="${esc(t('Copy'))}: ${esc(f.value)}" onclick="report2Copy(event,'${jsVal}')" aria-label="${esc(t('Copy'))}">⧉</button>
-          <span class="r2-val-text" title="${esc(f.value)}">${esc(f.value)}</span>${_r2Chip(f)}
+          <button class="r2-copy" title="${escAttr(t('Copy') + ': ' + f.value)}" onclick="report2Copy(event)" aria-label="${escAttr(t('Copy'))}">⧉</button>
+          <span class="r2-val-text" title="${escAttr(f.value)}">${esc(f.value)}</span>${_r2Chip(f)}
         </span>
         <span class="r2-occ"><b>${f.occurrences || 1}</b></span>
         <span class="r2-span">${span}</span>
@@ -4493,9 +4501,13 @@ function report2Favicons() {
   return `<div class="r2-favstrip"><span class="r2-favlbl">${t('Favicon over time')}</span>${cells}</div>`;
 }
 
-function report2Copy(ev, val) {
+function report2Copy(ev) {
   ev.stopPropagation();
   const btn = ev.currentTarget;
+  // Read the value from the row's text cell so nothing has to be escaped into an
+  // inline onclick attribute (a value with a quote used to break the button).
+  const cell = btn.parentElement && btn.parentElement.querySelector('.r2-val-text');
+  const val = cell ? cell.textContent : '';
   navigator.clipboard.writeText(val).then(() => {
     showToast(t('Copied') + ' ✓');
     // In-place confirmation so it's obvious the click copied: the icon flips to a
@@ -4629,8 +4641,13 @@ let _ribbonDrag = null;
 let ribbonExpanded = false;
 
 function applyFilters() {
-  const sevFilter = $('filter-severity').value;
-  const searchFilter = ($('filter-search').value || '').toLowerCase();
+  // The old tabbed findings table was replaced by the two-view report (report2).
+  // Its filter controls no longer exist in the DOM, so bail out if they're gone
+  // (a leftover caller, e.g. the timeline drawer, must not crash on null.value).
+  const sevEl = $('filter-severity'), searchEl = $('filter-search');
+  if (!sevEl || !searchEl) return;
+  const sevFilter = sevEl.value;
+  const searchFilter = (searchEl.value || '').toLowerCase();
 
   // Reset pagination when the filter changes so the first page reflects the
   // new dataset.
@@ -6639,8 +6656,9 @@ document.addEventListener('keydown', (e) => {
 
   if (key === 't' && onResults) {
     e.preventDefault();
-    if (timelineOpen) closeTimeline();
-    else openTimeline();
+    // Switch the report to its Activity view (the old timeline drawer was
+    // replaced by report2's Activity view).
+    if (typeof report2SetView === 'function') report2SetView('activity');
     return;
   }
 
@@ -6654,19 +6672,9 @@ document.addEventListener('keydown', (e) => {
 
   if (key === '/' && onResults) {
     e.preventDefault();
-    const input = document.getElementById('filter-search');
+    // Focus the report's findings filter (severity filter/tiers were removed).
+    const input = document.getElementById('r2-filter');
     if (input) { input.focus(); input.select(); }
-    return;
-  }
-
-  if (onResults && /^[0-4]$/.test(key)) {
-    e.preventDefault();
-    const input = document.getElementById('filter-severity');
-    if (!input) return;
-    const map = { '0': '', '1': 'LEAK', '2': 'PIVOT', '3': 'CONTEXT', '4': 'BACKGROUND' };
-    input.value = map[key];
-    applyFilters();
-    renderSeverityStats(allFindings);
     return;
   }
 

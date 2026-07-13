@@ -256,3 +256,32 @@ def test_no_pivots_hint_when_no_category_ticked(live_server, page):
             break
         on.first.click()
     assert page.locator("#r2-rail .r2-pivnote").count() >= 1
+
+
+def test_value_with_a_quote_does_not_break_the_row(live_server, page):
+    # Regression: a finding value containing a double quote used to break the
+    # inline onclick attribute (esc() didn't escape quotes). The row must render
+    # intact and copy the exact value.
+    page.context.grant_permissions(["clipboard-read", "clipboard-write"])
+    tricky = 'title="Accueil" & <b>x</b>'
+    findings = [{"id": 1, "category": "html_titles", "value": tricky,
+                 "first_seen": "2020-01", "last_seen": "2020-06", "occurrences": 2, "metadata": {}}]
+    _open_with(page, live_server, findings)
+    row = page.locator("#r2-main .r2-row")
+    assert row.count() == 1
+    # The full value is shown verbatim (not truncated/broken by the quote).
+    assert page.locator("#r2-main .r2-val-text").inner_text() == tricky
+    # Copy still works and yields the exact value.
+    row.locator(".r2-copy").click()
+    assert page.evaluate("() => navigator.clipboard.readText()") == tricky
+
+
+def test_applyfilters_is_null_safe_without_the_old_table(live_server, page):
+    # Regression 4A: the old findings-table filter controls are gone; a leftover
+    # caller (timeline drawer) must not crash on null.value.
+    _open_report(page, live_server)
+    err = page.evaluate("""() => {
+        try { if (typeof applyFilters === 'function') applyFilters(); return null; }
+        catch (e) { return String(e); }
+    }""")
+    assert err is None, f"applyFilters threw: {err}"
