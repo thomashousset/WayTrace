@@ -3,7 +3,10 @@
 Public API (backward-compatible with the old single-file extractor):
     ALL_CATEGORIES, extract_page_safe, finalize_accum, compute_highlights, extract_all
 """
-from .finalize import ALL_CATEGORIES, extract_page_safe, finalize_accum, extract_all  # noqa: F401
+from .finalize import (  # noqa: F401
+    ALL_CATEGORIES, extract_page_safe, finalize_accum, extract_all,
+    new_accum, mine_subdomains, process_page,
+)
 from .highlights import compute_highlights  # noqa: F401
 
 # Re-export patterns and helpers for tests and external consumers

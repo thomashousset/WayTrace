@@ -597,77 +597,91 @@ def _mine_subdomains_from_snapshot_urls(
         )
 
 
-def extract_all(pages: list[dict], domain: str, categories: list[str] | None = None) -> dict:
-    accum = {cat: {} for cat in ALL_CATEGORIES}
-    cat_set = set(categories) if categories else None
+def new_accum() -> dict:
+    """A fresh, empty accumulator (one dict per category)."""
+    return {cat: {} for cat in ALL_CATEGORIES}
 
-    # Mine subdomains from the CDX URLs up front. Runs even when pages
-    # have html=None (failed scrapes still prove the host existed).
+
+def mine_subdomains(pages: list[dict], domain: str, accum: dict, cat_set: set | None) -> None:
+    """Mine subdomains from the CDX URLs up front. Runs even when pages have
+    html=None (a failed scrape still proves the host existed)."""
     if cat_set is None or "subdomains" in cat_set:
         _mine_subdomains_from_snapshot_urls(pages, domain, accum)
 
-    processed = 0
-    # Source-page provenance: record, for every value, the FIRST archived page
-    # it appeared on. update_entity never rewrites an existing key, so a per-
-    # page diff of new accum keys gives us exactly the page that introduced
-    # each value. Surfacing source_url + a stable per-page source_page_id on the
-    # item lets the UI link to the snapshot and group co-occurring findings.
-    page_seq: dict[str, int] = {}
-    for page in pages:
-        if page["html"] is None:
+
+def process_page(page: dict, domain: str, accum: dict, cat_set: set | None,
+                 page_seq: dict) -> bool:
+    """Extract ONE page into the shared accumulator (incremental). Same work the
+    extract_all loop does per page: category extraction, JWTs, directory
+    listings, and stamping source-page provenance onto newly-introduced values.
+    Returns True if the page contributed (html present and parsed)."""
+    if page["html"] is None:
+        return False
+    counts_before = {cat: len(accum[cat]) for cat in ALL_CATEGORIES}
+    processed = extract_page_safe(
+        page["html"], page["url"], page["timestamp"], domain, accum,
+        categories=cat_set,
+        response_headers=page.get("response_headers"),
+    )
+
+    # JWT extraction (searches both URL and HTML)
+    if cat_set is None or "jwt_tokens" in cat_set:
+        for jwt_info in extract_jwts(page["html"], page["url"], page["timestamp"]):
+            token = jwt_info["token"]
+            month = ts_to_month(page["timestamp"])
+            update_entity(
+                accum["jwt_tokens"], token, month,
+                {
+                    "token": token[:50] + "..." if len(token) > 50 else token,
+                    "claims": jwt_info["claims"],
+                    "sensitive_claims": list(jwt_info["sensitive_claims"].keys()),
+                    "source": jwt_info["source"],
+                },
+            )
+
+    # Directory listing detection
+    if cat_set is None or "directory_listings" in cat_set:
+        dirlist = detect_directory_listing(page["html"], page["url"], page["timestamp"])
+        if dirlist:
+            month = ts_to_month(page["timestamp"])
+            update_entity(
+                accum["directory_listings"], dirlist["path"], month,
+                {
+                    "path": dirlist["path"],
+                    "server_type": dirlist["server_type"],
+                    "url": dirlist["url"],
+                },
+            )
+
+    # Stamp the page provenance onto the keys this page introduced.
+    src_url = page.get("source_url") or (
+        f"https://web.archive.org/web/{page['timestamp']}/{page['url']}"
+    )
+    pid = page_seq.setdefault(src_url, len(page_seq) + 1)
+    for cat in ALL_CATEGORIES:
+        cat_dict = accum[cat]
+        before = counts_before.get(cat, 0)
+        if len(cat_dict) <= before:
             continue
-        counts_before = {cat: len(accum[cat]) for cat in ALL_CATEGORIES}
-        if extract_page_safe(
-            page["html"], page["url"], page["timestamp"], domain, accum,
-            categories=cat_set,
-            response_headers=page.get("response_headers"),
-        ):
+        for k in list(cat_dict.keys())[before:]:
+            entry = cat_dict[k]
+            if isinstance(entry, dict) and "source_url" not in entry:
+                entry["source_url"] = src_url
+                entry["source_page_id"] = pid
+    return bool(processed)
+
+
+def extract_all(pages: list[dict], domain: str, categories: list[str] | None = None) -> dict:
+    accum = new_accum()
+    cat_set = set(categories) if categories else None
+    mine_subdomains(pages, domain, accum, cat_set)
+    # Source-page provenance: update_entity never rewrites an existing key, so a
+    # per-page diff of new accum keys is exactly the page that introduced each
+    # value (see process_page).
+    page_seq: dict[str, int] = {}
+    processed = 0
+    for page in pages:
+        if process_page(page, domain, accum, cat_set, page_seq):
             processed += 1
-
-        # JWT extraction (searches both URL and HTML)
-        if cat_set is None or "jwt_tokens" in cat_set:
-            for jwt_info in extract_jwts(page["html"], page["url"], page["timestamp"]):
-                token = jwt_info["token"]
-                month = ts_to_month(page["timestamp"])
-                update_entity(
-                    accum["jwt_tokens"], token, month,
-                    {
-                        "token": token[:50] + "..." if len(token) > 50 else token,
-                        "claims": jwt_info["claims"],
-                        "sensitive_claims": list(jwt_info["sensitive_claims"].keys()),
-                        "source": jwt_info["source"],
-                    },
-                )
-
-        # Directory listing detection
-        if cat_set is None or "directory_listings" in cat_set:
-            dirlist = detect_directory_listing(page["html"], page["url"], page["timestamp"])
-            if dirlist:
-                month = ts_to_month(page["timestamp"])
-                update_entity(
-                    accum["directory_listings"], dirlist["path"], month,
-                    {
-                        "path": dirlist["path"],
-                        "server_type": dirlist["server_type"],
-                        "url": dirlist["url"],
-                    },
-                )
-
-        # Stamp the page provenance onto the keys this page introduced.
-        src_url = page.get("source_url") or (
-            f"https://web.archive.org/web/{page['timestamp']}/{page['url']}"
-        )
-        pid = page_seq.setdefault(src_url, len(page_seq) + 1)
-        for cat in ALL_CATEGORIES:
-            cat_dict = accum[cat]
-            before = counts_before.get(cat, 0)
-            if len(cat_dict) <= before:
-                continue
-            for k in list(cat_dict.keys())[before:]:
-                entry = cat_dict[k]
-                if isinstance(entry, dict) and "source_url" not in entry:
-                    entry["source_url"] = src_url
-                    entry["source_page_id"] = pid
-
     logger.info("Extracted data from {} pages for {}", processed, domain)
     return finalize_accum(accum, categories=categories)

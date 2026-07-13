@@ -226,6 +226,7 @@ const I18N = {
     'Fetching pages': 'Récupération des pages',
     'Extracting & cross-referencing': 'Extraction & recoupement',
     'Extracting & cross-referencing…': 'Extraction & recoupement…',
+    'findings so far': 'résultats trouvés',
     // Report 2.0
     'Categories': 'Catégories',
     'Activity': 'Activité',
@@ -931,6 +932,20 @@ function _updatePhases(root, idx) {
   });
 }
 
+// Live findings during the extraction phase: category chips with running counts,
+// most first. Neutral "found so far", not a success verdict.
+function _liveFindingsHTML(counts) {
+  if (!counts || typeof counts !== 'object') return '';
+  const entries = Object.entries(counts).filter(([, n]) => n > 0)
+    .sort((a, b) => b[1] - a[1]);
+  if (!entries.length) return '';
+  const total = entries.reduce((s, [, n]) => s + n, 0);
+  const chips = entries.slice(0, 14).map(([cat, n]) =>
+    `<span class="pub-live-chip"><b>${n}</b> ${esc(catLabel(cat))}</span>`).join('');
+  return `<div class="pub-live-head">${total} ${esc(t('findings so far'))}</div>`
+    + `<div class="pub-live-chips">${chips}</div>`;
+}
+
 function renderPublicScan(job) {
   $('public-scan-domain').textContent = job.domain || '';
   const meta = $('public-scan-meta');
@@ -962,39 +977,45 @@ function renderPublicScan(job) {
     meta.textContent = t('Scanning');
     // Percentage from REAL work: pages scraped X/N (the scrape phase is nearly
     // all the wall-clock time). No arbitrary phase floor. Kept monotonic.
-    const m = (job.step || '').match(/(\d+)\s*\/\s*(\d+)/);
-    const now = Date.now();
-    let stepTxt, pctTxt = '', etaTxt = '', fillPct = null;   // fillPct null => indeterminate
-    if (m) {
-      const done = +m[1], total = Math.max(+m[2], 1);
-      let p = Math.round((done / total) * 98);           // 0 -> 98%, real pages
-      if (!_runStats) _runStats = { pct: 0, rate: 0, lastDone: done, lastTime: now };
-      p = Math.min(99, Math.max(_runStats.pct, p));      // never regress, cap 99
-      _runStats.pct = p;
-      // Observed page rate (EMA) -> honest ETA.
-      const dt = (now - _runStats.lastTime) / 1000;
-      if (done > _runStats.lastDone && dt > 0.25) {
-        const inst = (done - _runStats.lastDone) / dt;
-        _runStats.rate = _runStats.rate ? _runStats.rate * 0.6 + inst * 0.4 : inst;
-        _runStats.lastDone = done; _runStats.lastTime = now;
-      }
-      const remaining = Math.max(0, total - done);
-      stepTxt = t('Scraped {done} / {total} archived pages').replace('{done}', done).replace('{total}', total);
-      pctTxt = p + '%';
-      etaTxt = (_runStats.rate > 0 && remaining > 0)
-        ? _fmtEtaSecs(Math.round(remaining / _runStats.rate)) : t('estimating…');
-      fillPct = p;
-    } else if (_scanPhaseIndex(job.step) === 3) {
-      // Extraction phase: CPU-bound cross-referencing with no measurable sub-
-      // progress. Show an honest indeterminate bar and a clear label instead of
-      // leaving the percentage stuck near 100%.
-      stepTxt = t('Extracting & cross-referencing…');
-      _runStats = null;   // the page-rate ETA no longer applies
-    } else {
-      // Setup phase (querying archive.org, selecting): honest indeterminate bar.
-      stepTxt = job.step || t('Preparing scan…');
-    }
     const phaseIdx = _scanPhaseIndex(job.step);
+    const now = Date.now();
+    let stepTxt, pctTxt = '', etaTxt = '', fillPct = null, liveHTML = '';   // fillPct null => indeterminate
+    if (phaseIdx === 3) {
+      // Extraction phase: findings stream in live via job.live_counts, and the
+      // bar is determinate from the backend's 75->96% progress. Check this BEFORE
+      // the "X/N" match because the step reads "Extracting X/N" too.
+      const p = Math.max(0, Math.min(99, Math.round(job.progress || 75)));
+      stepTxt = t('Extracting & cross-referencing…');
+      pctTxt = p + '%';
+      fillPct = p;
+      _runStats = null;   // the page-rate ETA no longer applies
+      liveHTML = _liveFindingsHTML(job.live_counts);
+    } else {
+      const m = (job.step || '').match(/(\d+)\s*\/\s*(\d+)/);
+      if (m) {
+        const done = +m[1], total = Math.max(+m[2], 1);
+        let p = Math.round((done / total) * 74);           // 0 -> 74%, real pages (extraction takes 75->96)
+        if (!_runStats) _runStats = { pct: 0, rate: 0, lastDone: done, lastTime: now };
+        p = Math.min(74, Math.max(_runStats.pct, p));      // never regress
+        _runStats.pct = p;
+        // Observed page rate (EMA) -> honest ETA.
+        const dt = (now - _runStats.lastTime) / 1000;
+        if (done > _runStats.lastDone && dt > 0.25) {
+          const inst = (done - _runStats.lastDone) / dt;
+          _runStats.rate = _runStats.rate ? _runStats.rate * 0.6 + inst * 0.4 : inst;
+          _runStats.lastDone = done; _runStats.lastTime = now;
+        }
+        const remaining = Math.max(0, total - done);
+        stepTxt = t('Scraped {done} / {total} archived pages').replace('{done}', done).replace('{total}', total);
+        pctTxt = p + '%';
+        etaTxt = (_runStats.rate > 0 && remaining > 0)
+          ? _fmtEtaSecs(Math.round(remaining / _runStats.rate)) : t('estimating…');
+        fillPct = p;
+      } else {
+        // Setup phase (querying archive.org, selecting): honest indeterminate bar.
+        stepTxt = job.step || t('Preparing scan…');
+      }
+    }
     // Build the running scaffold ONCE, then patch only the dynamic text/width on
     // every poll. Rebuilding innerHTML each tick recreated the spinner node (its
     // rotation restarted from 0deg -> the visible stutter) and reset the bar's
@@ -1009,6 +1030,7 @@ function renderPublicScan(job) {
           <div class="pub-run-pct"></div>
           <div class="pub-run-bar"><div class="pub-run-bar-fill"></div></div>
           <div class="pub-run-eta"></div>
+          <div class="pub-live"></div>
           <div class="pub-run-wb"><span>${esc(t('Pages read from'))}</span> <img class="wb-logo" src="/icons/wayback.svg" alt="Wayback Machine"></div>
         </div>
         ${renderPrivacyCard(job)}
@@ -1025,6 +1047,8 @@ function renderPublicScan(job) {
     stepEl.textContent = stepTxt;
     pctEl.textContent = pctTxt;  pctEl.style.display = pctTxt ? '' : 'none';
     etaEl.textContent = etaTxt;  etaEl.style.display = etaTxt ? '' : 'none';
+    const liveEl = live.querySelector('.pub-live');
+    if (liveEl) { liveEl.innerHTML = liveHTML; liveEl.style.display = liveHTML ? '' : 'none'; }
     if (fillPct === null) {
       barEl.classList.add('indeterminate');
       fillEl.style.width = '';

@@ -27,7 +27,10 @@ from models import (
 )
 from services.cdx import fetch_cdx_snapshots
 from services import archive_health
-from services.extractor import ALL_CATEGORIES, extract_all, compute_highlights
+from services.extractor import (
+    ALL_CATEGORIES, extract_all, compute_highlights,
+    new_accum, mine_subdomains, process_page, finalize_accum,
+)
 from services.extractor.finalize import merge_analytics_ids
 from services.favicon_hash import hash_favicons
 from services.filters import (
@@ -266,21 +269,40 @@ async def _scan_pipeline(
         # can explain an empty scan honestly instead of blaming "archive gaps".
         pages_blocked = sum(1 for p in pages if p.get("error") == "blocked")
 
-        # Phase 4: Extraction
-        await store.update_job(
-            job_id, step="Extracting OSINT data...", progress=75
-        )
+        # Phase 4: Extraction — STREAMED.
+        # Extraction is CPU-bound (regex + selectolax over every page). It runs in
+        # batches on a worker thread so (a) the event loop stays responsive — a big
+        # scan used to freeze health checks and every other user's polling for
+        # minutes — and (b) live per-category counts are pushed between batches, so
+        # findings visibly fill in on the loading page as they're extracted, no
+        # refresh needed.
+        await store.update_job(job_id, step="Extracting OSINT data...", progress=75)
+        cat_set = set(categories) if categories else None
+        accum = new_accum()
+        mine_subdomains(pages, domain, accum, cat_set)   # cheap, from the CDX URLs
+        html_pages = [p for p in pages if p.get("html") is not None]
+        total_ex = len(html_pages) or 1
+        page_seq: dict = {}
 
-        # Extraction is CPU-bound (regex + selectolax over every page) and used to
-        # run inline on the event loop, freezing the whole worker for minutes on a
-        # large scan — health checks and every other user's progress polling stalled
-        # until it finished. Run it in a worker thread so the loop stays responsive
-        # (selectolax and Python's regex release the GIL, so the loop gets time).
-        def _extract_sync():
-            r = extract_all(pages, domain, categories=categories)
-            merge_analytics_ids(r)
-            return r
-        results = await asyncio.to_thread(_extract_sync)
+        def _process_batch(batch):
+            for p in batch:
+                process_page(p, domain, accum, cat_set, page_seq)
+
+        BATCH = 25
+        ex_done = 0
+        for i in range(0, len(html_pages), BATCH):
+            batch = html_pages[i:i + BATCH]
+            await asyncio.to_thread(_process_batch, batch)
+            ex_done += len(batch)
+            # 75 -> 96% across extraction; live counts of non-empty categories.
+            prog = 75 + int((ex_done / total_ex) * 21)
+            live_counts = {c: len(accum[c]) for c in ALL_CATEGORIES if accum[c]}
+            await store.update_job(
+                job_id, step=f"Extracting {ex_done}/{total_ex}",
+                progress=prog, live_counts=live_counts,
+            )
+        results = await asyncio.to_thread(finalize_accum, accum, categories)
+        merge_analytics_ids(results)
         # Best-effort favicon hashing (breaker-gated, capped). Never fatal.
         try:
             await hash_favicons(results.get("favicons") or [], domain)

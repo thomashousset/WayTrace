@@ -49,12 +49,14 @@ async def test_extraction_runs_off_the_event_loop(fresh_db, monkeypatch):
         ]
     monkeypatch.setattr(scan_module, "scrape_snapshots", _fake_scrape)
 
-    # Deliberately slow, BLOCKING extraction (~0.4s of synchronous work).
-    BLOCK = 0.4
-    def _slow_extract(pages, domain, categories=None):
-        time.sleep(BLOCK)
-        return {"emails": []}
-    monkeypatch.setattr(scan_module, "extract_all", _slow_extract)
+    # Deliberately slow, BLOCKING per-page extraction (the streamed path calls
+    # process_page in batches via asyncio.to_thread). Two pages * 0.2s = ~0.4s.
+    def _slow_process(page, domain, accum, cat_set, page_seq):
+        time.sleep(0.2)
+        return True
+    monkeypatch.setattr(scan_module, "process_page", _slow_process)
+    monkeypatch.setattr(scan_module, "mine_subdomains", lambda pages, d, a, c: None)
+    monkeypatch.setattr(scan_module, "finalize_accum", lambda accum, categories=None: {"emails": []})
     monkeypatch.setattr(scan_module, "merge_analytics_ids", lambda r: None)
     monkeypatch.setattr(scan_module, "compute_highlights", lambda r, d: [])
 
@@ -97,3 +99,52 @@ async def test_extraction_runs_off_the_event_loop(fresh_db, monkeypatch):
     from db import get_job_by_url_id
     persisted = await get_job_by_url_id(res["url_id"])
     assert persisted is not None and persisted["status"] == "completed"
+
+
+@pytest.mark.asyncio
+async def test_live_counts_pushed_during_extraction(fresh_db, monkeypatch):
+    """The extraction phase streams per-category counts to the job so findings
+    appear on the loading page without a refresh."""
+    import store as store_module
+    import routers.scan as scan_module
+
+    fresh = JobStore()
+    monkeypatch.setattr(store_module, "store", fresh)
+    monkeypatch.setattr(scan_module, "store", fresh)
+
+    async def _fake_scrape(selected, job_id, **kw):
+        # 60 fake html pages -> multiple extraction batches (BATCH=25).
+        return [
+            {"timestamp": f"20{10+i:02d}0101000000", "url": f"http://ex.com/{i}", "html": "<html></html>", "error": None}
+            for i in range(60)
+        ]
+    monkeypatch.setattr(scan_module, "scrape_snapshots", _fake_scrape)
+
+    # process_page adds one distinct email per page into accum["emails"].
+    def _fake_process(page, domain, accum, cat_set, page_seq):
+        accum["emails"][page["url"]] = {"first_seen": "2020-01"}
+        return True
+    monkeypatch.setattr(scan_module, "process_page", _fake_process)
+    monkeypatch.setattr(scan_module, "mine_subdomains", lambda pages, d, a, c: None)
+    monkeypatch.setattr(scan_module, "finalize_accum", lambda accum, categories=None: {"emails": list(accum["emails"].values())})
+    monkeypatch.setattr(scan_module, "merge_analytics_ids", lambda r: None)
+    monkeypatch.setattr(scan_module, "compute_highlights", lambda r, d: [])
+
+    # Capture live_counts pushed via update_job.
+    seen = []
+    orig_update = fresh.update_job
+    async def _spy(job_id, **kw):
+        if "live_counts" in kw:
+            seen.append(kw["live_counts"])
+        return await orig_update(job_id, **kw)
+    monkeypatch.setattr(fresh, "update_job", _spy)
+
+    res = await fresh.create_job("ex.com", "8.8.8.8")
+    selected = [{"timestamp": "20200101000000", "url": "http://ex.com/0"}]
+    await scan_module.run_scan(job_id=res["job_id"], config=ScanConfig(), selected_snapshots=selected)
+
+    # Several live-count updates, with the emails count strictly growing across
+    # batches (25 -> 50 -> 60).
+    assert len(seen) >= 2, seen
+    email_counts = [c.get("emails", 0) for c in seen]
+    assert email_counts == sorted(email_counts) and email_counts[-1] == 60, email_counts

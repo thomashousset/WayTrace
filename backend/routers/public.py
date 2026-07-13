@@ -72,6 +72,9 @@ def _live_to_payload(live: dict) -> dict:
         "position": store.get_position(live["id"]),
         "eta_seconds": store.get_eta_seconds(live["id"]),
         "total_in_queue": len(store.waiting),
+        # Live per-category counts pushed during the extraction phase so findings
+        # appear on the loading page as they're extracted (no refresh).
+        "live_counts": live.get("live_counts"),
     }
 
 
