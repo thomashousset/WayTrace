@@ -271,14 +271,22 @@ async def _scan_pipeline(
             job_id, step="Extracting OSINT data...", progress=75
         )
 
-        results = extract_all(pages, domain, categories=categories)
-        merge_analytics_ids(results)
+        # Extraction is CPU-bound (regex + selectolax over every page) and used to
+        # run inline on the event loop, freezing the whole worker for minutes on a
+        # large scan — health checks and every other user's progress polling stalled
+        # until it finished. Run it in a worker thread so the loop stays responsive
+        # (selectolax and Python's regex release the GIL, so the loop gets time).
+        def _extract_sync():
+            r = extract_all(pages, domain, categories=categories)
+            merge_analytics_ids(r)
+            return r
+        results = await asyncio.to_thread(_extract_sync)
         # Best-effort favicon hashing (breaker-gated, capped). Never fatal.
         try:
             await hash_favicons(results.get("favicons") or [], domain)
         except Exception as exc:
             logger.debug("favicon hashing skipped: {}", exc)
-        results["highlights"] = compute_highlights(results, domain)
+        results["highlights"] = await asyncio.to_thread(compute_highlights, results, domain)
 
         # Index the visible text of each scraped page for full-text search
         # (search the archived CONTENT, not just the pivots). Best-effort and
@@ -287,10 +295,14 @@ async def _scan_pipeline(
             live = await store.get_job(job_id)
             _uid = live.get("url_id") if live else None
             if _uid:
-                fts_rows = [
-                    (p.get("timestamp", ""), p.get("url", ""), _visible_text(p.get("html")))
-                    for p in pages if p.get("html")
-                ]
+                # _visible_text parses HTML per page (selectolax) — also CPU-bound,
+                # so build the FTS rows off the event loop too.
+                def _build_fts_rows():
+                    return [
+                        (p.get("timestamp", ""), p.get("url", ""), _visible_text(p.get("html")))
+                        for p in pages if p.get("html")
+                    ]
+                fts_rows = await asyncio.to_thread(_build_fts_rows)
                 await index_scan_pages(_uid, fts_rows)
         except Exception as exc:
             logger.debug("page-text indexing skipped for job {}: {}", job_id, exc)

@@ -221,6 +221,11 @@ const I18N = {
     'home.version': 'WayTrace v1.6.0 &middot; hébergé &middot; <a href="https://github.com/HXLLO/WayTrace" target="_blank" rel="noopener">source</a>',
     'home.archivedby': 'Archives par',
     'Pages read from': 'Pages lues depuis',
+    'Querying archive.org': 'Interrogation archive.org',
+    'Selecting snapshots': 'Sélection des snapshots',
+    'Fetching pages': 'Récupération des pages',
+    'Extracting & cross-referencing': 'Extraction & recoupement',
+    'Extracting & cross-referencing…': 'Extraction & recoupement…',
     // Report 2.0
     'Categories': 'Catégories',
     'Activity': 'Activité',
@@ -905,6 +910,27 @@ function _fmtEtaSecs(secs) {
   return t('~{m} min left').replace('{m}', Math.max(1, Math.round(secs / 60)));
 }
 
+// The four honest phases of a scan, mapped from the backend's `step` string.
+const SCAN_PHASES = ['Querying archive.org', 'Selecting snapshots', 'Fetching pages', 'Extracting & cross-referencing'];
+function _scanPhaseIndex(step) {
+  const s = (step || '').toLowerCase();
+  if (s.includes('extract')) return 3;
+  if (s.includes('scrap'))   return 2;
+  if (s.includes('select'))  return 1;
+  return 0;   // starting / fetching CDX / using selected snapshots
+}
+function _phasesHTML() {
+  return SCAN_PHASES.map((p, i) =>
+    `<span class="pub-phase" data-i="${i}"><span class="d"></span>${esc(t(p))}</span>`).join('');
+}
+function _updatePhases(root, idx) {
+  root.querySelectorAll('.pub-phase').forEach(el => {
+    const i = +el.dataset.i;
+    el.classList.toggle('done', i < idx);
+    el.classList.toggle('now', i === idx);
+  });
+}
+
 function renderPublicScan(job) {
   $('public-scan-domain').textContent = job.domain || '';
   const meta = $('public-scan-meta');
@@ -958,10 +984,17 @@ function renderPublicScan(job) {
       etaTxt = (_runStats.rate > 0 && remaining > 0)
         ? _fmtEtaSecs(Math.round(remaining / _runStats.rate)) : t('estimating…');
       fillPct = p;
+    } else if (_scanPhaseIndex(job.step) === 3) {
+      // Extraction phase: CPU-bound cross-referencing with no measurable sub-
+      // progress. Show an honest indeterminate bar and a clear label instead of
+      // leaving the percentage stuck near 100%.
+      stepTxt = t('Extracting & cross-referencing…');
+      _runStats = null;   // the page-rate ETA no longer applies
     } else {
       // Setup phase (querying archive.org, selecting): honest indeterminate bar.
       stepTxt = job.step || t('Preparing scan…');
     }
+    const phaseIdx = _scanPhaseIndex(job.step);
     // Build the running scaffold ONCE, then patch only the dynamic text/width on
     // every poll. Rebuilding innerHTML each tick recreated the spinner node (its
     // rotation restarted from 0deg -> the visible stutter) and reset the bar's
@@ -971,6 +1004,7 @@ function renderPublicScan(job) {
       body.innerHTML = `
         <div class="pub-state-card pub-run-live">
           <div class="pub-run-spinner" aria-hidden="true"></div>
+          <div class="pub-phases">${_phasesHTML()}</div>
           <div class="pub-run-step"></div>
           <div class="pub-run-pct"></div>
           <div class="pub-run-bar"><div class="pub-run-bar-fill"></div></div>
@@ -987,6 +1021,7 @@ function renderPublicScan(job) {
     const barEl  = live.querySelector('.pub-run-bar');
     const fillEl = live.querySelector('.pub-run-bar-fill');
     const etaEl  = live.querySelector('.pub-run-eta');
+    _updatePhases(live, phaseIdx);
     stepEl.textContent = stepTxt;
     pctEl.textContent = pctTxt;  pctEl.style.display = pctTxt ? '' : 'none';
     etaEl.textContent = etaTxt;  etaEl.style.display = etaTxt ? '' : 'none';
