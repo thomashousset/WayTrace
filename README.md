@@ -27,7 +27,7 @@ The interface is fully bilingual (English / French), switchable from the navbar.
 
 ## What's new in v1.6.0
 
-- **Neutral findings, provenance-first.** The report drops the severity "importance" UI (stats bar, filter, per-row dot). Instead every finding carries *first/last-seen*, *occurrences*, and its *archived source* — evidence you judge, not a verdict. The cluttered Pivots graph is gone; co-occurrence stays. The Wayback Machine source is credited with its logo.
+- **Redesigned two-view report.** *Categories* (default): a rail of all 43 categories, one open at a time, showing its findings **and** its own activity (per-value appeared/disappeared + a dated change feed). *Activity*: tick categories and individual pivots to compose a shared timeline, with the favicon-evolution gallery. **Provenance-first, neutral** — findings carry *first/last-seen*, *occurrences* and their *archived source*; the severity "importance" UI and the cluttered Pivots graph are gone. The Wayback Machine source is credited with its logo.
 
 ## What's new in v1.5.0
 

@@ -221,6 +221,40 @@ const I18N = {
     'home.version': 'WayTrace v1.6.0 &middot; hébergé &middot; <a href="https://github.com/HXLLO/WayTrace" target="_blank" rel="noopener">source</a>',
     'home.archivedby': 'Archives par',
     'Pages read from': 'Pages lues depuis',
+    // Report 2.0
+    'Categories': 'Catégories',
+    'Activity': 'Activité',
+    'Found': 'Trouvées',
+    'Show all': 'Tout afficher',
+    'empty categories (searched)': 'catégories vides (cherchées)',
+    'Views': 'Vues',
+    'tick': 'coche',
+    'Pivots — tick to track': 'Pivots — cocher pour suivre',
+    'value': 'valeur',
+    'occ.': 'occ.',
+    'seen': 'vu de → à',
+    'source': 'source',
+    'shown': 'affichés',
+    'copy column': 'copier la colonne',
+    'values': 'valeurs',
+    'Searched across every snapshot, found nothing in this category.': 'Cherché sur tous les snapshots, rien trouvé dans cette catégorie.',
+    'Showing first': 'Affiche les',
+    'of': 'sur',
+    'Activity of': 'Activité de',
+    'when each value was visible': 'quand chaque valeur était visible',
+    'Composed activity': 'Activité composée',
+    'categories': 'catégories',
+    'pivots': 'pivots',
+    'untick to remove a lane': 'décoche pour retirer un couloir',
+    'category': 'catégorie',
+    'pivot': 'pivot',
+    'appeared': 'apparu',
+    'disappeared': 'disparu',
+    'last capture': 'dernière capture',
+    'Favicon over time': 'Favicon dans le temps',
+    'Filter extracted results': 'Filtrer les résultats extraits',
+    'Search the archived pages': 'Chercher dans les pages archivées',
+    'Copied': 'Copié',
     'home.provenance': "Outil OSINT open source. La version hébergée limite le nombre de snapshots par scan ; auto-hébergez-la depuis GitHub pour analyser un domaine en entier.",
     'home.ethic': "Conçu pour les chercheurs en sécurité, les équipes, les journalistes et les professionnels curieux. Utilisez ce que vous trouvez de façon responsable : signalez les risques aux personnes qui possèdent les données, jamais contre elles.",
     'home.feed.title': 'Scans publiés récemment',
@@ -3939,6 +3973,342 @@ function scanMore(domain) {
   location.hash = '#/scope/' + encodeURIComponent(domain);
 }
 
+/* ============================================================================
+   REPORT 2.0  —  two-view master-detail results page
+   Default "Categories" view: a rail of all 43 categories (found first, empty
+   collapsed), one open at a time, its findings + its own activity together.
+   "Activity" view: checkable categories + pivots compose a shared-axis timeline,
+   plus the favicon evolution gallery and a dated change feed. Neutral: provenance
+   (first/last-seen, occurrences, archived source) is the evidence, no severity.
+   ========================================================================== */
+
+const REPORT2_SCOPE = Object.keys(CAT_DESCRIPTIONS); // the canonical 43 categories
+
+let report2State = {
+  view: 'cats',        // 'cats' | 'activity'
+  openCat: null,       // category key, or '__all__' for the flat dump
+  filter: '',          // in-category / global value filter
+  showEmpty: false,    // rail: reveal the empty categories
+  checkedCats: null,   // Activity view: Set of category keys shown as lanes
+  checkedPivots: null, // Activity view: Set of "cat::value" pivots shown as lanes
+};
+let _r2 = { findings: [], info: null, byCat: new Map(), found: [], empty: [], job: null, lo: 0, hi: 0 };
+
+function _r2Chip(f) {
+  const m = f.metadata;
+  if (!m || typeof m !== 'object') return '';
+  const c = m.version || m.type || m.platform || m.provider || m.service || m.kind
+    || (f.category === 'subdomains' && /(^|\.)(dev|staging|test|preprod|uat|api|admin|internal)\b/.test(f.value) ? f.value.split('.')[0] : '');
+  return c ? `<span class="r2-chip">${esc(String(c).slice(0, 22))}</span>` : '';
+}
+
+function _r2Month(s) {                      // "YYYY-MM" -> month index, or null
+  if (!s || typeof s !== 'string') return null;
+  const m = s.match(/^(\d{4})-(\d{2})/);
+  return m ? (parseInt(m[1], 10) * 12 + (parseInt(m[2], 10) - 1)) : null;
+}
+function _r2Bounds() {
+  let lo = Infinity, hi = -Infinity;
+  for (const f of _r2.findings) {
+    const a = _r2Month(f.first_seen), b = _r2Month(f.last_seen);
+    if (a != null) { lo = Math.min(lo, a); hi = Math.max(hi, b != null ? b : a); }
+    if (b != null) hi = Math.max(hi, b);
+  }
+  if (!isFinite(lo)) { lo = 0; hi = 0; }
+  _r2.lo = lo; _r2.hi = hi;
+}
+function _r2Pct(mi) {                        // month index -> 0..100 across the span
+  const span = Math.max(1, _r2.hi - _r2.lo);
+  return Math.max(0, Math.min(100, ((mi - _r2.lo) / span) * 100));
+}
+function _r2Year(mi) { return Math.floor(mi / 12); }
+
+/* One horizontal lane: a bar from first_seen to last_seen, a dot where it
+   appeared, and a hatched "gone" tail + hollow dot where it disappeared. */
+function _r2Lane(label, first, last, opts) {
+  opts = opts || {};
+  const a = _r2Month(first), b = _r2Month(last);
+  if (a == null) return '';
+  const left = _r2Pct(a), right = _r2Pct(b != null ? b : a);
+  const w = Math.max(1.5, right - left);
+  const disappeared = (b != null && b < _r2.hi);
+  const cls = opts.pivot ? 'pivot' : '';
+  const tag = opts.pivot ? '<span class="r2-pvtag">pivot</span>' : '';
+  return `<div class="r2-lane">
+    <span class="r2-lbl" title="${esc(label)}">${esc(label)} ${tag}</span>
+    <div class="r2-track">
+      <span class="r2-capa ${cls}" style="left:${left}%"></span>
+      <span class="r2-bar ${cls}${opts.faded ? ' faded' : ''}" style="left:${left}%;width:${w}%"></span>
+      ${disappeared ? `<span class="r2-gone" style="left:${right}%;right:0"></span><span class="r2-capz" style="left:${right}%"></span>` : ''}
+    </div>
+  </div>`;
+}
+function _r2Years() {
+  const y0 = _r2Year(_r2.lo), y1 = _r2Year(_r2.hi);
+  const n = Math.max(1, y1 - y0);
+  const step = n <= 4 ? 1 : Math.ceil(n / 4);
+  let out = '';
+  for (let y = y0; y <= y1; y += step) out += `<span>${y}</span>`;
+  if ((y1 - y0) % step !== 0) out += `<span>${y1}</span>`;
+  return out;
+}
+
+/* Dated change feed for a set of findings: an "appeared" event at first_seen,
+   and a "disappeared" event at last_seen when it stopped before the archive's
+   end. Sorted newest-relevant first, capped. Neutral wording. */
+function _r2Feed(findings, cap) {
+  const ev = [];
+  for (const f of findings) {
+    const a = _r2Month(f.first_seen), b = _r2Month(f.last_seen);
+    if (a != null) ev.push({ mi: a, kind: 'up', f });
+    if (b != null && b < _r2.hi) ev.push({ mi: b, kind: 'down', f });
+  }
+  ev.sort((x, y) => x.mi - y.mi);
+  const pick = ev.slice(-(cap || 8));
+  if (!pick.length) return '';
+  const rows = pick.map(e => {
+    const when = (e.kind === 'up' ? e.f.first_seen : e.f.last_seen) || '';
+    const verb = e.kind === 'up' ? t('appeared') : t('disappeared');
+    const src = (e.kind === 'down' && e.f.metadata && e.f.metadata.source_url)
+      ? ` <a href="${esc(e.f.metadata.source_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${t('last capture')} ↗</a>` : '';
+    return `<div class="r2-ev ${e.kind}"><span class="r2-when">${esc(when)}</span><span class="r2-mk"></span>
+      <span class="r2-txt"><span class="r2-k">${esc(String(e.f.value).slice(0, 42))}</span> ${verb}
+      <span class="r2-sub">${esc(catLabel(e.f.category))}${e.f.occurrences ? ' · ' + e.f.occurrences + '×' : ''}</span>${src}</span></div>`;
+  }).join('');
+  return `<div class="r2-feed">
+    <div class="r2-evleg"><span><i class="up"></i> ${t('appeared')}</span><span><i class="down"></i> ${t('disappeared')}</span></div>
+    ${rows}</div>`;
+}
+
+/* ---- entry point, called from renderV2InLegacyView ---- */
+function renderReport2(info, findings, job) {
+  const byCat = new Map();
+  for (const f of findings) {
+    if (!byCat.has(f.category)) byCat.set(f.category, []);
+    byCat.get(f.category).push(f);
+  }
+  for (const arr of byCat.values()) arr.sort((a, b) => (b.occurrences || 0) - (a.occurrences || 0));
+  const found = [...byCat.keys()].filter(c => byCat.get(c).length).sort((a, b) => byCat.get(b).length - byCat.get(a).length);
+  const empty = REPORT2_SCOPE.filter(c => !byCat.has(c) || !byCat.get(c).length);
+  _r2 = { findings, info, byCat, found, empty, job, lo: 0, hi: 0 };
+  _r2Bounds();
+
+  if (!report2State.openCat || (report2State.openCat !== '__all__' && !byCat.has(report2State.openCat))) {
+    report2State.openCat = found[0] || '__all__';
+  }
+  if (!report2State.checkedCats) report2State.checkedCats = new Set(found.slice(0, 4));
+  if (!report2State.checkedPivots) report2State.checkedPivots = new Set(_r2Pivots().slice(0, 3).map(p => p.key));
+  report2Render();
+}
+
+/* Candidate pivots for the Activity view: individual high-value values whose
+   timeline is worth overlaying (subdomains, trackers, favicons, people). */
+function _r2Pivots() {
+  const out = [];
+  const take = (cat, n) => (_r2.byCat.get(cat) || []).slice(0, n).forEach(f =>
+    out.push({ key: cat + '::' + f.value, label: f.value, cat, f }));
+  take('subdomains', 4);
+  take('analytics_trackers', 3);
+  take('favicons', 2);
+  take('persons', 3);
+  take('technologies', 2);
+  return out;
+}
+
+function report2SetView(v) { report2State.view = v; report2Render(); }
+function report2OpenCat(c) { report2State.openCat = c; report2State.filter = ''; report2State.view = 'cats'; report2Render(); }
+function report2ToggleEmpty() { report2State.showEmpty = !report2State.showEmpty; report2Render(); }
+function report2Filter(v) { report2State.filter = v || ''; report2RenderMain(); }
+function report2ToggleCat(c) { const s = report2State.checkedCats; s.has(c) ? s.delete(c) : s.add(c); report2RenderMain(); }
+function report2TogglePivot(k) { const s = report2State.checkedPivots; s.has(k) ? s.delete(k) : s.add(k); report2RenderMain(); }
+
+function report2Render() {
+  // Sync the view toggle buttons.
+  const bc = document.getElementById('r2-vbtn-cats'), ba = document.getElementById('r2-vbtn-activity');
+  if (bc && ba) {
+    const cats = report2State.view === 'cats';
+    bc.classList.toggle('active', cats); bc.setAttribute('aria-selected', String(cats));
+    ba.classList.toggle('active', !cats); ba.setAttribute('aria-selected', String(!cats));
+  }
+  const fi = document.getElementById('r2-filter');
+  if (fi && fi.value !== report2State.filter) fi.value = report2State.filter;
+  report2RenderRail();
+  report2RenderMain();
+}
+
+function report2RenderRail() {
+  const rail = document.getElementById('r2-rail');
+  if (!rail) return;
+  if (report2State.view === 'activity') {
+    const pivots = _r2Pivots();
+    rail.innerHTML =
+      `<div class="r2-rt"><span>${t('Categories')}</span><span>${t('tick')}</span></div>` +
+      _r2.found.map(c => {
+        const on = report2State.checkedCats.has(c);
+        return `<div class="r2-chk${on ? ' on' : ''}" onclick="report2ToggleCat('${c}')">
+          <span class="r2-box">${on ? '✓' : ''}</span><span>${esc(catLabel(c))}</span>
+          <span class="r2-c">${_r2.byCat.get(c).length}</span></div>`;
+      }).join('') +
+      `<div class="r2-rt2">${t('Pivots — tick to track')}</div>` +
+      pivots.map(p => {
+        const on = report2State.checkedPivots.has(p.key);
+        return `<div class="r2-chk pv${on ? ' on' : ''}" onclick="report2TogglePivot('${esc(p.key).replace(/'/g, "\\'")}')">
+          <span class="r2-box">${on ? '✓' : ''}</span><span class="r2-pv" title="${esc(p.label)}">${esc(String(p.label).slice(0, 26))}</span></div>`;
+      }).join('') +
+      `<div class="r2-rt2">${t('Views')}</div>
+       <div class="r2-nav" onclick="report2SetView('cats')"><span class="i">▤</span> ${t('Categories')}</div>`;
+    return;
+  }
+  // Categories view rail
+  const link = (c) => {
+    const on = report2State.openCat === c;
+    return `<div class="r2-rlink${on ? ' on' : ''}" onclick="report2OpenCat('${c}')">
+      <span>${esc(catLabel(c))}</span><span class="r2-c">${_r2.byCat.get(c).length}</span></div>`;
+  };
+  const emptyLink = (c) => `<div class="r2-rlink zero${report2State.openCat === c ? ' on' : ''}" onclick="report2OpenCat('${c}')">
+      <span>${esc(catLabel(c))}</span><span class="r2-c">0</span></div>`;
+  rail.innerHTML =
+    `<div class="r2-rt"><span>${t('Found')}</span><span>${_r2.found.length}</span></div>` +
+    _r2.found.map(link).join('') +
+    `<div class="r2-rall${report2State.openCat === '__all__' ? ' on' : ''}" onclick="report2OpenCat('__all__')"><span class="i">▦</span> ${t('Show all')}</div>` +
+    `<div class="r2-emptytoggle" onclick="report2ToggleEmpty()"><span>${report2State.showEmpty ? '▾' : '▸'}</span> ${_r2.empty.length} ${t('empty categories (searched)')}</div>` +
+    (report2State.showEmpty ? `<div class="r2-emptylist">${_r2.empty.map(emptyLink).join('')}</div>` : '') +
+    `<div class="r2-rt2">${t('Views')}</div>
+     <div class="r2-nav" onclick="report2SetView('activity')"><span class="i">▚</span> ${t('Activity')}</div>`;
+}
+
+function report2RenderMain() {
+  const main = document.getElementById('r2-main');
+  if (!main) return;
+  if (report2State.view === 'activity') { main.innerHTML = report2ActivityHTML(); return; }
+
+  const cat = report2State.openCat;
+  if (cat === '__all__') {
+    main.innerHTML = _r2.found.map(c => report2CatBlock(c, false)).join('');
+    return;
+  }
+  const isEmpty = !_r2.byCat.has(cat) || !_r2.byCat.get(cat).length;
+  main.innerHTML = report2CatBlock(cat, true, isEmpty);
+}
+
+function _r2Rows(list) {
+  return `<div class="r2-colhead"><span>${t('value')}</span><span class="r">${t('occ.')}</span><span class="r">${t('seen')}</span><span class="r r2-srch">${t('source')}</span></div>` +
+    list.map(f => {
+      const span = (f.first_seen || f.last_seen)
+        ? `${esc(f.first_seen || '?')} <span class="r2-arw">→</span> ${_r2Month(f.last_seen) != null && _r2Month(f.last_seen) >= _r2.hi ? `<span class="r2-now">${esc(f.last_seen)}</span>` : `<span class="r2-end">${esc(f.last_seen || '?')}</span>`}`
+        : '<span class="r2-end">—</span>';
+      return `<div class="r2-row">
+        <span class="r2-val" title="${esc(f.value)}">${esc(f.value)} ${_r2Chip(f)}<span class="r2-copy" onclick="report2Copy(event,'${esc(f.value).replace(/'/g, "\\'")}')">⧉</span></span>
+        <span class="r2-occ"><b>${f.occurrences || 1}</b></span>
+        <span class="r2-span">${span}</span>
+        <span class="r2-src">${makeSourceLink(f)}</span>
+      </div>`;
+    }).join('');
+}
+
+function report2CatBlock(cat, withActivity, isEmpty) {
+  const all = _r2.byCat.get(cat) || [];
+  const q = report2State.filter.toLowerCase();
+  const list = q ? all.filter(f => f.value.toLowerCase().includes(q)) : all;
+  const desc = CAT_DESCRIPTIONS[cat] ? t(CAT_DESCRIPTIONS[cat]) : '';
+  const filtered = q && list.length !== all.length ? `<span class="r2-filtered">${list.length} ${t('shown')}</span>` : '';
+  const head = `<div class="r2-dhead"><span class="r2-name">${esc(catLabel(cat))}</span><span class="r2-cnt">${all.length}</span>${filtered}
+    <span class="r2-copycol" onclick="report2CopyCol('${cat}')">${t('copy column')}</span></div>
+    ${desc ? `<p class="r2-ddesc">${esc(desc)}</p>` : ''}`;
+
+  if (isEmpty) {
+    return head + `<div class="r2-emptystate">${t('Searched across every snapshot, found nothing in this category.')}</div>`;
+  }
+  const CAP = 200;
+  const rows = _r2Rows(list.slice(0, CAP));
+  const more = list.length > CAP ? `<div class="r2-more">${t('Showing first')} ${CAP} ${t('of')} ${list.length}</div>` : '';
+  const act = withActivity ? report2CatActivity(cat, all) : '';
+  return `<div class="r2-catblock">${head}${rows}${more}${act}</div>`;
+}
+
+function report2CatActivity(cat, list) {
+  const lanes = list.slice(0, 24).map(f => _r2Lane(f.value, f.first_seen, f.last_seen, { faded: _r2Month(f.last_seen) != null && _r2Month(f.last_seen) < _r2.hi })).join('');
+  if (!lanes.trim()) return '';
+  return `<div class="r2-act">
+    <div class="r2-ah"><span class="i">▚</span> ${t('Activity of')} <b>${esc(catLabel(cat))}</b> — ${t('when each value was visible')}</div>
+    <div class="r2-tl"><div class="r2-years">${_r2Years()}</div>${lanes}</div>
+    ${_r2Feed(list, 6)}
+  </div>`;
+}
+
+function report2ActivityHTML() {
+  // lanes for checked categories (as a category-level span) + checked pivots
+  const catLanes = _r2.found.filter(c => report2State.checkedCats.has(c)).map(c => {
+    const arr = _r2.byCat.get(c);
+    let lo = Infinity, hi = -Infinity;
+    for (const f of arr) { const a = _r2Month(f.first_seen), b = _r2Month(f.last_seen); if (a != null) lo = Math.min(lo, a); if (b != null) hi = Math.max(hi, b); if (a != null) hi = Math.max(hi, a); }
+    if (!isFinite(lo)) return '';
+    const fs = _r2.lo === lo ? arr[0].first_seen : null;
+    return _r2Lane(catLabel(c), firstMonthStr(lo), firstMonthStr(hi), {});
+  }).join('');
+  const pivots = _r2Pivots();
+  const pvLanes = pivots.filter(p => report2State.checkedPivots.has(p.key)).map(p =>
+    _r2Lane(p.label, p.f.first_seen, p.f.last_seen, { pivot: true })).join('');
+
+  const nCat = report2State.checkedCats.size, nPv = report2State.checkedPivots.size;
+  const composer = `<div class="r2-composer">
+    <div class="r2-ch"><span class="i">▚</span> <b>${t('Composed activity')}</b> — ${nCat} ${t('categories')} + ${nPv} ${t('pivots')}<span class="r2-hint">${t('untick to remove a lane')}</span></div>
+    <div class="r2-tl"><div class="r2-years">${_r2Years()}</div>${catLanes}${pvLanes || ''}</div>
+    <div class="r2-evleg"><span><i class="up"></i> ${t('category')}</span><span><i class="pv"></i> ${t('pivot')}</span><span><i class="down"></i> ${t('disappeared')}</span></div>
+    ${report2Favicons()}
+    ${_r2Feed(_r2.findings, 8)}
+  </div>`;
+  return composer;
+}
+
+function firstMonthStr(mi) {                 // month index -> "YYYY-MM"
+  const y = Math.floor(mi / 12), m = (mi % 12) + 1;
+  return y + '-' + String(m).padStart(2, '0');
+}
+
+/* Favicon evolution gallery — loads each archived favicon image from
+   web.archive.org (only archive.org is contacted), falls back to a hash tile. */
+function report2Favicons() {
+  const favs = _r2.byCat.get('favicons') || [];
+  if (!favs.length) return '';
+  const cells = favs.slice(0, 6).map(f => {
+    const m = f.metadata || {};
+    const src = (m.source_url && m.source_url.includes('web.archive.org'))
+      ? m.source_url.replace(/(\/web\/\d+)\//, '$1im_/') : '';
+    const hash = (m.md5 || m.sha256 || '').slice(0, 8);
+    const span = [f.first_seen, f.last_seen].filter(Boolean).join(' → ');
+    const img = src
+      ? `<img class="r2-favimg" src="${esc(src)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="r2-favph" style="display:none">◆</span>`
+      : `<span class="r2-favph">◆</span>`;
+    return `<div class="r2-favera"><div class="r2-favico">${img}</div>
+      <span class="r2-favm"><b>${esc(span || '—')}</b>${hash ? esc(hash) : ''}</span></div>`;
+  }).join('<span class="r2-favarr">→</span>');
+  return `<div class="r2-favstrip"><span class="r2-favlbl">${t('Favicon over time')}</span>${cells}</div>`;
+}
+
+function report2Copy(ev, val) {
+  ev.stopPropagation();
+  navigator.clipboard.writeText(val).then(() => showToast(t('Copied') + ' ✓')).catch(() => {});
+}
+function report2CopyCol(cat) {
+  const all = _r2.byCat.get(cat) || [];
+  const q = report2State.filter.toLowerCase();
+  const list = q ? all.filter(f => f.value.toLowerCase().includes(q)) : all;
+  navigator.clipboard.writeText(list.map(f => f.value).join('\n'))
+    .then(() => showToast(t('Copied') + ' ' + list.length + ' ' + t('values'))).catch(() => {});
+}
+
+window.report2SetView = report2SetView;
+window.report2OpenCat = report2OpenCat;
+window.report2ToggleEmpty = report2ToggleEmpty;
+window.report2Filter = report2Filter;
+window.report2ToggleCat = report2ToggleCat;
+window.report2TogglePivot = report2TogglePivot;
+window.report2Copy = report2Copy;
+window.report2CopyCol = report2CopyCol;
+window.renderReport2 = renderReport2;
+
+
 function renderV2InLegacyView(job) {
   v2PublicMode = true;
   const findings = v2BuildLegacyFindings(job);
@@ -3995,21 +4365,16 @@ function renderV2InLegacyView(job) {
     }
   }
 
-  // Render with legacy functions
+  // Header (domain + meta), then the new two-view master-detail report.
   renderResultsHeader(info);
-  renderSeverityStats(findings);
-  renderHighlights(findings);
-  renderTechStack(findings);
-  renderFaviconGallery(findings, info.name);
-  renderCategoryGrid(info, null);
-  applyFilters();
-
-  // Reset timeline filter so the ribbon shows the full span
-  timelineMonthFilter = null;
-  timelineRangeFilter = null;
-  if (typeof renderTimelineRibbon === 'function') {
-    try { renderTimelineRibbon(); } catch (_) {}
-  }
+  // Reset per-scan report state so a freshly opened scan starts clean.
+  report2State.openCat = null;
+  report2State.filter = '';
+  report2State.showEmpty = false;
+  report2State.checkedCats = null;
+  report2State.checkedPivots = null;
+  report2State.view = 'cats';
+  renderReport2(info, findings, job);
 
   // Switch active view
   document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));

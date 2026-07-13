@@ -2,9 +2,12 @@
 
 ## v1.6.0
 
-- **Neutral findings.** The report no longer editorialises "importance": the severity stats bar, the severity filter, and the per-row severity dot are gone. What replaces them is provenance — every finding shows *when* it was first and last seen, *how often*, and the *archived source page*, so you judge, not the tool.
-- **Pivots tab removed.** The radial pivot graph was cluttered and low-signal; co-occurrence ("seen on the same page") remains where it's actually useful.
-- **Wayback Machine credited.** The data source is shown with the official Wayback Machine logo on the homepage and the loading view (public-domain mark, no background, theme-aware).
+- **Redesigned report — two views.** The results page is rebuilt around how an investigation actually reads:
+  - **Categories (default):** a rail lists all 43 categories (found first with counts, empty ones collapsed but present for scope transparency). You open one at a time; it shows its full findings *and* its own activity — when each value appeared and disappeared, plus a dated change feed.
+  - **Activity:** tick categories *and* individual pivots (a subdomain, tracker, favicon, person) to compose a shared-timeline; each becomes a lane. Includes the favicon-evolution gallery and a global change feed.
+- **Neutral findings.** No more "importance" editorialising (the severity stats bar, filter and per-row dot are gone). Provenance is the evidence — every finding shows *when* it was first/last seen, *how often*, and the *archived source page*, so you judge, not the tool.
+- **Pivots radial graph removed** (cluttered, low signal); co-occurrence stays where it's useful. Full-text page search kept alongside the findings filter.
+- **Wayback Machine credited** with its official logo on the homepage and loading view (public-domain mark, no background, theme-aware).
 
 ## v1.5.0
 

@@ -326,57 +326,34 @@
       </div>
     </div>
     <div id="res-favicons"></div>
-    <div class="page-search" id="res-pagesearch">
-      <div class="page-search-bar">
-        <input type="search" id="pagesearch-input" class="page-search-input"
-               placeholder="Search a word in the archived page content…"
-               data-i18n-ph="Search a word in the archived page content…"
-               aria-label="Search the archived page content"
-               onkeydown="if(event.key==='Enter'){event.preventDefault();runPageSearch()}"
-               oninput="debouncedPageSearch()">
-        <button class="btn" type="button" onclick="runPageSearch()" data-i18n="Search">Search</button>
+    <div id="report2">
+      <div class="r2-toolbar">
+        <div class="r2-views" role="tablist" aria-label="Report view">
+          <button id="r2-vbtn-cats" class="r2-vbtn active" role="tab" aria-selected="true" onclick="report2SetView('cats')"><span class="gl">▤</span> <span data-i18n="Categories">Categories</span></button>
+          <button id="r2-vbtn-activity" class="r2-vbtn" role="tab" aria-selected="false" onclick="report2SetView('activity')"><span class="gl">▚</span> <span data-i18n="Activity">Activity</span></button>
+        </div>
+        <div class="r2-searches">
+          <label class="r2-search">
+            <span class="cap" data-i18n="Filter extracted results">Filter extracted results</span>
+            <input id="r2-filter" type="text" autocomplete="off" spellcheck="false"
+                   placeholder="email, subdomain, tech…" data-i18n-ph="email, subdomain, tech…"
+                   aria-label="Filter extracted results" oninput="report2Filter(this.value)">
+          </label>
+          <label class="r2-search">
+            <span class="cap" data-i18n="Search the archived pages">Search the archived pages</span>
+            <input type="search" id="pagesearch-input" autocomplete="off"
+                   placeholder="any word in the archived HTML…"
+                   data-i18n-ph="any word in the archived HTML…"
+                   aria-label="Search the archived page content"
+                   onkeydown="if(event.key==='Enter'){event.preventDefault();runPageSearch()}"
+                   oninput="debouncedPageSearch()">
+          </label>
+        </div>
       </div>
       <div id="pagesearch-results" class="page-search-results" aria-live="polite"></div>
-    </div>
-    <div class="res-tabs" id="res-tabs">
-      <div class="res-tabs-head" role="tablist">
-        <button class="res-tab active" role="tab" data-tab="categories" onclick="selectResTab('categories')" data-i18n="Categories">Categories</button>
-        <button class="res-tab" role="tab" data-tab="activity" onclick="selectResTab('activity')" data-i18n="Activity">Activity</button>
-        <button class="res-tab" role="tab" data-tab="subs" onclick="selectResTab('subs')" data-i18n="Subdomains">Subdomains</button>
-        <button class="res-tab" role="tab" data-tab="tech" onclick="selectResTab('tech')" data-i18n="Tech &amp; infra">Tech &amp; infra</button>
-      </div>
-      <div class="res-tab-panel" id="res-tab-categories" role="tabpanel">
-        <div id="res-catgrid" class="cat-section"></div>
-        <div id="res-catdesc" class="cat-desc cat-desc-all"></div>
-        <div class="filters-bar" id="res-filters">
-          <select class="filter-select" id="filter-severity" aria-label="Filter findings by severity" onchange="applyFilters()">
-            <option value="" data-i18n="All values">All values</option>
-            <option value="LEAK" data-i18n="Leak">Leak</option>
-            <option value="PIVOT" data-i18n="Pivot">Pivot</option>
-            <option value="CONTEXT" data-i18n="Context">Context</option>
-            <option value="BACKGROUND" data-i18n="Background">Background</option>
-          </select>
-          <input class="filter-input" id="filter-search" type="text"
-                 aria-label="Search findings by value"
-                 placeholder="Search values..." data-i18n-ph="Search values..." oninput="debouncedApplyFilters()">
-          <div class="filters-right">
-            <button class="btn-sm" onclick="copyAll()" data-i18n="Copy all">Copy all</button>
-          </div>
-        </div>
-        <table class="data-table" id="res-table">
-          <thead id="res-thead"></thead>
-          <tbody id="res-tbody"></tbody>
-        </table>
-        <div class="table-footer" id="res-footer"></div>
-      </div>
-      <div class="res-tab-panel" id="res-tab-activity" role="tabpanel" style="display:none">
-        <div id="res-timeline-ribbon"></div>
-      </div>
-      <div class="res-tab-panel" id="res-tab-subs" role="tabpanel" style="display:none">
-        <div id="res-subs"></div>
-      </div>
-      <div class="res-tab-panel" id="res-tab-tech" role="tabpanel" style="display:none">
-        <div id="res-tech"></div>
+      <div class="r2-body">
+        <aside class="r2-rail" id="r2-rail"></aside>
+        <div class="r2-main" id="r2-main"></div>
       </div>
     </div>
   </div>

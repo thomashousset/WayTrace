@@ -27,7 +27,7 @@ L'interface est entièrement bilingue (anglais / français), basculable depuis l
 
 ## Nouveautés de la v1.6.0
 
-- **Résultats neutres, la provenance d'abord.** Le rapport retire l'UI de « gravité » (barre de stats, filtre, point par ligne). À la place, chaque résultat porte son *first/last-seen*, ses *occurrences* et sa *page source archivée* : la preuve, c'est vous qui jugez. Le graphe Pivots encombrant disparaît ; la co-occurrence reste. La source Wayback Machine est créditée par son logo.
+- **Rapport repensé, deux vues.** *Catégories* (défaut) : un rail des 43 catégories, une ouverte à la fois, montrant ses résultats **et** sa propre activité (apparu/disparu par valeur + un flux de changements daté). *Activité* : cochez des catégories et des pivots précis pour composer une frise partagée, avec la galerie d'évolution des favicons. **La provenance d'abord, neutre** — chaque résultat porte son *first/last-seen*, ses *occurrences* et sa *page source archivée* ; l'UI de « gravité » et le graphe Pivots encombrant disparaissent. La source Wayback Machine est créditée par son logo.
 
 ## Nouveautés de la v1.5.0
 
