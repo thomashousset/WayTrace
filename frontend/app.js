@@ -4133,7 +4133,26 @@ function renderReport2(info, findings, job) {
   }
   if (!report2State.checkedCats) report2State.checkedCats = new Set(found.slice(0, 4));
   if (!report2State.checkedPivots) report2State.checkedPivots = new Set(_r2Pivots().slice(0, 3).map(p => p.key));
+  _r2SetHeaderFavicon(info && info.name);
   report2Render();
+}
+
+/* Show the site's own (archived) favicon next to the scan name. Uses the most
+   recent favicon finding's archived image (only archive.org is contacted); falls
+   back to just the name if none or the image fails. */
+function _r2SetHeaderFavicon(domain) {
+  const el = document.getElementById('res-domain');
+  if (!el) return;
+  const favs = (_r2.byCat.get('favicons') || []).slice();
+  favs.sort((a, b) => String(b.last_seen || '').localeCompare(String(a.last_seen || '')));
+  const m = favs.length ? (favs[0].metadata || {}) : null;
+  const src = (m && m.source_url && m.source_url.includes('web.archive.org'))
+    ? m.source_url.replace(/(\/web\/\d+)\//, '$1im_/') : '';
+  if (src) {
+    el.innerHTML = `<img class="res-fav" src="${esc(src)}" alt="" onerror="this.remove()">${esc(domain || '')}`;
+  } else {
+    el.textContent = domain || '';
+  }
 }
 
 /* Candidate pivots for the Activity view: individual high-value values whose
