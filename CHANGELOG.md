@@ -2,19 +2,21 @@
 
 ## v1.6.0
 
-- **Redesigned report — two views.** The results page is rebuilt around how an investigation actually reads:
-  - **Categories (default):** a rail lists all 43 categories (found first with counts, empty ones collapsed but present for scope transparency). You open one at a time; it shows its full findings *and* its own activity — when each value appeared and disappeared, plus a dated change feed.
-  - **Activity:** tick categories *and* individual pivots (a subdomain, tracker, favicon, person) to compose a shared-timeline; each becomes a lane. Includes the favicon-evolution gallery and a global change feed.
-- **Neutral findings.** No more "importance" editorialising (the severity stats bar, filter and per-row dot are gone). Provenance is the evidence — every finding shows *when* it was first/last seen, *how often*, and the *archived source page*, so you judge, not the tool.
-- **Pivots radial graph removed** (cluttered, low signal); co-occurrence stays where it's useful. Full-text page search kept alongside the findings filter.
-- **Wayback Machine credited** with its official logo on the homepage and loading view (public-domain mark, no background, theme-aware).
+- **Redesigned report, two views.** The results page is rebuilt around how an investigation actually reads:
+  - **Categories (default):** a rail lists all 43 categories (found first with counts, empty ones collapsed but present for scope transparency). You open one at a time; it shows its full findings *and* its own activity: when each value appeared and disappeared, plus a dated change feed. "Show all" flattens every found category.
+  - **Activity:** tick categories *and* individual pivots (a subdomain, tracker, favicon, person) to compose a shared timeline; each becomes a lane, and the axis always spans exactly what's shown. Pivots derive from the ticked categories and are searchable. Includes the favicon-evolution gallery and a global change feed.
+- **Neutral, provenance-first findings.** No more "importance" editorialising (the severity stats bar, filter, per-row dot, and the radial Pivots graph are gone). Every finding shows *when* it was first/last seen, *how often*, and the *archived source page*, so you judge. Values are fully shown and copyable (per-value with a confirmation, or whole column); CSV export carries the source, not a severity verdict.
+- **Live scan.** Extraction now overlaps downloading (pages are extracted as they arrive) and runs off the event loop, so the server stays responsive and findings fill in on the loading page while the scan runs. The loading page shows four honest phases and real progress.
+- **Don't re-scan a domain you already have.** A completed scan is reused for **14 days** instead of re-scanning (which would re-hammer archive.org); "Scan more" forces a fresh one. Anti-block hardened further: a hard IP-refusal now bails out immediately instead of draining hundreds of doomed requests.
+- **Better search & a11y.** Full-text page search no longer breaks on punctuation (emails, URLs, hyphens). Keyboard focus is visible on the search box and Scan button; the recent-scans feed distinguishes an error from an empty result; the sign-in dialog traps focus and closes on Escape.
+- **Wayback Machine credited** with its official logo on the homepage and loading view.
 
 ## v1.5.0
 
 - **Rate ceiling pinned below the refusal point.** The adaptive governor's ceiling drops from 150 to **80 req/min** (starting at 75): after a dense scan measured archive.org refusing TCP connections once the self-tuned rate crept to ~105/min, the governor can no longer climb into that zone. The floor/burst behaviour is unchanged.
-- **Escalating hard-block cooldown.** A connection refusal used to pause scanning for a flat 30 minutes — far too long for what is usually a temporary, rate-based reject that clears in seconds. The pause is now **2 minutes on a first/isolated refusal** and only doubles (capped at 30 min) when refusals recur back-to-back within 15 minutes, i.e. the signature of a real block. Refusals are now logged at WARNING (were invisible at the default log level).
+- **Escalating hard-block cooldown.** A connection refusal used to pause scanning for a flat 30 minutes - far too long for what is usually a temporary, rate-based reject that clears in seconds. The pause is now **2 minutes on a first/isolated refusal** and only doubles (capped at 30 min) when refusals recur back-to-back within 15 minutes, i.e. the signature of a real block. Refusals are now logged at WARNING (were invisible at the default log level).
 - **One scan at a time.** The public queue runs a **single scan at a time** with a **15-deep** waiting queue and **one in-flight scan per client**, so aggregate archive.org load stays minimal and no single user can stack scans.
-- **UX.** The scan-progress spinner no longer stutters (its animation was restarting on every status poll). The alarming red "blocked" banner is gone — the count of pages archive.org rate-limited is folded into the neutral scan-summary line instead.
+- **UX.** The scan-progress spinner no longer stutters (its animation was restarting on every status poll). The alarming red "blocked" banner is gone - the count of pages archive.org rate-limited is folded into the neutral scan-summary line instead.
 
 ## v1.3.0
 
@@ -29,7 +31,7 @@
 - **Single scan pipeline.** Removed a dead, divergent second pipeline (collect/analyze) that duplicated CDX/scraping/extraction; the public scan flow is now the only path. This also removed unauthenticated legacy endpoints (IDOR).
 - **Security hardening.** Fixed a catastrophic ReDoS in the S3 bucket regex; made client-IP detection spoof-resistant (trust the reverse-proxy header, not client-forgeable ones); reject selected snapshots that aren't on the scanned domain; refuse to boot in production with the default secret.
 - **Reliability.** Reworked the scraper to back off on archive.org connection-level throttling (not only HTTP 429) and report a per-outcome breakdown, so large scans no longer fail silently.
-- **Accessibility & UI.** WCAG-AA text contrast, keyboard-operable favicon tiles, and the Google favicon fallback removed (it leaked the investigated domain to Google — the tool now contacts only archive.org).
+- **Accessibility & UI.** WCAG-AA text contrast, keyboard-operable favicon tiles, and the Google favicon fallback removed (it leaked the investigated domain to Google - the tool now contacts only archive.org).
 - **Codebase.** The single-file frontend is split into cacheable `index.html` + `styles.css` + `app.js`.
 
 ## v1.1.0

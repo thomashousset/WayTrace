@@ -163,7 +163,7 @@ async def maintain() -> None:
 
 
 # ---------------------------------------------------------------------------
-# v2 jobs persistence (7-day retention, public lookup by url_id)
+# v2 jobs persistence (retention window, public lookup by url_id)
 # ---------------------------------------------------------------------------
 
 def _iso(dt: datetime | None) -> str | None:
@@ -285,8 +285,8 @@ async def delete_job(url_id: str) -> bool:
 
 
 # Cap the text stored per page and the number of pages indexed per scan so the
-# full-text index stays bounded (visible text, not raw HTML). ~40 KB x 400 pages
-# is a few MB per scan, purged on the 7-day retention.
+# full-text index stays bounded (visible text, not raw HTML). ~40 KB x 600 pages
+# is a few MB per scan, purged on the retention window.
 _FTS_MAX_CHARS_PER_PAGE = 40_000
 _FTS_MAX_PAGES = 600
 
@@ -466,7 +466,7 @@ async def delete_expired_jobs() -> int:
         now = _iso(datetime.now(timezone.utc))
         cur = await db.execute("DELETE FROM jobs WHERE expires_at <= ?", (now,))
         # Prune the full-text index of any scan that no longer exists (expired
-        # or deleted), so it follows the same 7-day retention as the scans.
+        # or deleted), so it follows the same retention window as the scans.
         await db.execute(
             "DELETE FROM scan_pages_fts WHERE url_id NOT IN (SELECT url_id FROM jobs)"
         )

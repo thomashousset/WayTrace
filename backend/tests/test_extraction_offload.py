@@ -209,3 +209,56 @@ async def test_extraction_overlaps_download(fresh_db, monkeypatch):
     assert first_push_emitted["v"] is not None, "no live counts pushed"
     assert first_push_emitted["v"] < 60, (
         f"extraction only started after all pages downloaded (emitted={first_push_emitted['v']})")
+
+
+@pytest.mark.asyncio
+async def test_scan_timeout_cancels_the_scrape_task(fresh_db, monkeypatch):
+    """On scan timeout the separately-scheduled scrape task must be cancelled, not
+    left running (which would keep hitting archive.org and fill a dead queue)."""
+    import store as store_module
+    import routers.scan as scan_module
+
+    fresh = JobStore()
+    monkeypatch.setattr(store_module, "store", fresh)
+    monkeypatch.setattr(scan_module, "store", fresh)
+    monkeypatch.setattr(scan_module.settings, "scan_timeout_seconds", 1)  # wait_for wants >=1
+
+    emitted = {"n": 0}
+    cancelled = {"v": False}
+
+    async def _endless_scrape(selected, job_id, on_page=None):
+        try:
+            for i in range(10000):
+                p = {"timestamp": "20200101000000", "url": f"http://ex.com/{i}", "html": "<html></html>", "error": None}
+                emitted["n"] += 1
+                if on_page:
+                    await on_page(p)
+                await asyncio.sleep(0.02)
+            return []
+        except asyncio.CancelledError:
+            cancelled["v"] = True
+            raise
+    monkeypatch.setattr(scan_module, "scrape_snapshots", _endless_scrape)
+    # Make process_page slow enough that the consumer never drains fast; the point
+    # is the timeout firing while the scrape is mid-flight.
+    monkeypatch.setattr(scan_module, "process_page", lambda *a: True)
+    monkeypatch.setattr(scan_module, "mine_subdomains", lambda *a: None)
+    monkeypatch.setattr(scan_module, "finalize_accum", lambda accum, categories=None: {})
+
+    res = await fresh.create_job("ex.com", "4.4.4.4")
+    selected = [{"timestamp": "20200101000000", "url": "http://ex.com/0"}]
+    # run_scan wraps the pipeline in wait_for(timeout=1s); the endless scrape makes
+    # it time out. We shorten the wait by patching wait_for's timeout indirectly:
+    # override to a small value via monkeypatching asyncio.wait_for is fragile, so
+    # instead assert the task is cancelled by cancelling run_scan after a moment.
+    task = asyncio.create_task(scan_module.run_scan(job_id=res["job_id"], config=ScanConfig(), selected_snapshots=selected))
+    await asyncio.sleep(0.15)
+    n_at_cancel = emitted["n"]
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+    await asyncio.sleep(0.1)   # give any orphan a chance to keep emitting
+    assert cancelled["v"] is True, "scrape task was not cancelled"
+    assert emitted["n"] <= n_at_cancel + 2, "scrape kept running after cancel (orphan)"

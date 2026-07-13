@@ -4,7 +4,7 @@
 
 > **The internet never forgets.**
 
-Reconstruct the complete digital history of any domain from the Wayback Machine (archive.org). Enter a domain: WayTrace pulls archived HTML across decades, selects the most revealing snapshots, and extracts **43 categories** of intelligence — emails, subdomains, exposed secrets, tech stacks, people — each stamped with `first_seen` / `last_seen`, so you get a full timeline of what appeared, changed, and disappeared. You can even full-text search the archived page content itself.
+Reconstruct the complete digital history of any domain from the Wayback Machine (archive.org). Enter a domain: WayTrace pulls archived HTML across decades, selects the most revealing snapshots, and extracts **43 categories** of intelligence - emails, subdomains, exposed secrets, tech stacks, people - each stamped with `first_seen` / `last_seen`, so you get a full timeline of what appeared, changed, and disappeared. You can even full-text search the archived page content itself.
 
 **No active scanning. No brute-forcing. No traffic to the target. Only public data from archive.org.**
 
@@ -27,11 +27,14 @@ The interface is fully bilingual (English / French), switchable from the navbar.
 
 ## What's new in v1.6.0
 
-- **Redesigned two-view report.** *Categories* (default): a rail of all 43 categories, one open at a time, showing its findings **and** its own activity (per-value appeared/disappeared + a dated change feed). *Activity*: tick categories and individual pivots to compose a shared timeline, with the favicon-evolution gallery. **Provenance-first, neutral** — findings carry *first/last-seen*, *occurrences* and their *archived source*; the severity "importance" UI and the cluttered Pivots graph are gone. The Wayback Machine source is credited with its logo.
+- **Redesigned two-view report.** *Categories* (default): a rail of all 43 categories, one open at a time, showing its findings **and** its own activity (per-value appeared/disappeared + a dated change feed). *Activity*: tick categories and individual pivots to compose a shared timeline, with the favicon-evolution gallery. **Provenance-first and neutral**: findings carry *first/last-seen*, *occurrences* and their *archived source*; the severity "importance" UI and the cluttered Pivots graph are gone.
+- **Live scan.** Extraction overlaps downloading and runs off the event loop, so findings fill in while the scan runs and the server stays responsive. Honest four-phase loading.
+- **No accidental re-scans.** A domain scanned in the last **14 days** is reused instead of re-scanned; "Scan more" forces a fresh one.
+- **Polish.** Full-text page search fixed for punctuation, visible keyboard focus, feed error state, and the Wayback Machine source credited with its logo.
 
 ## What's new in v1.5.0
 
-- **Self-governing, IP-safe archive.org access.** Every request goes through a shared, *adaptive* rate governor (AIMD, like TCP congestion control: it creeps up while responses stay clean and halves on the first connection-refusal) plus a shared concurrency limit — so no number of parallel scans or users can push the server IP past archive.org's tolerance. v1.5 pins the ceiling at **80 req/min** (below the point archive.org was measured refusing connections) and makes a hard-block pause **escalate from 2 minutes** instead of a flat 30, so a temporary reject is cheap.
+- **Self-governing, IP-safe archive.org access.** Every request goes through a shared, *adaptive* rate governor (AIMD, like TCP congestion control: it creeps up while responses stay clean and halves on the first connection-refusal) plus a shared concurrency limit - so no number of parallel scans or users can push the server IP past archive.org's tolerance. v1.5 pins the ceiling at **80 req/min** (below the point archive.org was measured refusing connections) and makes a hard-block pause **escalate from 2 minutes** instead of a flat 30, so a temporary reject is cheap.
 - **One scan at a time.** A single active scan, a 15-deep queue, and one in-flight scan per client keep aggregate archive.org load minimal.
 - **Full-text search over page content** (from v1.2.0): search any word across a scan's archived pages, not just the extracted pivots, with highlighted excerpts and links to the Wayback capture.
 - **UX polish:** honest loading progress (real pages scraped + measured ETA, no stutter), a bilingual archive.org status banner, self-describing result categories, and a lot of dead code removed.
@@ -142,7 +145,7 @@ Not all archived pages are worth the same. WayTrace scores each URL path:
 
 **Year-proportional spread.** Picks are distributed across the archived years rather than clustering on whichever period has the most captures, so a domain's whole history is represented.
 
-**Adaptive cap.** The maximum page count scales with domain size. On the hosted service a per-scan ceiling (`HOSTED_SNAPSHOT_CEILING`, default 5000) keeps runs bounded; set it to `0` on a self-hosted install to scan in full.
+**Adaptive cap.** The maximum page count scales with domain size. On the hosted service a per-scan ceiling (`HOSTED_SNAPSHOT_CEILING`, default 3000) keeps runs bounded; set it to `0` on a self-hosted install to scan in full.
 
 ---
 
@@ -184,13 +187,13 @@ Every finding also records the **source page** it came from, so co-occurring ent
 
 ## Findings & provenance
 
-WayTrace does **not** tell you what's "important" — it shows you the evidence and lets you judge. Every finding carries:
+WayTrace does **not** tell you what's "important" - it shows you the evidence and lets you judge. Every finding carries:
 
 | Field | What it tells you |
 |-------|-------------------|
 | **first seen / last seen** | when the value appeared in the archive and when it was last present (so you see what's live vs. gone) |
 | **occurrences** | how many archived pages it showed up on |
-| **source page** | the exact Wayback capture it came from — one click to verify |
+| **source page** | the exact Wayback capture it came from - one click to verify |
 
 Categories with findings are surfaced first; the full 43-category scope (including the empty ones) stays visible for transparency, so a clean result reads as "we looked and found nothing", not "we didn't look".
 
@@ -198,16 +201,14 @@ Categories with findings are surfaced first; the full 43-category scope (includi
 
 ## Results interface
 
-Results open as a single page with a tabbed intelligence block:
+The report is a single page with two views you switch between:
 
-- **Activity** - one timeline lane per category on a shared year axis; click a lane to expand a per-value gantt and see when each entity was live.
-- **Pivots** - a radial graph linking the domain to its emails, subdomains, persons, orgs, social, GitHub, trackers, favicons, and hosting.
-- **Subdomains** - ranked by occurrences with their active period.
-- **Tech & infra** - stack, hosting/CDN, and HTTP headers with first/last seen.
+- **Categories (default).** A rail on the left lists all 43 categories: the ones with findings first (with counts), then the empty ones collapsed but present. You open **one category at a time**; the panel shows its full findings (value, occurrences, first/last-seen, and a link to the archived source page) **and its own activity** below - a lane per value showing when it appeared and disappeared, plus a dated change feed. "Show all" flattens every found category at once.
+- **Activity.** Tick categories **and** individual pivots (a specific subdomain, tracker, favicon, person...) to compose a shared-timeline: each becomes a lane on the same year axis (pivots highlighted), so overlaps and disappearances read at a glance. The axis always spans exactly what's shown. Includes the favicon-evolution gallery and a global change feed. Pivots are searchable.
 
-Across every tab: a **global search** (filters all tabs at once), **sortable columns**, **one-click column copy** (e.g. every email), and **export** to JSON, CSV (current tab), or all categories at once. There's also a **full-text search over the archived page content itself** — find any word inside the scraped pages, with highlighted excerpts and a link to the exact Wayback capture. The whole UI is bilingual (EN / FR).
+Two searches sit at the top, kept distinct: **filter the extracted findings** (instant, client-side) and **full-text search the archived page content** (any word inside the scraped HTML, with highlighted excerpts and a link to the exact Wayback capture). Every value is copyable (per-value or whole column), and you can **export** to JSON, CSV, or a standalone HTML report.
 
-Every result category is shown — including the ones with **zero findings** — each with a one-line description of what it detects, so you always see the full scope of what was searched, not just what was found.
+WayTrace does not rank findings by "importance": every result carries its **provenance** (first/last-seen, occurrences, archived source) and you judge. Every category is shown - including the ones with **zero findings** - so you always see the full scope of what was searched, not just what was found.
 
 ---
 
@@ -344,11 +345,11 @@ Server-Sent Events for real-time progress (preferred over polling). Events: `pro
 
 Every scan is stored under a stable `url_id` and stays available for the retention window (14 days on the hosted build; configurable when self-hosted):
 
-- `GET /api/s/{url_id}` — view a scan; `DELETE` to remove it; `POST /api/s/{url_id}/publish` to toggle public.
-- `GET /api/s/{url_id}/search?q=…` — full-text search the scan's archived page content.
-- `GET /api/s/{url_id}/export.{json,csv,html}` — download.
-- `GET /api/feed` — recently published scans.
-- `GET /api/local-scans` — **self-hosted only**: lists every scan this instance has run (published or private), so a solo user keeps and re-accesses all their scans from "My scans". Disabled on the hosted build, which scopes scans to accounts.
+- `GET /api/s/{url_id}` - view a scan; `DELETE` to remove it; `POST /api/s/{url_id}/publish` to toggle public.
+- `GET /api/s/{url_id}/search?q=…` - full-text search the scan's archived page content.
+- `GET /api/s/{url_id}/export.{json,csv,html}` - download.
+- `GET /api/feed` - recently published scans.
+- `GET /api/local-scans` - **self-hosted only**: lists every scan this instance has run (published or private), so a solo user keeps and re-accesses all their scans from "My scans". Disabled on the hosted build, which scopes scans to accounts.
 
 ### GET /api/health
 
@@ -364,12 +365,14 @@ All settings live in `.env` (copy from `.env.example`). Defaults are polite towa
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `ARCHIVE_RATE_PER_MINUTE` | `90` | **Starting** archive.org request rate (req/min). The governor adapts it live. |
-| `ARCHIVE_RATE_MIN` / `ARCHIVE_RATE_MAX` | `60` / `150` | Floor and ceiling the adaptive rate stays within (1 → 2.5 req/s) |
+| `ARCHIVE_RATE_PER_MINUTE` | `75` | **Starting** archive.org request rate (req/min). The governor adapts it live. |
+| `ARCHIVE_RATE_MIN` / `ARCHIVE_RATE_MAX` | `60` / `80` | Floor and ceiling the adaptive rate stays within (1 → 1.33 req/s) |
 | `ARCHIVE_GLOBAL_CONCURRENCY` | `3` | Max simultaneous archive.org connections across all scans |
 | `MAX_CONCURRENT_SCRAPES` | `4` | Per-scan parallel requests (1-50) |
 | `SCRAPE_DELAY_MIN` / `SCRAPE_DELAY_MAX` | `0.5` / `1.2` | Per-request jitter (s) |
-| `MAX_ACTIVE_TOTAL` | `2` | Scans running at once; the rest queue |
+| `MAX_ACTIVE_TOTAL` | `1` | Scans running at once; the rest queue |
+| `MAX_QUEUE_TOTAL` | `15` | Waiting-queue depth (active + waiting cap) |
+| `MAX_ACTIVE_PER_IP` | `1` | In-flight scans per client (can't stack a second) |
 | `ARCHIVE_REQUEST_TIMEOUT` | `60` | Per-request timeout (s) |
 | `HOSTED_SNAPSHOT_CEILING` | `3000` | Per-scan snapshot ceiling; `0` disables it for self-hosted **full** scans |
 | `SCAN_RETENTION_DAYS` | `14` | How long a stored scan is kept (and reused by the guardrail) |
@@ -403,7 +406,7 @@ backend/
     extractor/            One module per category (43 total) + finalize/highlights
 
 frontend/                 index.html + styles.css + app.js - vanilla JS, no
-                          build step, dark/light, bilingual EN/FR, tabbed results
+                          build step, dark/light, bilingual EN/FR, two-view report
 tests/                    1200+ tests: extraction, selection, API, anti-block, regressions
 ```
 

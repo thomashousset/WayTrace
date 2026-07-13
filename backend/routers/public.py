@@ -12,7 +12,7 @@ import io
 import json
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 from loguru import logger
 from pydantic import BaseModel, Field

@@ -6,7 +6,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from loguru import logger
 
@@ -28,7 +28,7 @@ from models import (
 from services.cdx import fetch_cdx_snapshots
 from services import archive_health
 from services.extractor import (
-    ALL_CATEGORIES, extract_all, compute_highlights,
+    ALL_CATEGORIES, compute_highlights,
     new_accum, mine_subdomains, process_page, finalize_accum,
 )
 from services.extractor.finalize import merge_analytics_ids
@@ -85,7 +85,7 @@ def format_sse_event(event_id: int, event_type: str, data: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Scan pipeline (sequential: CDX → filter → scrape → extract)
+# Scan pipeline (CDX -> filter -> scrape, with extraction overlapping the scrape)
 # ---------------------------------------------------------------------------
 
 async def run_scan(
@@ -143,7 +143,7 @@ async def _persist_and_finish(job_id: str, start: float) -> None:
     if live.get("status") == "cancelled":
         # The user deleted this scan while it was still running. Persisting it
         # now would re-insert the row that delete_scan just hard-deleted (and
-        # revive it with a fresh 7-day expiry). Free the slot and stop.
+        # revive it with a fresh expiry). Free the slot and stop.
         await store.finish_job(job_id, duration_seconds=time.time() - start)
         return
     now = datetime.now(timezone.utc)
@@ -298,15 +298,26 @@ async def _scan_pipeline(
             # stream the live counts so findings fill in as pages arrive.
             await store.update_job(job_id, live_counts=live_counts)
 
-        while True:
-            item = await _q.get()
-            if item is _DONE:
-                break
-            if item.get("html") is not None:
-                batch.append(item)
-            if len(batch) >= 25:
-                await _flush()
-        await _flush()  # tail
+        # The scrape runs as a separate task, so if the pipeline is cancelled
+        # (scan timeout) or the consumer raises, we MUST cancel it too — otherwise
+        # it keeps fetching from archive.org and pushing onto a queue no one drains.
+        try:
+            while True:
+                item = await _q.get()
+                if item is _DONE:
+                    break
+                if item.get("html") is not None:
+                    batch.append(item)
+                if len(batch) >= 25:
+                    await _flush()
+            await _flush()  # tail
+        finally:
+            if not scrape_task.done():
+                scrape_task.cancel()
+                try:
+                    await scrape_task
+                except (asyncio.CancelledError, Exception):
+                    pass
 
         pages = scrape_task.result()   # full list (incl. failed pages) for meta/FTS
 

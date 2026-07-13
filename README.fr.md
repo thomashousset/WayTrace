@@ -27,11 +27,14 @@ L'interface est entièrement bilingue (anglais / français), basculable depuis l
 
 ## Nouveautés de la v1.6.0
 
-- **Rapport repensé, deux vues.** *Catégories* (défaut) : un rail des 43 catégories, une ouverte à la fois, montrant ses résultats **et** sa propre activité (apparu/disparu par valeur + un flux de changements daté). *Activité* : cochez des catégories et des pivots précis pour composer une frise partagée, avec la galerie d'évolution des favicons. **La provenance d'abord, neutre** — chaque résultat porte son *first/last-seen*, ses *occurrences* et sa *page source archivée* ; l'UI de « gravité » et le graphe Pivots encombrant disparaissent. La source Wayback Machine est créditée par son logo.
+- **Rapport repensé, deux vues.** *Catégories* (défaut) : un rail des 43 catégories, une ouverte à la fois, montrant ses résultats **et** sa propre activité (apparu/disparu par valeur + un flux de changements daté). *Activité* : cochez des catégories et des pivots précis pour composer une frise partagée, avec la galerie d'évolution des favicons. **La provenance d'abord, neutre** : chaque résultat porte son *first/last-seen*, ses *occurrences* et sa *page source archivée* ; l'UI de « gravité » et le graphe Pivots encombrant disparaissent.
+- **Scan vivant.** L'extraction chevauche le téléchargement et tourne hors de l'event loop : les résultats se remplissent pendant le scan et le serveur reste réactif. Chargement honnête en quatre phases.
+- **Plus de re-scan accidentel.** Un domaine scanné dans les **14 derniers jours** est réutilisé au lieu d'être re-scanné ; « Scan more » force un scan frais.
+- **Finitions.** Recherche plein-texte corrigée pour la ponctuation, focus clavier visible, état d'erreur du flux, et la source Wayback Machine créditée par son logo.
 
 ## Nouveautés de la v1.5.0
 
-- **Accès archive.org auto-régulé, sûr pour l'IP.** Chaque requête passe par un gouverneur de débit *adaptatif* partagé (AIMD, comme le contrôle de congestion TCP : il monte doucement tant que les réponses restent propres et se divise par deux au premier refus de connexion) plus une limite de concurrence partagée. La v1.5 fixe le plafond à **80 req/min** (sous le seuil où archive.org a été mesuré refusant les connexions) et fait **démarrer une pause de blocage à 2 minutes** au lieu de 30 fixes, escaladant seulement sur refus consécutifs — un refus passager coûte donc peu.
+- **Accès archive.org auto-régulé, sûr pour l'IP.** Chaque requête passe par un gouverneur de débit *adaptatif* partagé (AIMD, comme le contrôle de congestion TCP : il monte doucement tant que les réponses restent propres et se divise par deux au premier refus de connexion) plus une limite de concurrence partagée. La v1.5 fixe le plafond à **80 req/min** (sous le seuil où archive.org a été mesuré refusant les connexions) et fait **démarrer une pause de blocage à 2 minutes** au lieu de 30 fixes, escaladant seulement sur refus consécutifs - un refus passager coûte donc peu.
 - **Un seul scan à la fois.** Un scan actif unique, une file d'attente de 15, et un scan en cours max par client gardent la charge archive.org minimale.
 - **Recherche plein-texte dans le contenu des pages** (depuis la v1.2.0) : cherchez n'importe quel mot dans les pages archivées d'un scan, pas seulement les pivots extraits, avec extraits surlignés et liens vers la capture Wayback.
 - **Finitions UX :** progression de chargement honnête (vraies pages récupérées + ETA mesurée, sans hoquet), bannière d'état archive.org bilingue, catégories de résultats auto-descriptives, et beaucoup de code mort retiré.
@@ -142,7 +145,7 @@ Toutes les pages archivées n'ont pas la même valeur. WayTrace note chaque chem
 
 **Répartition au prorata des années.** Les choix sont distribués sur les années archivées plutôt que concentrés sur la période la plus capturée, pour représenter tout l'historique d'un domaine.
 
-**Plafond adaptatif.** Le nombre maximum de pages évolue avec la taille du domaine. Sur le service hébergé, un plafond par scan (`HOSTED_SNAPSHOT_CEILING`, défaut 5000) borne les runs ; mettez-le à `0` sur une installation auto-hébergée pour scanner en entier.
+**Plafond adaptatif.** Le nombre maximum de pages évolue avec la taille du domaine. Sur le service hébergé, un plafond par scan (`HOSTED_SNAPSHOT_CEILING`, défaut 3000) borne les runs ; mettez-le à `0` sur une installation auto-hébergée pour scanner en entier.
 
 ---
 
@@ -198,16 +201,14 @@ Les catégories avec résultats remontent en premier ; le périmètre complet de
 
 ## Interface des résultats
 
-Les résultats s'ouvrent sur une page unique avec un bloc de renseignement à onglets :
+Le rapport est une page unique avec deux vues entre lesquelles vous basculez :
 
-- **Activité** - une voie chronologique par catégorie sur un axe d'années partagé ; cliquez une voie pour déplier un gantt par valeur et voir quand chaque entité était active.
-- **Pivots** - un graphe radial reliant le domaine à ses emails, sous-domaines, personnes, organisations, réseaux sociaux, GitHub, trackers, favicons et hébergement.
-- **Sous-domaines** - classés par occurrences avec leur période d'activité.
-- **Tech & infra** - stack, hébergement/CDN et en-têtes HTTP avec premières/dernières dates vues.
+- **Catégories (par défaut).** Un rail à gauche liste les 43 catégories : celles avec résultats d'abord (avec compteurs), puis les vides repliées mais présentes. Vous ouvrez **une catégorie à la fois** ; le panneau montre tous ses résultats (valeur, occurrences, vu de / à, et un lien vers la page source archivée) **et sa propre activité** en dessous : une voie par valeur montrant quand elle est apparue et a disparu, plus un flux de changements daté. « Tout afficher » déroule toutes les catégories trouvées d'un coup.
+- **Activité.** Cochez des catégories **et** des pivots précis (un sous-domaine, un tracker, un favicon, une personne...) pour composer une frise partagée : chacun devient une voie sur le même axe d'années (pivots mis en avant), pour lire d'un coup d'œil les recouvrements et les disparitions. L'axe couvre toujours exactement ce qui est affiché. Inclut la galerie d'évolution des favicons et un flux de changements global. Les pivots sont cherchables.
 
-Sur tous les onglets : une **recherche globale** (filtre tous les onglets à la fois), des **colonnes triables**, une **copie de colonne en un clic** (p. ex. tous les emails), et un **export** en JSON, CSV (onglet courant) ou toutes les catégories d'un coup. Il y a aussi une **recherche plein-texte dans le contenu même des pages archivées** — trouvez n'importe quel mot dans les pages récupérées, avec extraits surlignés et lien vers la capture Wayback exacte. Toute l'interface est bilingue (FR / EN).
+Deux recherches en tête, bien distinctes : **filtrer les résultats extraits** (instantané, côté client) et **recherche plein-texte dans le contenu des pages archivées** (n'importe quel mot du HTML récupéré, avec extraits surlignés et lien vers la capture Wayback exacte). Chaque valeur est copiable (par valeur ou par colonne entière), et vous pouvez **exporter** en JSON, CSV ou rapport HTML autonome.
 
-Chaque catégorie de résultat est affichée — y compris celles à **zéro résultat** — chacune avec une description en une ligne de ce qu'elle détecte, pour que vous voyiez toujours l'étendue complète de ce qui a été cherché, pas seulement de ce qui a été trouvé.
+WayTrace ne classe pas les résultats par « importance » : chaque résultat porte sa **provenance** (vu de / à, occurrences, source archivée) et c'est vous qui jugez. Chaque catégorie est affichée, y compris celles à **zéro résultat**, pour que vous voyiez toujours l'étendue complète de ce qui a été cherché, pas seulement de ce qui a été trouvé.
 
 ---
 
@@ -344,11 +345,11 @@ Server-Sent Events pour la progression en temps réel (préféré au polling). �
 
 Chaque scan est stocké sous un `url_id` stable et reste disponible pendant la fenêtre de rétention (14 jours sur le build hébergé ; configurable en auto-hébergé) :
 
-- `GET /api/s/{url_id}` — consulter un scan ; `DELETE` pour le supprimer ; `POST /api/s/{url_id}/publish` pour basculer public.
-- `GET /api/s/{url_id}/search?q=…` — recherche plein-texte dans le contenu des pages archivées du scan.
-- `GET /api/s/{url_id}/export.{json,csv,html}` — télécharger.
-- `GET /api/feed` — scans récemment publiés.
-- `GET /api/local-scans` — **auto-hébergé uniquement** : liste tous les scans lancés par cette instance (publiés ou privés), pour qu'un utilisateur solo conserve et réaccède à tous ses scans depuis « Mes scans ». Désactivé sur le build hébergé, qui rattache les scans aux comptes.
+- `GET /api/s/{url_id}` - consulter un scan ; `DELETE` pour le supprimer ; `POST /api/s/{url_id}/publish` pour basculer public.
+- `GET /api/s/{url_id}/search?q=…` - recherche plein-texte dans le contenu des pages archivées du scan.
+- `GET /api/s/{url_id}/export.{json,csv,html}` - télécharger.
+- `GET /api/feed` - scans récemment publiés.
+- `GET /api/local-scans` - **auto-hébergé uniquement** : liste tous les scans lancés par cette instance (publiés ou privés), pour qu'un utilisateur solo conserve et réaccède à tous ses scans depuis « Mes scans ». Désactivé sur le build hébergé, qui rattache les scans aux comptes.
 
 ### GET /api/health
 
@@ -364,12 +365,14 @@ Tous les réglages sont dans `.env` (copié depuis `.env.example`). Les valeurs 
 
 | Variable | Défaut | Description |
 |----------|--------|-------------|
-| `ARCHIVE_RATE_PER_MINUTE` | `90` | Débit **de départ** des requêtes archive.org (req/min). Le gouverneur l'adapte en direct. |
-| `ARCHIVE_RATE_MIN` / `ARCHIVE_RATE_MAX` | `60` / `150` | Plancher et plafond dans lesquels le débit adaptatif reste (1 → 2,5 req/s) |
+| `ARCHIVE_RATE_PER_MINUTE` | `75` | Débit **de départ** des requêtes archive.org (req/min). Le gouverneur l'adapte en direct. |
+| `ARCHIVE_RATE_MIN` / `ARCHIVE_RATE_MAX` | `60` / `80` | Plancher et plafond dans lesquels le débit adaptatif reste (1 → 1,33 req/s) |
 | `ARCHIVE_GLOBAL_CONCURRENCY` | `3` | Connexions archive.org simultanées max, tous scans confondus |
 | `MAX_CONCURRENT_SCRAPES` | `4` | Requêtes parallèles par scan (1-50) |
 | `SCRAPE_DELAY_MIN` / `SCRAPE_DELAY_MAX` | `0.5` / `1.2` | Gigue par requête (s) |
-| `MAX_ACTIVE_TOTAL` | `2` | Scans exécutés en même temps ; le reste attend en file |
+| `MAX_ACTIVE_TOTAL` | `1` | Scans exécutés en même temps ; le reste attend en file |
+| `MAX_QUEUE_TOTAL` | `15` | Profondeur de la file d'attente (actifs + en attente) |
+| `MAX_ACTIVE_PER_IP` | `1` | Scans en cours par client (impossible d'en empiler un 2ᵉ) |
 | `ARCHIVE_REQUEST_TIMEOUT` | `60` | Délai par requête (s) |
 | `HOSTED_SNAPSHOT_CEILING` | `3000` | Plafond de snapshots par scan ; `0` le désactive pour des scans **complets** auto-hébergés |
 | `SCAN_RETENTION_DAYS` | `14` | Durée de conservation d’un scan (et de réutilisation par le garde-fou) |
@@ -403,7 +406,7 @@ backend/
     extractor/            Un module par catégorie (43 au total) + finalize/highlights
 
 frontend/                 index.html + styles.css + app.js - JS vanilla, sans build,
-                          clair/sombre, bilingue FR/EN, résultats à onglets
+                          clair/sombre, bilingue FR/EN, rapport à deux vues
 tests/                    1200+ tests : extraction, sélection, API, anti-blocage, régressions
 ```
 
