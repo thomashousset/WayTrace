@@ -342,7 +342,7 @@ Server-Sent Events pour la progression en temps réel (préféré au polling). �
 
 ### Scans partagés & stockage
 
-Chaque scan est stocké sous un `url_id` stable et reste disponible pendant la fenêtre de rétention (7 jours sur le build hébergé ; configurable en auto-hébergé) :
+Chaque scan est stocké sous un `url_id` stable et reste disponible pendant la fenêtre de rétention (14 jours sur le build hébergé ; configurable en auto-hébergé) :
 
 - `GET /api/s/{url_id}` — consulter un scan ; `DELETE` pour le supprimer ; `POST /api/s/{url_id}/publish` pour basculer public.
 - `GET /api/s/{url_id}/search?q=…` — recherche plein-texte dans le contenu des pages archivées du scan.
@@ -371,8 +371,8 @@ Tous les réglages sont dans `.env` (copié depuis `.env.example`). Les valeurs 
 | `SCRAPE_DELAY_MIN` / `SCRAPE_DELAY_MAX` | `0.5` / `1.2` | Gigue par requête (s) |
 | `MAX_ACTIVE_TOTAL` | `2` | Scans exécutés en même temps ; le reste attend en file |
 | `ARCHIVE_REQUEST_TIMEOUT` | `60` | Délai par requête (s) |
-| `HOSTED_SNAPSHOT_CEILING` | `5000` | Plafond de snapshots par scan ; `0` le désactive pour des scans **complets** auto-hébergés |
-| `SCAN_RETENTION_DAYS` | `7` | Durée pendant laquelle un scan stocké reste consultable |
+| `HOSTED_SNAPSHOT_CEILING` | `3000` | Plafond de snapshots par scan ; `0` le désactive pour des scans **complets** auto-hébergés |
+| `SCAN_RETENTION_DAYS` | `14` | Durée de conservation d’un scan (et de réutilisation par le garde-fou) |
 | `IS_PRODUCTION` | `0` | `1` en prod : refuse de démarrer avec le `SECRET_KEY` par défaut |
 | `DATABASE_URL` | `/data/waytrace.db` | Chemin SQLite (à surcharger hors Docker) |
 | `LOG_LEVEL` | `INFO` | `DEBUG` / `INFO` / `WARNING` / `ERROR` |

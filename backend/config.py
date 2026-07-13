@@ -65,7 +65,9 @@ class Settings(BaseSettings):
     # (year-proportional). Set to 0 to disable the ceiling entirely — that's the
     # mode for a self-hosted / local install, which can scan a domain in full.
     hosted_snapshot_ceiling: int = 3000
-    scan_retention_days: int = 7
+    # Scans are kept (and thus reused by the already-scanned guardrail) for this
+    # long. 14 days = a domain isn't re-scanned within two weeks.
+    scan_retention_days: int = 14
     cleanup_interval_seconds: int = 3600
 
     # Security: hide OpenAPI schema + Swagger UI by default in prod.

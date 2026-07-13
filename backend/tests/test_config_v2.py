@@ -18,7 +18,9 @@ def test_max_active_per_ip_default():
 
 
 def test_scan_retention_days_default():
-    assert settings.scan_retention_days == 7
+    # 14 days: a scan is kept — and reused by the already-scanned guardrail — for
+    # two weeks before a re-scan is allowed.
+    assert settings.scan_retention_days == 14
 
 
 def test_cleanup_interval_seconds_default():

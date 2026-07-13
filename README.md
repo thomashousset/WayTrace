@@ -342,7 +342,7 @@ Server-Sent Events for real-time progress (preferred over polling). Events: `pro
 
 ### Shared scans & storage
 
-Every scan is stored under a stable `url_id` and stays available for the retention window (7 days on the hosted build; configurable when self-hosted):
+Every scan is stored under a stable `url_id` and stays available for the retention window (14 days on the hosted build; configurable when self-hosted):
 
 - `GET /api/s/{url_id}` — view a scan; `DELETE` to remove it; `POST /api/s/{url_id}/publish` to toggle public.
 - `GET /api/s/{url_id}/search?q=…` — full-text search the scan's archived page content.
@@ -371,8 +371,8 @@ All settings live in `.env` (copy from `.env.example`). Defaults are polite towa
 | `SCRAPE_DELAY_MIN` / `SCRAPE_DELAY_MAX` | `0.5` / `1.2` | Per-request jitter (s) |
 | `MAX_ACTIVE_TOTAL` | `2` | Scans running at once; the rest queue |
 | `ARCHIVE_REQUEST_TIMEOUT` | `60` | Per-request timeout (s) |
-| `HOSTED_SNAPSHOT_CEILING` | `5000` | Per-scan snapshot ceiling; `0` disables it for self-hosted **full** scans |
-| `SCAN_RETENTION_DAYS` | `7` | How long a stored scan stays retrievable |
+| `HOSTED_SNAPSHOT_CEILING` | `3000` | Per-scan snapshot ceiling; `0` disables it for self-hosted **full** scans |
+| `SCAN_RETENTION_DAYS` | `14` | How long a stored scan is kept (and reused by the guardrail) |
 | `IS_PRODUCTION` | `0` | `1` in prod: refuses to boot with the default `SECRET_KEY` |
 | `DATABASE_URL` | `/data/waytrace.db` | SQLite path (override outside Docker) |
 | `LOG_LEVEL` | `INFO` | `DEBUG` / `INFO` / `WARNING` / `ERROR` |
