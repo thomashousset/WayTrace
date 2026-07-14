@@ -2366,13 +2366,13 @@
     #r2-summary:empty { display: none; }
     #r2-summary {
       display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;
-      padding: 12px 2px; border-bottom: 1px solid var(--surface3);
+      padding: 12px 2px; border-bottom: 1px solid var(--border);
     }
-    .r2-sum-stats { display: flex; flex-wrap: wrap; align-items: center; gap: 0; font-family: var(--mono); font-size: 12.5px; color: var(--text-dim); }
-    .r2-sum-stat { padding: 0 12px; border-left: 1px solid var(--surface3); }
+    .r2-sum-stats { display: flex; flex-wrap: wrap; align-items: center; gap: 0; font-family: var(--font); font-size: 12.5px; color: var(--text-dim); }
+    .r2-sum-stat { padding: 0 12px; border-left: 1px solid var(--border); }
     .r2-sum-stat:first-child { padding-left: 2px; border-left: 0; }
-    .r2-sum-stat b { color: var(--text); font-weight: 600; }
-    .r2-sum-range { padding: 0 12px; border-left: 1px solid var(--surface3); font-family: var(--mono); font-size: 12px; color: var(--text-faint); }
+    .r2-sum-stat b { color: var(--text); font-weight: 600; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+    .r2-sum-range { padding: 0 12px; border-left: 1px solid var(--border); font-family: var(--mono); font-size: 12px; color: var(--text-faint); }
     .r2-presence { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
     .r2-preseg {
       font-family: var(--mono); font-size: 11.5px; padding: 6px 11px; border: 0; background: transparent;
@@ -2404,12 +2404,12 @@
     .r2-cooc-cat { font-family: var(--mono); font-size: 10.5px; color: var(--text-faint); min-width: 96px; }
     .r2-cooc-val { font-family: var(--mono); font-size: 11.5px; color: var(--text); border: 1px solid var(--surface3); border-radius: 4px; padding: 1px 6px; }
     .r2-cooc-more { font-family: var(--mono); font-size: 10.5px; color: var(--text-faint); }
-    @media (max-width: 560px) { #r2-summary { justify-content: flex-start; } }
+    @media (max-width: 820px) { #r2-summary { justify-content: flex-start; } }
 
     .r2-body { display: grid; grid-template-columns: 232px 1fr; gap: 0; }
     .r2-rail {
       border-right: 1px solid var(--surface3); padding: 14px 10px 20px;
-      position: sticky; top: 8px; align-self: start; max-height: calc(100vh - 40px); overflow: auto;
+      position: sticky; top: 64px; align-self: start; max-height: calc(100vh - 72px); overflow: auto;
     }
     .r2-rt, .r2-rt2 {
       font-family: var(--font); font-size: 11.5px; font-weight: 600; letter-spacing: 0; text-transform: none;
@@ -2420,6 +2420,7 @@
       display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 11px; border-radius: 6px;
       font-size: 12.5px; color: var(--text-dim); cursor: pointer; border-left: 2px solid transparent;
     }
+    .r2-rlink { transition: background .12s, color .12s, border-color .12s; }
     .r2-rlink:hover { background: var(--surface2); color: var(--text); }
     .r2-rlink:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; color: var(--text); }
     .r2-rlink.on { background: var(--accent-soft); color: var(--text); border-left-color: var(--accent); font-weight: 550; }
@@ -2447,6 +2448,7 @@
 
     /* checkboxes (Activity view rail) */
     .r2-chk { display: flex; align-items: center; gap: 9px; padding: 6px 8px; border-radius: 6px; font-size: 12.5px; color: var(--text-dim); cursor: pointer; }
+    .r2-chk { transition: background .12s, color .12s; }
     .r2-chk:hover { background: var(--surface2); color: var(--text); }
     .r2-chk.on { color: var(--text); }
     .r2-box {
@@ -2470,6 +2472,20 @@
       .r2-body { grid-template-columns: 1fr; }
       .r2-rail { position: static; border-right: 0; border-bottom: 1px solid var(--surface3); max-height: none; }
       .r2-main { padding: 16px 0; }
+    }
+    /* Narrow screens: the value goes on its own line and occ/seen/source flow
+       below as a compact meta row, so the fixed columns never crush the value. */
+    @media (max-width: 560px) {
+      .r2-colhead { display: none; }
+      .r2-row { grid-template-columns: 1fr; gap: 3px; padding: 10px 8px; }
+      .r2-row .r2-occ, .r2-row .r2-span, .r2-row .r2-src { text-align: left; }
+      .r2-row .r2-occ::before { content: "×"; color: var(--text-faint); }
+      .r2-row > .r2-occ, .r2-row > .r2-span, .r2-row > .r2-src { display: inline; margin-right: 12px; font-size: 11.5px; }
+    }
+    /* Keyboard focus for the div-based rail/activity controls. */
+    .r2-chk:focus-visible, .r2-rall:focus-visible, .r2-nav:focus-visible,
+    .r2-emptytoggle:focus-visible, .r2-copycol:focus-visible, .r2-cooc-chip:focus-visible {
+      outline: 2px solid var(--accent); outline-offset: -2px;
     }
 
     /* category detail block */
@@ -2497,6 +2513,7 @@
     .r2-colhead { display: grid; grid-template-columns: 1fr 62px 168px 62px; gap: 14px; padding: 0 8px 6px; font-family: var(--font); font-size: 11px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--text-faint); }
     .r2-colhead .r { text-align: right; }
     .r2-row { display: grid; grid-template-columns: 1fr 62px 168px 62px; gap: 14px; align-items: start; padding: 9px 8px; border-bottom: 1px solid var(--surface3); }
+    .r2-row { transition: background .12s; }
     .r2-row:hover { background: var(--surface2); }
     /* Value cell: the value shows in FULL — it wraps instead of truncating, so no
        info is lost and the whole thing is selectable for copy-paste. The copy
@@ -2514,6 +2531,11 @@
     .r2-copy:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); transform: translateY(-1px); }
     .r2-copy:active { transform: translateY(0) scale(.92); }
     .r2-copy:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; opacity: 1; }
+    /* Touch has no hover: the copy control must be visible and a real tap target. */
+    @media (hover: none) {
+      .r2-copy { opacity: 1; color: var(--text-dim); border-color: var(--border); min-width: 34px; min-height: 30px; }
+      .r2-cooc-chip { min-height: 28px; }
+    }
     /* Click confirmation: green check that pulses so the copy is unmistakable. */
     .r2-copy.copied {
       opacity: 1; color: var(--accent-text); background: var(--green); border-color: var(--green);
@@ -2535,7 +2557,7 @@
 
     /* per-category + composed activity */
     .r2-act, .r2-composer { margin-top: 18px; border: 1px solid var(--surface3); border-radius: var(--radius); background: var(--bg); overflow: hidden; }
-    .r2-composer { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+    .r2-composer { border-color: var(--accent); box-shadow: 0 0 18px -6px var(--accent-glow); }
     .r2-ah, .r2-ch { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--surface3); font-size: 12.5px; color: var(--text-dim); }
     .r2-ah b, .r2-ch b { color: var(--text); }
     .r2-ah .i, .r2-ch .i { color: var(--accent); }
@@ -2545,8 +2567,8 @@
     .r2-lane { display: grid; grid-template-columns: 150px 1fr; gap: 8px; align-items: center; height: 25px; }
     .r2-lbl { font-family: var(--mono); font-size: 11.5px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 6px; }
     .r2-pvtag { font-size: 9px; color: var(--green); border: 1px solid var(--green); border-radius: 3px; padding: 0 3px; }
-    .r2-track { position: relative; height: 100%; border-left: 1px solid var(--surface3); }
-    .r2-track::before, .r2-track::after { content: ""; position: absolute; top: 0; bottom: 0; width: 1px; background: var(--surface3); }
+    .r2-track { position: relative; height: 100%; border-left: 1px solid var(--border); }
+    .r2-track::before, .r2-track::after { content: ""; position: absolute; top: 0; bottom: 0; width: 1px; background: var(--border); }
     .r2-track::before { left: 33.3%; }
     .r2-track::after { left: 66.6%; }
     .r2-bar { position: absolute; top: 50%; transform: translateY(-50%); height: 7px; border-radius: 100px; background: var(--accent); opacity: .9; }

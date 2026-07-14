@@ -364,3 +364,62 @@ def test_cooccurrence_chip_expands_same_page_findings(live_server, page):
     assert "Jane Doe" in panel.inner_text()
     # gone@x.com is alone on its page -> no chip.
     assert page.locator("#r2-main .r2-row", has_text="gone@x.com").locator(".r2-cooc-chip").count() == 0
+
+
+# --- code-audit regressions ---
+
+# Category "emails" all disappeared by 2018; "subdomains" reaches the archive end
+# (2025). The global "still present" bound must stay 2025 even after opening the
+# 2018-only emails category (which locally mutates the timeline bound).
+GLOBALHI = [
+    {"id": 1, "category": "emails", "value": "old1@x.com", "first_seen": "2012-01", "last_seen": "2018-03", "occurrences": 4, "metadata": {}},
+    {"id": 2, "category": "emails", "value": "old2@x.com", "first_seen": "2013-01", "last_seen": "2017-06", "occurrences": 2, "metadata": {}},
+    {"id": 3, "category": "subdomains", "value": "www.x.com", "first_seen": "2012-01", "last_seen": "2025-06", "occurrences": 99, "metadata": {}},
+]
+
+
+def test_presence_bound_stable_after_opening_an_old_category(live_server, page):
+    _open_with(page, live_server, GLOBALHI)
+    # Open the emails category (its newest last_seen is 2018) — this used to shrink
+    # the global bound and misclassify presence on the next render.
+    page.locator(".r2-rlink", has_text="Emails").first.click()
+    # Now filter to "Still present": ONLY www.x.com (2025) should qualify; the 2018
+    # emails must NOT be counted live.
+    page.locator(".r2-preseg", has_text="Still present").click()
+    page.locator(".r2-rlink", has_text="Subdomains").first.click()
+    assert page.locator("#r2-main .r2-row", has_text="www.x.com").count() == 1
+    page.locator(".r2-rlink", has_text="Emails").first.click()
+    # Emails category under "Still present" must be empty (all disappeared in 2018).
+    assert page.locator("#r2-main .r2-row", has_text="@x.com").count() == 0
+    assert page.locator("#r2-main .r2-emptystate").count() == 1
+
+
+def test_pivot_value_with_quote_does_not_inject(live_server, page):
+    tricky = 'x" onmouseover="window.__hacked=1'
+    findings = [
+        {"id": 1, "category": "subdomains", "value": tricky, "first_seen": "2020-01", "last_seen": "2025-06", "occurrences": 3, "metadata": {}},
+        {"id": 2, "category": "emails", "value": "a@x.com", "first_seen": "2020-01", "last_seen": "2025-06", "occurrences": 5, "metadata": {}},
+    ]
+    _open_with(page, live_server, findings)
+    page.locator("#r2-vbtn-activity").click()
+    # The pivot renders (its category is checked by default) and toggling it works
+    # via a data attribute — no injected handler fires.
+    pv = page.locator("#r2-rail .r2-chk.pv", has_text='onmouseover')
+    assert pv.count() == 1
+    pv.first.hover()
+    pv.first.click()
+    assert page.evaluate("() => window.__hacked") in (None, 0)
+    assert "on" in (pv.first.get_attribute("class") or "")
+
+
+def test_copy_column_respects_presence_filter(live_server, page):
+    page.context.grant_permissions(["clipboard-read", "clipboard-write"])
+    _open_with(page, live_server, GLOBALHI)
+    page.locator(".r2-rlink", has_text="Subdomains").first.click()
+    page.locator(".r2-preseg", has_text="Disappeared").click()
+    # Subdomains has only the live www.x.com -> under "Disappeared" nothing shows,
+    # so copy column copies nothing (not the full category).
+    page.locator(".r2-rlink", has_text="Emails").first.click()
+    page.locator("#r2-main .r2-copycol").first.click()
+    clip = page.evaluate("() => navigator.clipboard.readText()")
+    assert "old1@x.com" in clip and "www.x.com" not in clip

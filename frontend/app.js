@@ -2462,6 +2462,10 @@ function _r2Bounds() {
   }
   if (!isFinite(lo)) { lo = 0; hi = 0; }
   _r2.lo = lo; _r2.hi = hi;
+  // Stable global bound for "still present" logic. _r2.hi gets mutated per-render
+  // by _r2SetBoundsFrom (activity timelines use local bounds), so presence/live
+  // colouring must read this immutable one instead of _r2.hi.
+  _r2.globalHi = hi;
 }
 
 // Set the timeline bounds from a SPECIFIC set of findings, so the axis always
@@ -2622,6 +2626,10 @@ function report2RailKey(ev, cat) {
     if (next) next.focus();
   }
 }
+// Make a div-based control keyboard-operable: Enter/Space fire its click.
+function report2KeyActivate(ev) {
+  if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); ev.currentTarget.click(); }
+}
 function report2SetView(v) { report2State.view = v; report2Render(); }
 function report2OpenCat(c) { report2State.openCat = c; report2State.filter = ''; report2State.view = 'cats'; report2Render(); }
 function report2ToggleEmpty() { report2State.showEmpty = !report2State.showEmpty; report2Render(); }
@@ -2648,7 +2656,7 @@ function report2PivotFilter(v) {
 
 // "Still present" = the value's last_seen reaches the archive's latest month; a
 // finding that stopped earlier has "disappeared".
-function _r2IsLive(f) { const b = _r2Month(f.last_seen); return b != null && b >= _r2.hi; }
+function _r2IsLive(f) { const b = _r2Month(f.last_seen); return b != null && b >= _r2.globalHi; }
 function _r2ApplyPresence(list) {
   if (report2State.presence === 'live') return list.filter(_r2IsLive);
   if (report2State.presence === 'gone') return list.filter(f => !_r2IsLive(f));
@@ -2669,7 +2677,7 @@ function report2RenderSummary() {
   const stat = (n, label) => `<span class="r2-sum-stat"><b>${n}</b> ${esc(label)}</span>`;
   const p = report2State.presence;
   const seg = (key, label) =>
-    `<button class="r2-preseg${p === key ? ' on' : ''}" onclick="report2SetPresence('${key}')">${esc(label)}</button>`;
+    `<button class="r2-preseg${p === key ? ' on' : ''}" aria-pressed="${p === key}" onclick="report2SetPresence('${key}')">${esc(label)}</button>`;
   el.innerHTML =
     `<div class="r2-sum-stats">`
     + stat(nf, t('findings'))
@@ -2679,8 +2687,8 @@ function report2RenderSummary() {
     + `</div>`
     + `<div class="r2-presence" role="group" aria-label="${esc(t('Filter by presence'))}">`
     + seg('all', t('All'))
-    + `<button class="r2-preseg${p === 'live' ? ' on' : ''}" onclick="report2SetPresence('live')"><span class="r2-live-dot"></span>${esc(t('Still present'))} ${live}</button>`
-    + `<button class="r2-preseg${p === 'gone' ? ' on' : ''}" onclick="report2SetPresence('gone')">${esc(t('Disappeared'))} ${gone}</button>`
+    + `<button class="r2-preseg${p === 'live' ? ' on' : ''}" aria-pressed="${p === 'live'}" onclick="report2SetPresence('live')"><span class="r2-live-dot"></span>${esc(t('Still present'))} ${live}</button>`
+    + `<button class="r2-preseg${p === 'gone' ? ' on' : ''}" aria-pressed="${p === 'gone'}" onclick="report2SetPresence('gone')">${esc(t('Disappeared'))} ${gone}</button>`
     + `</div>`;
 }
 function report2SetPresence(v) { report2State.presence = v; report2Render(); }
@@ -2714,8 +2722,11 @@ function report2RenderRail() {
          + (pivots.length
             ? pivots.map(p => {
                 const on = report2State.checkedPivots.has(p.key);
-                return `<div class="r2-chk pv${on ? ' on' : ''}" onclick="report2TogglePivot('${esc(p.key).replace(/'/g, "\\'")}')">
-                  <span class="r2-box">${on ? '✓' : ''}</span><span class="r2-pv" title="${esc(p.label)}">${esc(String(p.label))}</span></div>`;
+                // The key contains archive-derived text; pass it via a data-
+                // attribute (escAttr) and read it in the handler, never inside the
+                // onclick JS string, so a value with a quote can't inject a handler.
+                return `<div role="button" tabindex="0" onkeydown="report2KeyActivate(event)" class="r2-chk pv${on ? ' on' : ''}" data-pivot-key="${escAttr(p.key)}" onclick="report2TogglePivot(this.dataset.pivotKey)">
+                  <span class="r2-box">${on ? '✓' : ''}</span><span class="r2-pv" title="${escAttr(p.label)}">${esc(String(p.label))}</span></div>`;
               }).join('')
             : `<div class="r2-pivnote">${t('No pivot matches.')}</div>`))
       : `<div class="r2-pivnote">${t('Tick a category above to pick pivots from its values.')}</div>`;
@@ -2723,14 +2734,14 @@ function report2RenderRail() {
       `<div class="r2-rt"><span>${t('Categories')}</span><span>${t('tick')}</span></div>` +
       _r2.found.map(c => {
         const on = report2State.checkedCats.has(c);
-        return `<div class="r2-chk${on ? ' on' : ''}" onclick="report2ToggleCat('${c}')">
+        return `<div role="button" tabindex="0" onkeydown="report2KeyActivate(event)" class="r2-chk${on ? ' on' : ''}" onclick="report2ToggleCat('${c}')">
           <span class="r2-box">${on ? '✓' : ''}</span><span>${esc(catLabel(c))}</span>
           <span class="r2-c">${_r2.byCat.get(c).length}</span></div>`;
       }).join('') +
       `<div class="r2-rt2">${t('Pivots from ticked categories')}</div>` +
       pivotBody +
       `<div class="r2-rt2">${t('Views')}</div>
-       <div class="r2-nav" onclick="report2SetView('cats')"><span class="i">▤</span> ${t('Categories')}</div>`;
+       <div role="button" tabindex="0" onkeydown="report2KeyActivate(event)" class="r2-nav" onclick="report2SetView('cats')"><span class="i">▤</span> ${t('Categories')}</div>`;
     return;
   }
   // Categories view rail
@@ -2744,11 +2755,11 @@ function report2RenderRail() {
   rail.innerHTML =
     `<div class="r2-rt"><span>${t('Found')}</span><span>${_r2.found.length}</span></div>` +
     _r2.found.map(link).join('') +
-    `<div class="r2-rall${report2State.openCat === '__all__' ? ' on' : ''}" onclick="report2OpenCat('__all__')"><span class="i">▦</span> ${t('Show all')}</div>` +
-    `<div class="r2-emptytoggle" onclick="report2ToggleEmpty()"><span>${report2State.showEmpty ? '▾' : '▸'}</span> ${_r2.empty.length} ${t('empty categories (searched)')}</div>` +
+    `<div role="button" tabindex="0" onkeydown="report2KeyActivate(event)" class="r2-rall${report2State.openCat === '__all__' ? ' on' : ''}" onclick="report2OpenCat('__all__')"><span class="i">▦</span> ${t('Show all')}</div>` +
+    `<div role="button" tabindex="0" onkeydown="report2KeyActivate(event)" class="r2-emptytoggle" onclick="report2ToggleEmpty()"><span>${report2State.showEmpty ? '▾' : '▸'}</span> ${_r2.empty.length} ${t('empty categories (searched)')}</div>` +
     (report2State.showEmpty ? `<div class="r2-emptylist">${_r2.empty.map(emptyLink).join('')}</div>` : '') +
     `<div class="r2-rt2">${t('Views')}</div>
-     <div class="r2-nav" onclick="report2SetView('activity')"><span class="i">▚</span> ${t('Activity')}</div>`;
+     <div role="button" tabindex="0" onkeydown="report2KeyActivate(event)" class="r2-nav" onclick="report2SetView('activity')"><span class="i">▚</span> ${t('Activity')}</div>`;
 }
 
 function report2RenderMain() {
@@ -2793,7 +2804,7 @@ function _r2Rows(list) {
   return `<div class="r2-colhead"><span>${t('value')}</span><span class="r">${t('occ.')}</span><span class="r">${t('seen')}</span><span class="r r2-srch">${t('source')}</span></div>` +
     list.map(f => {
       const span = (f.first_seen || f.last_seen)
-        ? `${esc(f.first_seen || '?')} <span class="r2-arw">→</span> ${_r2Month(f.last_seen) != null && _r2Month(f.last_seen) >= _r2.hi ? `<span class="r2-now">${esc(f.last_seen)}</span>` : `<span class="r2-end">${esc(f.last_seen || '?')}</span>`}`
+        ? `${esc(f.first_seen || '?')} <span class="r2-arw">→</span> ${_r2IsLive(f) ? `<span class="r2-now">${esc(f.last_seen)}</span>` : `<span class="r2-end">${esc(f.last_seen || '?')}</span>`}`
         : '<span class="r2-end">·</span>';
       // Co-occurrence: an optional chip revealing other findings from the same
       // archived page. Purely opt-in — clicking the value copies; only this chip
@@ -2850,7 +2861,7 @@ function report2CatBlock(cat, withActivity, isEmpty) {
   const filtered = (list.length !== total.length)
     ? `<span class="r2-filtered">${list.length} ${t('shown')}</span>` : '';
   const head = `<div class="r2-dhead"><span class="r2-name">${esc(catLabel(cat))}</span><span class="r2-cnt">${total.length}</span>${filtered}
-    <span class="r2-copycol" onclick="report2CopyCol('${cat}', event)">${t('copy column')}</span></div>
+    <span role="button" tabindex="0" onkeydown="report2KeyActivate(event)" class="r2-copycol" onclick="report2CopyCol('${cat}', event)">${t('copy column')}</span></div>
     ${desc ? `<p class="r2-ddesc">${esc(desc)}</p>` : ''}`;
 
   if (isEmpty) {
@@ -2870,9 +2881,11 @@ function report2CatBlock(cat, withActivity, isEmpty) {
 }
 
 function report2CatActivity(cat, list) {
-  // Axis spans exactly this category's findings (no dead years).
+  // Axis spans exactly this category's findings (no dead years). "Gone" values
+  // are faded based on the global archive end (not this local axis), so a value
+  // that stopped before the archive's latest month reads as disappeared.
   _r2SetBoundsFrom(list);
-  const lanes = list.slice(0, 24).map(f => _r2Lane(f.value, f.first_seen, f.last_seen, { faded: _r2Month(f.last_seen) != null && _r2Month(f.last_seen) < _r2.hi })).join('');
+  const lanes = list.slice(0, 24).map(f => _r2Lane(f.value, f.first_seen, f.last_seen, { faded: !_r2IsLive(f) })).join('');
   if (!lanes.trim()) return '';
   return `<div class="r2-act">
     <div class="r2-ah"><span class="i">▚</span> ${t('Activity of')} <b>${esc(catLabel(cat))}</b> · ${t('when each value was visible')}</div>
@@ -2915,7 +2928,7 @@ function report2ActivityHTML() {
     </div>`;
   }
 
-  _r2SetBoundsFrom(shownFindings);   // axis spans exactly the checked lanes
+  _r2SetBoundsFrom(shownFindings);   // axis spans exactly the checked lanes (no dead years)
   // Dedupe for the change feed: a value can be both a checked category finding
   // and a checked pivot, which would list its appeared/disappeared event twice.
   const feedSeen = new Set();
@@ -2979,7 +2992,8 @@ function report2Copy(ev) {
   }).catch(() => {});
 }
 function report2CopyCol(cat, ev) {
-  const all = _r2.byCat.get(cat) || [];
+  // Copy exactly what's shown: honour the presence filter, then the text filter.
+  const all = _r2ApplyPresence(_r2.byCat.get(cat) || []);
   const q = report2State.filter.toLowerCase();
   const list = q ? all.filter(f => f.value.toLowerCase().includes(q)) : all;
   const btn = ev && ev.currentTarget;
@@ -3004,6 +3018,7 @@ window.report2Copy = report2Copy;
 window.report2CopyCol = report2CopyCol;
 window.report2PivotFilter = report2PivotFilter;
 window.report2RailKey = report2RailKey;
+window.report2KeyActivate = report2KeyActivate;
 window.report2SetPresence = report2SetPresence;
 window.report2ToggleCooc = report2ToggleCooc;
 window.renderReport2 = renderReport2;
