@@ -423,3 +423,25 @@ def test_copy_column_respects_presence_filter(live_server, page):
     page.locator("#r2-main .r2-copycol").first.click()
     clip = page.evaluate("() => navigator.clipboard.readText()")
     assert "old1@x.com" in clip and "www.x.com" not in clip
+
+
+def test_favicon_source_url_with_quote_does_not_inject(live_server, page):
+    # A favicon whose archived source_url carries an attribute-breakout payload
+    # (planted on a site, then archived) must not execute when the favicon
+    # gallery renders it — it is attribute-escaped, not injected.
+    payload = 'https://web.archive.org/web/20230101000000/http://x/f"onerror="window.__xss=1"'
+    findings = [
+        {"id": 1, "category": "favicons", "value": "https://x/favicon.ico",
+         "first_seen": "2023-01", "last_seen": "2025-06", "occurrences": 10,
+         "metadata": {"md5": "deadbeef", "source_url": payload}},
+        {"id": 2, "category": "emails", "value": "a@x.com", "first_seen": "2023-01",
+         "last_seen": "2025-06", "occurrences": 5, "metadata": {}},
+    ]
+    _open_with(page, live_server, findings)
+    page.locator("#r2-vbtn-activity").click()
+    img = page.locator("#r2-main img.r2-favimg")
+    assert img.count() == 1
+    # The onerror handler must be the benign built-in, not the injected one.
+    assert "window.__xss" not in (img.first.get_attribute("onerror") or "")
+    # And nothing executed.
+    assert page.evaluate("() => window.__xss") in (None, 0)

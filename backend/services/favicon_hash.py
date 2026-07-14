@@ -27,6 +27,7 @@ from loguru import logger
 
 from config import settings
 from services import archive_health, archive_rate
+from services.net_guard import GuardedResolver, guarded_wayback_get
 from config import USER_AGENT
 from services.scraper import _get_global_sem
 
@@ -158,7 +159,7 @@ async def hash_favicons(favicons: list[dict], domain: str) -> int:
         try:
             async with _get_global_sem():
                 await archive_rate.acquire()
-                async with session.get(url) as resp:
+                async with guarded_wayback_get(session, url) as resp:
                     if resp.status != 200:
                         if resp.status in (429, 503):
                             archive_health.record_failure()
@@ -179,7 +180,7 @@ async def hash_favicons(favicons: list[dict], domain: str) -> int:
         except Exception as exc:  # never let favicon hashing break a scan
             logger.debug("favicon hash error for {}: {}", url, exc)
 
-    connector = aiohttp.TCPConnector(limit=settings.archive_global_concurrency)
+    connector = aiohttp.TCPConnector(resolver=GuardedResolver(), limit=settings.archive_global_concurrency)
     async with aiohttp.ClientSession(timeout=timeout, connector=connector, headers=headers) as session:
         await asyncio.gather(*[_one(session, it, u) for it, u in targets])
 

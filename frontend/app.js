@@ -1182,7 +1182,7 @@ function renderPrivacyCard(job) {
     <div class="pub-privacy-card">
       <div class="pub-privacy-title">Your share link</div>
       <div class="pub-share-row">
-        <input class="pub-share-input" id="pub-share-url" type="text" readonly value="${esc(shareUrl)}" onclick="this.select()">
+        <input class="pub-share-input" id="pub-share-url" type="text" readonly value="${escAttr(shareUrl)}" onclick="this.select()">
         <button class="btn" id="pub-share-copy" type="button">Copy link</button>
       </div>
       ${badge}
@@ -1641,7 +1641,7 @@ function renderScopePaths() {
     const lvl = pct >= 35 ? 'lvl-red' : (pct >= 12 ? 'lvl-amber' : '');
     const off = scopeExcludedPaths.has(pg.path);
     const pctTxt = pct >= 10 ? pct.toFixed(0) + '%' : pct.toFixed(1) + '%';
-    return `<label class="scope-path${off ? ' excluded' : ''}" title="${esc(pg.path)} · ${pg.count} snapshots">
+    return `<label class="scope-path${off ? ' excluded' : ''}" title="${escAttr(pg.path)} · ${pg.count} snapshots">
         <input type="checkbox" ${off ? '' : 'checked'} onchange="onScopePathToggle('${esc(pg.path)}', this.checked)">
         <span class="scope-path-name">${esc(pg.path)}</span>
         <span class="scope-path-share">
@@ -2499,7 +2499,7 @@ function _r2Lane(label, first, last, opts) {
   const cls = opts.pivot ? 'pivot' : '';
   const tag = opts.pivot ? '<span class="r2-pvtag">pivot</span>' : '';
   return `<div class="r2-lane">
-    <span class="r2-lbl" title="${esc(label)}">${esc(label)} ${tag}</span>
+    <span class="r2-lbl" title="${escAttr(label)}">${esc(label)} ${tag}</span>
     <div class="r2-track">
       <span class="r2-capa ${cls}" style="left:${left}%"></span>
       <span class="r2-bar ${cls}${opts.faded ? ' faded' : ''}" style="left:${left}%;width:${w}%"></span>
@@ -2534,7 +2534,7 @@ function _r2Feed(findings, cap) {
     const when = (e.kind === 'up' ? e.f.first_seen : e.f.last_seen) || '';
     const verb = e.kind === 'up' ? t('appeared') : t('disappeared');
     const src = (e.kind === 'down' && e.f.metadata && e.f.metadata.source_url)
-      ? ` <a href="${esc(e.f.metadata.source_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${t('last capture')} ↗</a>` : '';
+      ? ` <a href="${escAttr(e.f.metadata.source_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${t('last capture')} ↗</a>` : '';
     return `<div class="r2-ev ${e.kind}"><span class="r2-when">${esc(when)}</span><span class="r2-mk"></span>
       <span class="r2-txt"><span class="r2-k">${esc(String(e.f.value).slice(0, 42))}</span> ${verb}
       <span class="r2-sub">${esc(catLabel(e.f.category))}${e.f.occurrences ? ' · ' + e.f.occurrences + '×' : ''}</span>${src}</span></div>`;
@@ -2587,7 +2587,7 @@ function _r2SetHeaderFavicon(domain) {
   const src = (m && m.source_url && m.source_url.includes('web.archive.org'))
     ? m.source_url.replace(/(\/web\/\d+)\//, '$1im_/') : '';
   if (src) {
-    el.innerHTML = `<img class="res-fav" src="${esc(src)}" alt="" onerror="this.remove()">${esc(domain || '')}`;
+    el.innerHTML = `<img class="res-fav" src="${escAttr(src)}" alt="" onerror="this.remove()">${esc(domain || '')}`;
   } else {
     el.textContent = domain || '';
   }
@@ -2717,7 +2717,7 @@ function report2RenderRail() {
     const pivots = pq ? allPivots.filter(p => String(p.label).toLowerCase().includes(pq)) : allPivots;
     const pivotBody = allPivots.length
       ? (`<div class="r2-pivsearch"><input id="r2-pivfilter" type="text" autocomplete="off" spellcheck="false"
-            placeholder="${esc(t('Search pivots…'))}" value="${esc(report2State.pivotFilter || '')}"
+            placeholder="${esc(t('Search pivots…'))}" value="${escAttr(report2State.pivotFilter || '')}"
             oninput="report2PivotFilter(this.value)"></div>`
          + (pivots.length
             ? pivots.map(p => {
@@ -2964,7 +2964,7 @@ function report2Favicons() {
     const hash = (m.md5 || m.sha256 || '').slice(0, 8);
     const span = [f.first_seen, f.last_seen].filter(Boolean).join(' → ');
     const img = src
-      ? `<img class="r2-favimg" src="${esc(src)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="r2-favph" style="display:none">◆</span>`
+      ? `<img class="r2-favimg" src="${escAttr(src)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="r2-favph" style="display:none">◆</span>`
       : `<span class="r2-favph">◆</span>`;
     return `<div class="r2-favera"><div class="r2-favico">${img}</div>
       <span class="r2-favm"><b>${esc(span || '·')}</b>${hash ? esc(hash) : ''}</span></div>`;
@@ -3117,7 +3117,7 @@ function makeSourceLink(f) {
     const isArchive = url.includes('web.archive.org');
     const label = isArchive ? 'archive' : 'view';
     const cls = isArchive ? 'src-link' : 'src-link cc';
-    return `<a class="${cls}" href="${esc(url)}" target="_blank" rel="noopener" title="View source page" onclick="event.stopPropagation()">${label}</a>`;
+    return `<a class="${cls}" href="${escAttr(url)}" target="_blank" rel="noopener" title="View source page" onclick="event.stopPropagation()">${label}</a>`;
   }
   return '';
 }
@@ -3448,7 +3448,7 @@ function renderFindingDrawer(finding) {
     sourceSection = `
       <div class="fd-section-label">${t('Source page')}</div>
       <div class="fd-link-row">
-        <a href="${esc(sourceUrl)}" target="_blank" rel="noopener">${esc(sourceUrl)}</a>
+        <a href="${escAttr(sourceUrl)}" target="_blank" rel="noopener">${esc(sourceUrl)}</a>
       </div>
     `;
   }
@@ -3510,7 +3510,7 @@ function renderFindingDrawer(finding) {
       <div class="fd-section-label">${t('Hashes')}</div>
       ${md5 ? `<div class="fd-hash-row"><span class="fd-hash-k">MD5</span><code class="fd-hash-v">${esc(md5)}</code></div>` : ''}
       ${sha256 ? `<div class="fd-hash-row"><span class="fd-hash-k">SHA256</span><code class="fd-hash-v">${esc(sha256)}</code></div>` : ''}
-      ${shodan !== null ? `<div class="fd-hash-row"><span class="fd-hash-k">Shodan</span><code class="fd-hash-v">${esc(String(shodan))}</code><a class="fd-hash-pivot" href="${esc(shodanUrl)}" target="_blank" rel="noopener" title="${esc(t('Search this favicon on Shodan'))}">${t('pivot')} ↗</a></div>` : ''}
+      ${shodan !== null ? `<div class="fd-hash-row"><span class="fd-hash-k">Shodan</span><code class="fd-hash-v">${esc(String(shodan))}</code><a class="fd-hash-pivot" href="${escAttr(shodanUrl)}" target="_blank" rel="noopener" title="${esc(t('Search this favicon on Shodan'))}">${t('pivot')} ↗</a></div>` : ''}
     `;
   }
 

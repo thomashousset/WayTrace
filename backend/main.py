@@ -65,6 +65,37 @@ app = FastAPI(
     openapi_url="/api/openapi.json" if settings.expose_api_docs else None,
 )
 
+class _BodySizeLimitMiddleware:
+    """Reject oversized request bodies (via Content-Length) before the app reads
+    them, so an unauthenticated POST can't buffer hundreds of MB and OOM the
+    single worker. Caddy also caps the body in prod; this covers the app
+    directly (self-hosted / no proxy)."""
+
+    def __init__(self, app, max_bytes: int):
+        self.app = app
+        self.max_bytes = max_bytes
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http":
+            for name, value in scope.get("headers", []):
+                if name == b"content-length":
+                    try:
+                        too_big = int(value) > self.max_bytes
+                    except ValueError:
+                        too_big = False
+                    if too_big:
+                        payload = b'{"detail":"Request body too large."}'
+                        await send({"type": "http.response.start", "status": 413,
+                                    "headers": [(b"content-type", b"application/json"),
+                                                (b"content-length", str(len(payload)).encode())]})
+                        await send({"type": "http.response.body", "body": payload})
+                        return
+                    break
+        await self.app(scope, receive, send)
+
+
+app.add_middleware(_BodySizeLimitMiddleware, max_bytes=settings.max_request_body_bytes)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,

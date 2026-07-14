@@ -393,50 +393,10 @@ async def _scan_pipeline(
 # Preflight
 # ---------------------------------------------------------------------------
 
-@router.post("/scan/preflight", response_model=PreflightResponse)
-async def scan_preflight(body: JobCreate):
-    """Lightweight CDX probe. bounded so a flaky archive.org returns a
-    fast 502 instead of letting the UI spinner sit for 8 minutes.
-    """
-    if archive_health.is_open():
-        raise HTTPException(
-            status_code=503,
-            detail={"error": "archive_paused", "message": archive_health.status()["message"],
-                    "retry_after": archive_health.seconds_remaining()},
-        )
-    # collapse=timestamp:6 keeps path diversity (one capture per URL+month).
-    # The killer was an over-large limit: at server_limit=15000 even a mega
-    # domain (lemonde.fr ~ tens of millions of captures) answers in ~15-25s
-    # AND stays diverse (thousands of distinct paths). limit=20000 tipped it
-    # over the deadline. Fallback to collapse=urlkey (one per URL) if the
-    # month-collapse ever stalls; both keep diversity.
-    try:
-        try:
-            # use_cache: a recent CDX result (preflight or scan, < 6h) is reused
-            # instead of re-querying archive.org. Big lever against throttling on
-            # repeat lookups; the TTL keeps it fresh enough for a preview.
-            cdx_result = await fetch_cdx_snapshots(
-                body.domain, max_snapshots=15_000, server_limit=15_000,
-                deadline_seconds=55, request_timeout=45, retries=2,
-                collapse="timestamp:6", use_cache=True,
-            )
-        except RuntimeError:
-            cdx_result = await fetch_cdx_snapshots(
-                body.domain, max_snapshots=12_000, server_limit=12_000,
-                deadline_seconds=35, request_timeout=30, retries=1,
-                collapse="urlkey", use_cache=False,
-            )
-    except RuntimeError as exc:
-        raise HTTPException(
-            status_code=502,
-            detail=(
-                f"Archive.org didn't respond in time: {exc}. "
-                "Try the scan directly (the full crawl has its own retry "
-                "budget) or wait a minute and refresh."
-            ),
-        )
-
-    snapshots = cdx_result["snapshots"]
+def _assemble_preflight(snapshots: list[dict], domain: str) -> PreflightResponse:
+    """Group CDX snapshots into the preflight payload. Pure CPU (no I/O), run via
+    asyncio.to_thread so it never blocks the event loop."""
+    from urllib.parse import urlparse as _urlparse
 
     html_snaps = [s for s in snapshots if s.get("mimetype") == "text/html"]
     html_snaps.sort(key=lambda s: s["timestamp"])
@@ -485,13 +445,12 @@ async def scan_preflight(body: JobCreate):
     path_groups.sort(key=lambda g: (-g.score, g.path))
 
     # Build subdomain groups for scope selection
-    from urllib.parse import urlparse as _urlparse
     by_subdomain: dict[str, list[dict]] = {}
     for snap in html_snaps:
         try:
-            host = _urlparse(snap["url"]).hostname or body.domain
+            host = _urlparse(snap["url"]).hostname or domain
         except (ValueError, KeyError):
-            host = body.domain
+            host = domain
         by_subdomain.setdefault(host, []).append(snap)
 
     subdomain_groups = []
@@ -506,7 +465,7 @@ async def scan_preflight(body: JobCreate):
     subdomain_groups.sort(key=lambda g: -g.snapshot_count)
 
     return PreflightResponse(
-        domain=body.domain,
+        domain=domain,
         total_snapshots=len(snapshots),
         html_snapshots=len(html_snaps),
         unique_paths=len(unique_paths),
@@ -519,6 +478,55 @@ async def scan_preflight(body: JobCreate):
         path_groups=path_groups,
         subdomain_groups=subdomain_groups,
     )
+
+
+@router.post("/scan/preflight", response_model=PreflightResponse)
+async def scan_preflight(body: JobCreate, request: Request):
+    """Lightweight CDX probe. bounded so a flaky archive.org returns a
+    fast 502 instead of letting the UI spinner sit for 8 minutes.
+    """
+    if archive_health.is_open():
+        raise HTTPException(
+            status_code=503,
+            detail={"error": "archive_paused", "message": archive_health.status()["message"],
+                    "retry_after": archive_health.seconds_remaining()},
+        )
+    # collapse=timestamp:6 keeps path diversity (one capture per URL+month).
+    # The killer was an over-large limit: at server_limit=15000 even a mega
+    # domain (lemonde.fr ~ tens of millions of captures) answers in ~15-25s
+    # AND stays diverse (thousands of distinct paths). limit=20000 tipped it
+    # over the deadline. Fallback to collapse=urlkey (one per URL) if the
+    # month-collapse ever stalls; both keep diversity.
+    try:
+        try:
+            # use_cache: a recent CDX result (preflight or scan, < 6h) is reused
+            # instead of re-querying archive.org. Big lever against throttling on
+            # repeat lookups; the TTL keeps it fresh enough for a preview.
+            cdx_result = await fetch_cdx_snapshots(
+                body.domain, max_snapshots=15_000, server_limit=15_000,
+                deadline_seconds=55, request_timeout=45, retries=2,
+                collapse="timestamp:6", use_cache=True,
+            )
+        except RuntimeError:
+            cdx_result = await fetch_cdx_snapshots(
+                body.domain, max_snapshots=12_000, server_limit=12_000,
+                deadline_seconds=35, request_timeout=30, retries=1,
+                collapse="urlkey", use_cache=False,
+            )
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                f"Archive.org didn't respond in time: {exc}. "
+                "Try the scan directly (the full crawl has its own retry "
+                "budget) or wait a minute and refresh."
+            ),
+        )
+
+    # Building the response (grouping up to 15k snapshots + thousands of Pydantic
+    # models) is pure CPU; run it off the event loop so a cache-primed flood of
+    # preflights can't pin the single worker.
+    return await asyncio.to_thread(_assemble_preflight, cdx_result["snapshots"], body.domain)
 
 
 # ---------------------------------------------------------------------------

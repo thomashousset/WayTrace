@@ -10,6 +10,7 @@ from loguru import logger
 
 from config import settings
 from services import archive_health, archive_rate
+from services.net_guard import GuardedResolver, guarded_wayback_get
 from store import store
 
 WAYBACK_URL = "https://web.archive.org/web/{timestamp}id_/{url}"
@@ -118,6 +119,7 @@ async def scrape_snapshots(
     semaphore = asyncio.Semaphore(settings.max_concurrent_scrapes)
     timeout = aiohttp.ClientTimeout(total=settings.archive_request_timeout)
     connector = aiohttp.TCPConnector(
+        resolver=GuardedResolver(),
         limit=settings.max_concurrent_scrapes + 10,
         limit_per_host=settings.max_concurrent_scrapes,
         keepalive_timeout=60,
@@ -213,7 +215,7 @@ async def scrape_snapshots(
                     # Process-wide rate ceiling: spaces requests so a burst
                     # never exceeds archive.org's tolerance (IP-block guard).
                     await archive_rate.acquire()
-                    async with session.get(url) as resp:
+                    async with guarded_wayback_get(session, url) as resp:
                         status = resp.status
                         retry_after = _parse_retry_after(resp.headers.get("Retry-After"))
                         if status == 429:

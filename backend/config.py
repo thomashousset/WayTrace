@@ -84,6 +84,10 @@ class Settings(BaseSettings):
     # Set IS_PRODUCTION=1 in deploy/.env.prod. Enables production boot checks
     # (e.g. refusing to start with the default SECRET_KEY).
     is_production: bool = False
+    # Reject request bodies larger than this (bytes) before reading them, so an
+    # unauthenticated POST can't OOM the single worker. The largest legitimate
+    # body is selected_snapshots (max 5000 small objects); 2 MB is ample.
+    max_request_body_bytes: int = 2_000_000
     archive_request_timeout: int = 60
     archive_retry_count: int = 3
     scan_timeout_seconds: int = 3600
