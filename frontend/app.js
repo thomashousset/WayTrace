@@ -195,6 +195,16 @@ const I18N = {
     'Loading your scans…': 'Chargement de vos scans…',
     'public': 'public',
     'No findings': 'Aucun résultat',
+    'Filter by presence': 'Filtrer par présence',
+    'All': 'Tout',
+    'Still present': 'Encore présent',
+    'Disappeared': 'Disparu',
+    'none still present': 'rien n\'est encore présent',
+    'none disappeared': 'rien n\'a disparu',
+    'nothing matches the filter': 'rien ne correspond au filtre',
+    'Other findings on the same archived page': 'Autres résultats sur la même page archivée',
+    'Seen together on the same archived page': 'Vus ensemble sur la même page archivée',
+    'view page': 'voir la page',
     'WayTrace searched all 43 categories across {n} archived pages and found nothing to extract.': 'WayTrace a cherché dans les 43 catégories sur {n} pages archivées et n\'a rien trouvé à extraire.',
     'value': 'valeur',
     'occ.': 'occ.',
@@ -2425,6 +2435,8 @@ let report2State = {
   checkedCats: null,   // Activity view: Set of category keys shown as lanes
   checkedPivots: null, // Activity view: Set of "cat::value" pivots shown as lanes
   pivotFilter: '',     // Activity view: search box over the pivot list
+  presence: 'all',     // findings filter: 'all' | 'live' (still present) | 'gone'
+  expandedPage: null,  // source_page_id whose co-occurrence panel is open, or null
 };
 let _r2 = { findings: [], info: null, byCat: new Map(), found: [], empty: [], job: null, lo: 0, hi: 0 };
 
@@ -2538,7 +2550,16 @@ function renderReport2(info, findings, job) {
   for (const arr of byCat.values()) arr.sort((a, b) => (b.occurrences || 0) - (a.occurrences || 0));
   const found = [...byCat.keys()].filter(c => byCat.get(c).length).sort((a, b) => byCat.get(b).length - byCat.get(a).length);
   const empty = REPORT2_SCOPE.filter(c => !byCat.has(c) || !byCat.get(c).length);
-  _r2 = { findings, info, byCat, found, empty, job, lo: 0, hi: 0 };
+  // Co-occurrence: group findings by the archived page that introduced them, so a
+  // row can reveal what else was seen on the same page (source_page_id).
+  const byPage = new Map();
+  for (const f of findings) {
+    const pid = f.metadata && f.metadata.source_page_id;
+    if (pid == null) continue;
+    if (!byPage.has(pid)) byPage.set(pid, []);
+    byPage.get(pid).push(f);
+  }
+  _r2 = { findings, info, byCat, found, empty, job, lo: 0, hi: 0, byPage };
   _r2Bounds();
 
   if (!report2State.openCat || (report2State.openCat !== '__all__' && !byCat.has(report2State.openCat))) {
@@ -2625,6 +2646,45 @@ function report2PivotFilter(v) {
   if (inp) { inp.focus(); const n = inp.value.length; try { inp.setSelectionRange(n, n); } catch (_) {} }
 }
 
+// "Still present" = the value's last_seen reaches the archive's latest month; a
+// finding that stopped earlier has "disappeared".
+function _r2IsLive(f) { const b = _r2Month(f.last_seen); return b != null && b >= _r2.hi; }
+function _r2ApplyPresence(list) {
+  if (report2State.presence === 'live') return list.filter(_r2IsLive);
+  if (report2State.presence === 'gone') return list.filter(f => !_r2IsLive(f));
+  return list;
+}
+
+// Compact summary strip + the presence filter (All / Still present / Disappeared).
+function report2RenderSummary() {
+  const el = document.getElementById('r2-summary');
+  if (!el) return;
+  const m = (_r2.info && _r2.info.scanMeta) || {};
+  const nf = _r2.findings.length;
+  const nc = _r2.found.length;
+  const live = _r2.findings.filter(_r2IsLive).length;
+  const gone = nf - live;
+  const pages = m.pages_scraped || m.snapshots_analyzed || 0;
+  const range = (m.date_first_seen && m.date_last_seen) ? `${m.date_first_seen} → ${m.date_last_seen}` : '';
+  const stat = (n, label) => `<span class="r2-sum-stat"><b>${n}</b> ${esc(label)}</span>`;
+  const p = report2State.presence;
+  const seg = (key, label) =>
+    `<button class="r2-preseg${p === key ? ' on' : ''}" onclick="report2SetPresence('${key}')">${esc(label)}</button>`;
+  el.innerHTML =
+    `<div class="r2-sum-stats">`
+    + stat(nf, t('findings'))
+    + stat(nc + '/43', t('categories'))
+    + (pages ? stat(pages, t('pages')) : '')
+    + (range ? `<span class="r2-sum-range">${esc(range)}</span>` : '')
+    + `</div>`
+    + `<div class="r2-presence" role="group" aria-label="${esc(t('Filter by presence'))}">`
+    + seg('all', t('All'))
+    + `<button class="r2-preseg${p === 'live' ? ' on' : ''}" onclick="report2SetPresence('live')"><span class="r2-live-dot"></span>${esc(t('Still present'))} ${live}</button>`
+    + `<button class="r2-preseg${p === 'gone' ? ' on' : ''}" onclick="report2SetPresence('gone')">${esc(t('Disappeared'))} ${gone}</button>`
+    + `</div>`;
+}
+function report2SetPresence(v) { report2State.presence = v; report2Render(); }
+
 function report2Render() {
   // Sync the view toggle buttons.
   const bc = document.getElementById('r2-vbtn-cats'), ba = document.getElementById('r2-vbtn-activity');
@@ -2635,6 +2695,7 @@ function report2Render() {
   }
   const fi = document.getElementById('r2-filter');
   if (fi && fi.value !== report2State.filter) fi.value = report2State.filter;
+  report2RenderSummary();
   report2RenderRail();
   report2RenderMain();
 }
@@ -2734,30 +2795,72 @@ function _r2Rows(list) {
       const span = (f.first_seen || f.last_seen)
         ? `${esc(f.first_seen || '?')} <span class="r2-arw">→</span> ${_r2Month(f.last_seen) != null && _r2Month(f.last_seen) >= _r2.hi ? `<span class="r2-now">${esc(f.last_seen)}</span>` : `<span class="r2-end">${esc(f.last_seen || '?')}</span>`}`
         : '<span class="r2-end">·</span>';
-      return `<div class="r2-row">
+      // Co-occurrence: an optional chip revealing other findings from the same
+      // archived page. Purely opt-in — clicking the value copies; only this chip
+      // expands the panel.
+      const pid = f.metadata && f.metadata.source_page_id;
+      const coCount = pid != null && _r2.byPage.has(pid) ? _r2.byPage.get(pid).length - 1 : 0;
+      const chip = coCount > 0
+        ? `<button class="r2-cooc-chip${report2State.expandedPage === pid ? ' on' : ''}" title="${escAttr(t('Other findings on the same archived page'))}" onclick="report2ToggleCooc(event, ${pid})">⋯ ${coCount}</button>`
+        : '';
+      const row = `<div class="r2-row">
         <span class="r2-val">
           <button class="r2-copy" title="${escAttr(t('Copy') + ': ' + f.value)}" onclick="report2Copy(event)" aria-label="${escAttr(t('Copy'))}">⧉</button>
-          <span class="r2-val-text" title="${escAttr(f.value)}">${esc(f.value)}</span>${_r2Chip(f)}
+          <span class="r2-val-text" title="${escAttr(f.value)}">${esc(f.value)}</span>${_r2Chip(f)}${chip}
         </span>
         <span class="r2-occ"><b>${f.occurrences || 1}</b></span>
         <span class="r2-span">${span}</span>
         <span class="r2-src">${makeSourceLink(f)}</span>
       </div>`;
+      const panel = (coCount > 0 && report2State.expandedPage === pid) ? _r2CoocPanel(pid, f) : '';
+      return row + panel;
     }).join('');
 }
 
+// Inline co-occurrence panel: the OTHER findings introduced by the same archived
+// page, grouped by category, with a link to that page.
+function _r2CoocPanel(pid, self) {
+  const peers = (_r2.byPage.get(pid) || []).filter(x => x !== self);
+  if (!peers.length) return '';
+  const src = self.metadata && self.metadata.source_url;
+  const byCat = new Map();
+  for (const p of peers) { if (!byCat.has(p.category)) byCat.set(p.category, []); byCat.get(p.category).push(p); }
+  const groups = [...byCat.entries()].map(([c, arr]) =>
+    `<div class="r2-cooc-grp"><span class="r2-cooc-cat">${esc(catLabel(c))}</span>`
+    + arr.slice(0, 8).map(p => `<span class="r2-cooc-val">${esc(String(p.value).slice(0, 60))}</span>`).join('')
+    + (arr.length > 8 ? `<span class="r2-cooc-more">+${arr.length - 8}</span>` : '')
+    + `</div>`).join('');
+  return `<div class="r2-cooc-panel">
+    <div class="r2-cooc-head">${t('Seen together on the same archived page')}${src ? ` <a href="${escAttr(src)}" target="_blank" rel="noopener">${t('view page')} ↗</a>` : ''}</div>
+    ${groups}
+  </div>`;
+}
+function report2ToggleCooc(ev, pid) {
+  ev.stopPropagation();
+  report2State.expandedPage = (report2State.expandedPage === pid) ? null : pid;
+  report2RenderMain();
+}
+
 function report2CatBlock(cat, withActivity, isEmpty) {
-  const all = _r2.byCat.get(cat) || [];
+  const total = _r2.byCat.get(cat) || [];
+  const all = _r2ApplyPresence(total);   // still-present / disappeared filter
   const q = report2State.filter.toLowerCase();
   const list = q ? all.filter(f => f.value.toLowerCase().includes(q)) : all;
   const desc = CAT_DESCRIPTIONS[cat] ? t(CAT_DESCRIPTIONS[cat]) : '';
-  const filtered = q && list.length !== all.length ? `<span class="r2-filtered">${list.length} ${t('shown')}</span>` : '';
-  const head = `<div class="r2-dhead"><span class="r2-name">${esc(catLabel(cat))}</span><span class="r2-cnt">${all.length}</span>${filtered}
+  const filtered = (list.length !== total.length)
+    ? `<span class="r2-filtered">${list.length} ${t('shown')}</span>` : '';
+  const head = `<div class="r2-dhead"><span class="r2-name">${esc(catLabel(cat))}</span><span class="r2-cnt">${total.length}</span>${filtered}
     <span class="r2-copycol" onclick="report2CopyCol('${cat}', event)">${t('copy column')}</span></div>
     ${desc ? `<p class="r2-ddesc">${esc(desc)}</p>` : ''}`;
 
   if (isEmpty) {
     return head + `<div class="r2-emptystate">${t('Searched across every snapshot, found nothing in this category.')}</div>`;
+  }
+  if (!list.length) {
+    // The category has findings, but none match the active presence/text filter.
+    const why = report2State.presence === 'live' ? t('none still present')
+      : report2State.presence === 'gone' ? t('none disappeared') : t('nothing matches the filter');
+    return `<div class="r2-catblock">${head}<div class="r2-emptystate">${why}</div></div>`;
   }
   const CAP = 200;
   const rows = _r2Rows(list.slice(0, CAP));
@@ -2901,6 +3004,8 @@ window.report2Copy = report2Copy;
 window.report2CopyCol = report2CopyCol;
 window.report2PivotFilter = report2PivotFilter;
 window.report2RailKey = report2RailKey;
+window.report2SetPresence = report2SetPresence;
+window.report2ToggleCooc = report2ToggleCooc;
 window.renderReport2 = renderReport2;
 
 
@@ -2969,6 +3074,8 @@ function renderV2InLegacyView(job) {
   report2State.checkedCats = null;
   report2State.checkedPivots = null;
   report2State.pivotFilter = '';
+  report2State.presence = 'all';
+  report2State.expandedPage = null;
   report2State.view = 'cats';
   renderReport2(info, findings, job);
 

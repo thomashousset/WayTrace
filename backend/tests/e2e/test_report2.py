@@ -315,3 +315,52 @@ def test_copy_column_shows_confirmation(live_server, page):
     page.wait_for_selector("#r2-main .r2-copycol.copied", timeout=2000)
     clip = page.evaluate("() => navigator.clipboard.readText()")
     assert "@oteria.fr" in clip
+
+
+# --- summary header, presence filter, co-occurrence ---
+
+PRES = [
+    {"id": 1, "category": "emails", "value": "live@x.com", "first_seen": "2016-01", "last_seen": "2025-06", "occurrences": 9, "metadata": {"source_page_id": 1, "source_url": "https://web.archive.org/web/20200101/http://x.com/"}},
+    {"id": 2, "category": "emails", "value": "gone@x.com", "first_seen": "2017-01", "last_seen": "2019-06", "occurrences": 4, "metadata": {"source_page_id": 2}},
+    {"id": 3, "category": "persons", "value": "Jane Doe", "first_seen": "2018-01", "last_seen": "2025-06", "occurrences": 3, "metadata": {"source_page_id": 1}},
+]
+
+
+def test_summary_strip_shows_stats(live_server, page):
+    _open_with(page, live_server, PRES)
+    txt = page.locator("#r2-summary").inner_text()
+    assert "3" in txt          # 3 findings
+    assert "43" in txt         # X/43 categories
+    # Presence segmented control present with live/gone counts.
+    assert page.locator("#r2-summary .r2-preseg").count() == 3
+
+
+def test_presence_filter_narrows_to_still_present(live_server, page):
+    _open_with(page, live_server, PRES)
+    page.locator(".r2-rlink", has_text="Emails").first.click()
+    # Default: both emails shown.
+    assert page.locator("#r2-main .r2-row", has_text="live@x.com").count() == 1
+    assert page.locator("#r2-main .r2-row", has_text="gone@x.com").count() == 1
+    # Click "Still present" -> only the live one remains.
+    page.locator(".r2-preseg", has_text="Still present").click()
+    assert page.locator("#r2-main .r2-row", has_text="live@x.com").count() == 1
+    assert page.locator("#r2-main .r2-row", has_text="gone@x.com").count() == 0
+    # "Disappeared" -> only the gone one.
+    page.locator(".r2-preseg", has_text="Disappeared").click()
+    assert page.locator("#r2-main .r2-row", has_text="gone@x.com").count() == 1
+    assert page.locator("#r2-main .r2-row", has_text="live@x.com").count() == 0
+
+
+def test_cooccurrence_chip_expands_same_page_findings(live_server, page):
+    _open_with(page, live_server, PRES)
+    page.locator(".r2-rlink", has_text="Emails").first.click()
+    # live@x.com shares source_page_id 1 with "Jane Doe" -> a "⋯ 1" chip.
+    chip = page.locator("#r2-main .r2-row", has_text="live@x.com").locator(".r2-cooc-chip")
+    assert chip.count() == 1
+    assert page.locator("#r2-main .r2-cooc-panel").count() == 0
+    chip.click()
+    panel = page.locator("#r2-main .r2-cooc-panel")
+    assert panel.count() == 1
+    assert "Jane Doe" in panel.inner_text()
+    # gone@x.com is alone on its page -> no chip.
+    assert page.locator("#r2-main .r2-row", has_text="gone@x.com").locator(".r2-cooc-chip").count() == 0
