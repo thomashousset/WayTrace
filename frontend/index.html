@@ -321,7 +321,6 @@
         <div class="results-meta" id="res-meta"></div>
       </div>
       <div class="results-actions">
-        <button class="btn btn-accent" onclick="openTimeline()" data-i18n="Timeline">Timeline</button>
         <button class="btn" onclick="openExportDrawer()" data-i18n="Export">Export</button>
       </div>
     </div>
@@ -368,47 +367,6 @@
     <div id="my-scans"></div>
   </div>
 </div>
-
-<div class="tl-backdrop" id="tl-backdrop" aria-hidden="true" onclick="closeTimeline()"></div>
-
-<aside id="timeline-drawer" class="tl-drawer" aria-hidden="true" aria-label="Timeline">
-  <header class="tl-header">
-    <h2 class="tl-title">Timeline</h2>
-    <div class="tl-actions">
-      <button class="tl-btn" id="tl-diff-btn" aria-pressed="false"
-              onclick="toggleTimelineDiff()" title="Compare two months">
-        Diff
-      </button>
-      <button class="tl-btn" id="tl-sync-btn" aria-pressed="true"
-              onclick="toggleTimelineSync()" title="Sync with table filters">
-        Synced
-      </button>
-      <button class="tl-btn" id="tl-show-all-btn" aria-pressed="false"
-              onclick="toggleTimelineShowAll()" title="Toggle all categories">
-        Show all tracks
-      </button>
-      <button class="tl-btn tl-close-btn" onclick="closeTimeline()" aria-label="Close timeline">×</button>
-    </div>
-  </header>
-
-  <div class="tl-diff-controls">
-    <span class="tl-diff-label">From <input type="month" id="tl-diff-a" class="tl-diff-input" aria-label="Diff timeline start month" onchange="renderTimelineDiff()"></span>
-    <span class="tl-diff-arrow">→</span>
-    <span class="tl-diff-label">To <input type="month" id="tl-diff-b" class="tl-diff-input" aria-label="Diff timeline end month" onchange="renderTimelineDiff()"></span>
-  </div>
-
-  <div class="tl-axis" id="tl-axis"></div>
-
-  <div class="tl-tracks" id="tl-tracks"></div>
-
-  <div class="tl-diff-view" id="tl-diff-view"></div>
-
-  <footer class="tl-footer">
-    <span class="tl-stats" id="tl-stats">·</span>
-  </footer>
-</aside>
-
-<div class="tl-tooltip" id="tl-tooltip" role="tooltip"></div>
 
 <aside id="export-drawer" class="exp-drawer" aria-hidden="true" aria-label="Export findings">
   <header class="exp-header">
