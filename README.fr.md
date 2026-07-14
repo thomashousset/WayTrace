@@ -1,6 +1,6 @@
 # WayTrace
 
-[English](README.md) . **Français**
+[English](README.md) · **Français**
 
 > **Internet n'oublie jamais.**
 
@@ -39,7 +39,7 @@ L'interface est entièrement bilingue (anglais / français), basculable depuis l
 - **Recherche plein-texte dans le contenu des pages** (depuis la v1.2.0) : cherchez n'importe quel mot dans les pages archivées d'un scan, pas seulement les pivots extraits, avec extraits surlignés et liens vers la capture Wayback.
 - **Finitions UX :** progression de chargement honnête (vraies pages récupérées + ETA mesurée, sans hoquet), bannière d'état archive.org bilingue, catégories de résultats auto-descriptives, et beaucoup de code mort retiré.
 
-Voir [CHANGELOG.md](CHANGELOG.md) pour l'historique complet (v1.0 → v1.5).
+Voir [CHANGELOG.md](CHANGELOG.md) pour l'historique complet (v1.0 → v1.6).
 
 ---
 
@@ -154,22 +154,22 @@ Toutes les pages archivées n'ont pas la même valeur. WayTrace note chaque chem
 43 catégories, chaque résultat suivi avec `first_seen`, `last_seen` et `occurrences`.
 
 **Personnes et contact**
-`emails` . `phones` . `persons` . `social_profiles` . `pgp_keys`
+`emails` · `phones` · `persons` · `social_profiles` · `pgp_keys`
 
 **Secrets et expositions**
-`api_keys` . `connection_strings` . `cloud_buckets` . `jwt_tokens` . `internal_ips` . `hidden_fields` . `directory_listings`
+`api_keys` · `connection_strings` · `cloud_buckets` · `jwt_tokens` · `internal_ips` · `hidden_fields` · `directory_listings`
 
 **Infrastructure et hébergement**
-`subdomains` . `hosting` . `http_headers` . `status_pages` . `favicons` . `sitemaps_and_robots`
+`subdomains` · `hosting` · `http_headers` · `status_pages` · `favicons` · `sitemaps_and_robots`
 
 **Technique et tracking**
-`technologies` . `analytics_trackers` . `analytics_ids` . `adsense_ids` . `verification_tags` . `captcha_providers` . `cookie_consent` . `auth_providers`
+`technologies` · `analytics_trackers` · `analytics_ids` · `adsense_ids` · `verification_tags` · `captcha_providers` · `cookie_consent` · `auth_providers`
 
 **Identifiants et corrélation**
-`crypto_addresses` . `french_business_ids` . `github_repos` . `organizations` . `bug_bounty_programs` . `job_boards`
+`crypto_addresses` · `french_business_ids` · `github_repos` · `organizations` · `bug_bounty_programs` · `job_boards`
 
 **Structure et contenu**
-`endpoints` . `js_urls` . `iframe_sources` . `outgoing_links` . `linked_documents` . `rss_feeds` . `assets` . `html_comments` . `meta_info` . `html_titles` . `addresses`
+`endpoints` · `js_urls` · `iframe_sources` · `outgoing_links` · `linked_documents` · `rss_feeds` · `assets` · `html_comments` · `meta_info` · `html_titles` · `addresses`
 
 Quelques-unes à signaler :
 
@@ -354,7 +354,7 @@ Chaque scan est stocké sous un `url_id` stable et reste disponible pendant la f
 ### GET /api/health
 
 ```json
-{ "status": "ok", "uptime_seconds": 3842, "active_jobs": 1 }
+{ "status": "ok", "version": "1.6.0", "uptime_seconds": 3842, "active_jobs": 1 }
 ```
 
 ---

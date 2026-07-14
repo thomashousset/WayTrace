@@ -1,6 +1,6 @@
 # WayTrace
 
-**English** . [Français](README.fr.md)
+**English** · [Français](README.fr.md)
 
 > **The internet never forgets.**
 
@@ -39,7 +39,7 @@ The interface is fully bilingual (English / French), switchable from the navbar.
 - **Full-text search over page content** (from v1.2.0): search any word across a scan's archived pages, not just the extracted pivots, with highlighted excerpts and links to the Wayback capture.
 - **UX polish:** honest loading progress (real pages scraped + measured ETA, no stutter), a bilingual archive.org status banner, self-describing result categories, and a lot of dead code removed.
 
-See [CHANGELOG.md](CHANGELOG.md) for the full history (v1.0 → v1.5).
+See [CHANGELOG.md](CHANGELOG.md) for the full history (v1.0 → v1.6).
 
 ---
 
@@ -154,22 +154,22 @@ Not all archived pages are worth the same. WayTrace scores each URL path:
 43 categories, each finding tracked with `first_seen`, `last_seen`, and `occurrences`.
 
 **People & contact**
-`emails` . `phones` . `persons` . `social_profiles` . `pgp_keys`
+`emails` · `phones` · `persons` · `social_profiles` · `pgp_keys`
 
 **Secrets & exposures**
-`api_keys` . `connection_strings` . `cloud_buckets` . `jwt_tokens` . `internal_ips` . `hidden_fields` . `directory_listings`
+`api_keys` · `connection_strings` · `cloud_buckets` · `jwt_tokens` · `internal_ips` · `hidden_fields` · `directory_listings`
 
 **Infrastructure & hosting**
-`subdomains` . `hosting` . `http_headers` . `status_pages` . `favicons` . `sitemaps_and_robots`
+`subdomains` · `hosting` · `http_headers` · `status_pages` · `favicons` · `sitemaps_and_robots`
 
 **Tech & tracking**
-`technologies` . `analytics_trackers` . `analytics_ids` . `adsense_ids` . `verification_tags` . `captcha_providers` . `cookie_consent` . `auth_providers`
+`technologies` · `analytics_trackers` · `analytics_ids` · `adsense_ids` · `verification_tags` · `captcha_providers` · `cookie_consent` · `auth_providers`
 
 **Identifiers & correlation**
-`crypto_addresses` . `french_business_ids` . `github_repos` . `organizations` . `bug_bounty_programs` . `job_boards`
+`crypto_addresses` · `french_business_ids` · `github_repos` · `organizations` · `bug_bounty_programs` · `job_boards`
 
 **Structure & content**
-`endpoints` . `js_urls` . `iframe_sources` . `outgoing_links` . `linked_documents` . `rss_feeds` . `assets` . `html_comments` . `meta_info` . `html_titles` . `addresses`
+`endpoints` · `js_urls` · `iframe_sources` · `outgoing_links` · `linked_documents` · `rss_feeds` · `assets` · `html_comments` · `meta_info` · `html_titles` · `addresses`
 
 A few worth calling out:
 
@@ -204,7 +204,7 @@ Categories with findings are surfaced first; the full 43-category scope (includi
 The report is a single page with two views you switch between:
 
 - **Categories (default).** A rail on the left lists all 43 categories: the ones with findings first (with counts), then the empty ones collapsed but present. You open **one category at a time**; the panel shows its full findings (value, occurrences, first/last-seen, and a link to the archived source page) **and its own activity** below - a lane per value showing when it appeared and disappeared, plus a dated change feed. "Show all" flattens every found category at once.
-- **Activity.** Tick categories **and** individual pivots (a specific subdomain, tracker, favicon, person...) to compose a shared-timeline: each becomes a lane on the same year axis (pivots highlighted), so overlaps and disappearances read at a glance. The axis always spans exactly what's shown. Includes the favicon-evolution gallery and a global change feed. Pivots are searchable.
+- **Activity.** Tick categories **and** individual pivots (a specific subdomain, tracker, favicon, person...) to compose a shared timeline: each becomes a lane on the same year axis (pivots highlighted), so overlaps and disappearances read at a glance. The axis always spans exactly what's shown. Includes the favicon-evolution gallery and a global change feed. Pivots are searchable.
 
 Two searches sit at the top, kept distinct: **filter the extracted findings** (instant, client-side) and **full-text search the archived page content** (any word inside the scraped HTML, with highlighted excerpts and a link to the exact Wayback capture). Every value is copyable (per-value or whole column), and you can **export** to JSON, CSV, or a standalone HTML report.
 
@@ -354,7 +354,7 @@ Every scan is stored under a stable `url_id` and stays available for the retenti
 ### GET /api/health
 
 ```json
-{ "status": "ok", "uptime_seconds": 3842, "active_jobs": 1 }
+{ "status": "ok", "version": "1.6.0", "uptime_seconds": 3842, "active_jobs": 1 }
 ```
 
 ---
