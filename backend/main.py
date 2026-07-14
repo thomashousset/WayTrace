@@ -124,18 +124,22 @@ async def static_asset_cache(request, call_next):
 # inline styles and inline event handlers. Even with it, the CSP blocks
 # external script origins, restricts XHR to same-origin, and kills framing.
 # Favicon thumbnails load from web.archive.org + Google's favicon service.
+# Cloudflare Turnstile (bot gate) needs its script + iframe when enabled. Only
+# widen the CSP when a sitekey is configured (never on the public/self-host build).
+_TS = "https://challenges.cloudflare.com" if settings.turnstile_sitekey else ""
 _CSP = (
     "default-src 'self'; "
-    "script-src 'self' 'unsafe-inline'; "
+    f"script-src 'self' 'unsafe-inline' {_TS}; "
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
     "img-src 'self' data: https:; "
     "font-src 'self' data: https://fonts.gstatic.com; "
     "connect-src 'self'; "
+    f"frame-src 'self' {_TS}; "
     "object-src 'none'; "
     "base-uri 'self'; "
     "form-action 'self'; "
     "frame-ancestors 'none'"
-)
+).replace("  ", " ")
 
 
 @app.middleware("http")

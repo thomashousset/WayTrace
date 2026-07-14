@@ -2613,3 +2613,6 @@
     .r2-favm b { color: var(--text); display: block; }
     .r2-favarr { color: var(--text-faint); }
     .r2-empty-compose { padding: 22px 16px; color: var(--text-faint); font-size: 13px; text-align: center; }
+
+/* Turnstile bot-gate widget in the auth modal (empty/hidden when disabled). */
+.auth-turnstile:not(:empty) { margin: 4px 0 2px; display: flex; justify-content: center; }

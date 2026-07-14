@@ -88,6 +88,11 @@ class Settings(BaseSettings):
     # unauthenticated POST can't OOM the single worker. The largest legitimate
     # body is selected_snapshots (max 5000 small objects); 2 MB is ample.
     max_request_body_bytes: int = 2_000_000
+    # Cloudflare Turnstile (managed mode) — bot gate on account creation. Inert
+    # when unset: no widget renders and verification is skipped (dev/self-host).
+    # Set both in deploy/.env.prod to enable on the hosted build.
+    turnstile_sitekey: str = ""
+    turnstile_secret: str = ""
     archive_request_timeout: int = 60
     archive_retry_count: int = 3
     scan_timeout_seconds: int = 3600
