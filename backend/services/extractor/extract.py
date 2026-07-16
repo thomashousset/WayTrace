@@ -210,6 +210,11 @@ def _record_endpoint(ctx: ExtractionContext, raw: str) -> None:
         return
     link_domain = (parsed.hostname or "").lower()
     path = (parsed.path or "/").rstrip("/") or "/"
+    # Endpoints are absolute routes. A bare relative token like "museum" from
+    # a legacy <a href="museum"> is not a reliable path, so drop it rather than
+    # record it as the endpoint "museum".
+    if not path.startswith("/"):
+        return
     # Drop Wayback self-references.
     if link_domain == "web.archive.org" or path.startswith("/web/"):
         return

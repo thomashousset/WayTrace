@@ -135,3 +135,31 @@ def test_xmr_with_context_still_emitted():
     from services.extractor.crypto_extract import extract_crypto_addresses
     got = extract_crypto_addresses(f"<p>Monero (XMR) donations: {_XMR_SHAPED}</p>")
     assert any(c.get("type") == "xmr" for c in got)
+
+
+# --- Legacy Netscape-era pages: <meta generator> holds a browser UA string,
+#     and bare relative links must not masquerade as tech / endpoints. ---
+
+def test_browser_ua_generator_not_shredded_into_bogus_tech():
+    techs = {t["technology"] for t in _run(
+        '<meta name="generator" content="Mozilla/3.0Gold (Win95; I) [Netscape]">'
+    )["technologies"]}
+    assert not (techs & {"Mozilla/3.0Gold", "(Win95", "I)", "[Netscape]"})
+
+
+def test_real_generator_still_detected():
+    techs = {(t["technology"], t["version"]) for t in _run(
+        '<meta name="generator" content="WordPress 6.4; WP Rocket 3.17">'
+    )["technologies"]}
+    assert ("WordPress", "6.4") in techs
+    assert ("WP Rocket", "3.17") in techs
+
+
+def test_relative_bareword_link_not_recorded_as_endpoint():
+    paths = {e["path"] for e in _run('<a href="museum">Museum</a>')["endpoints"]}
+    assert "museum" not in paths
+
+
+def test_absolute_route_still_recorded_as_endpoint():
+    paths = {e["path"] for e in _run('<a href="/admin/login">Login</a>')["endpoints"]}
+    assert "/admin/login" in paths

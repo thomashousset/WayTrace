@@ -60,6 +60,16 @@ def extract_technologies(
                 tech, version = parts[0], (parts[1] if len(parts) > 1 else None)
             if not tech or len(tech) > 80:
                 continue
+            # A real technology token is a word, not a fragment of a browser
+            # user-agent string. Legacy pages authored in Netscape Composer set
+            # <meta generator> to the UA ("Mozilla/3.0Gold (Win95; I) [Netscape]"),
+            # which the split above shreds into "Mozilla/3.0Gold", "(Win95",
+            # "I)", "[Netscape]". Reject anything not letter-led and free of
+            # URL/UA punctuation.
+            if not re.match(r"^[A-Za-z][A-Za-z0-9.+\- ]*$", tech):
+                continue
+            if version is not None and not re.match(r"^v?\d", version):
+                version = None
             tech = _TECH_ALIASES.get(tech.lower(), tech)
             update_entity(
                 accum["technologies"], tech.lower(), month,
