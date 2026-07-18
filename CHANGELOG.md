@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.7.1
+
+- **New look.** The dark theme trades its olive-tinted gray for a deep truffle brown, and the light theme becomes a cool porcelain white; two deliberately contrasting moods instead of one warm scheme stretched both ways.
+
 ## v1.7.0
 
 - **The scan queue survives a restart.** Queued and running scans are now persisted, so a redeploy or a crash no longer drops them: on restart they are re-queued under the same link, and a scan that was mid-run simply starts over. Finished scans were already saved; this closes the gap for the ones still in flight.

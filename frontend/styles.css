@@ -1,13 +1,13 @@
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
     :root {
-      /* Warm dark default. Sans-only. Hierarchy via weight/size/caps, never serif. */
-      --bg: #1C1B18;
-      --surface: #23221E;
-      --surface2: #2C2A25;
-      --surface3: #3A362E;
-      --border: #3A362E;
-      --border-hover: #5A5241;
+      /* Deep truffle-brown dark default. Sans-only. Hierarchy via weight/size/caps, never serif. */
+      --bg: #151311;
+      --surface: #1D1916;
+      --surface2: #27211E;
+      --surface3: #342B26;
+      --border: #342B26;
+      --border-hover: #544338;
       --text: #F0EBDE;
       --text-dim: #B8B1A0;
       --text-faint: #9E978A;
@@ -42,15 +42,14 @@
       --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Fira Code', monospace;
     }
 
-    /* Light-mode opt-in (inert by default, no UI trigger yet). Preserves the
-       previous cream-paper scheme for anyone who flips data-theme="light". */
+    /* Light mode: cool porcelain white, deliberate contrast with the warm dark. */
     [data-theme="light"] {
-      --bg: #F5F1E8;
-      --surface: #FAF7EE;
-      --surface2: #EDE6D4;
-      --surface3: #E0D7C0;
-      --border: #DCD2BA;
-      --border-hover: #BDAE8E;
+      --bg: #F2F3F5;
+      --surface: #F6F7F8;
+      --surface2: #E1E4EA;
+      --surface3: #CDD2DD;
+      --border: #C7CDD8;
+      --border-hover: #9FA8B9;
       --text: #1B1A17;
       --text-dim: #5A564C;
       --text-faint: #655F4F;
@@ -61,8 +60,8 @@
       --accent-text: #FFFFFF;
       --accent-glow: rgba(199,84,31,.06);
       --accent-glow2: rgba(199,84,31,.12);
-      --pivot: #3B5D6D;
-      --pivot-soft: #DBE4E9;
+      --pivot: #33566B;
+      --pivot-soft: #D8E2EA;
 
       --red: #B63B28;       --red-dim: rgba(182,59,40,.10);
       --orange: #C7541F;    --orange-dim: rgba(199,84,31,.10);

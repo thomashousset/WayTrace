@@ -208,7 +208,7 @@ const I18N = {
     'home.cap.timeline': 'Chronologie',
     'home.cap.timeline.d': 'Quand chaque élément est apparu, et quand il a disparu.',
     'home.caption': 'Données publiques uniquement &middot; <a href="#/legal">Mentions légales</a>',
-    'home.version': 'WayTrace v1.6.0 &middot; hébergé &middot; <a href="https://github.com/thomashousset/WayTrace" target="_blank" rel="noopener">source</a>',
+    'home.version': 'WayTrace v1.7.1 &middot; hébergé &middot; <a href="https://github.com/thomashousset/WayTrace" target="_blank" rel="noopener">source</a>',
     'home.archivedby': 'Archives par',
     'Pages read from': 'Pages lues depuis',
     'Querying archive.org': 'Interrogation archive.org',
