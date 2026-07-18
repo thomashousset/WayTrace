@@ -176,8 +176,257 @@ function toggleTheme() {
   else document.documentElement.removeAttribute('data-theme');
   try { localStorage.setItem('wt_theme', next); } catch (_) {}
   applyThemeLabel();
+  // Re-emit the palette for the new mode and remember it on the account.
+  applyThemeVars();
+  const p = currentThemePref();
+  if (p) { p.mode = next; setThemePref(p); }
 }
 applyThemeLabel();
+
+/* ===== THEMES (presets + custom palette) =====
+   A theme is {preset, mode, custom?}. Preset seeds hold only a background HSL
+   and an accent hex per mode; every other color (surfaces, borders, accent
+   ramp) is derived so any seed yields a coherent UI. The computed variables
+   are cached in localStorage (wt_theme_vars) so the boot script can restore
+   them before first paint, and mirrored on the account so a sign-in brings
+   the theme to any device. */
+
+const THEME_MANAGED_VARS = [
+  '--bg', '--surface', '--surface2', '--surface3', '--border', '--border-hover',
+  '--accent', '--accent-dim', '--accent-soft', '--accent-glow', '--accent-glow2',
+  '--orange', '--orange-dim', '--pivot', '--pivot-soft',
+  '--text', '--text-dim', '--text-faint', '--text-bright',
+];
+
+// Seeds: d/l = dark/light, bg = [h,s,l], ac = accent hex, x = extra overrides.
+// Several themes retint the text ramp too, so switching really changes the
+// whole mood of the app, not just the accent. Names stay accent-free.
+const THEME_PRESETS = [
+  {id: 'truffe',   name: 'Truffe',   d: {bg: [24, 12, 7.5],  ac: '#E87A48'}, l: {bg: [220, 12, 95.5], ac: '#C7541F', x: {'--pivot': '#33566B', '--pivot-soft': '#D8E2EA'}}},
+  {id: 'encre',    name: 'Encre',    d: {bg: [222, 18, 8],   ac: '#5B9DF0'}, l: {bg: [220, 24, 94.5], ac: '#2360C0'}},
+  {id: 'fjord',    name: 'Fjord',    d: {bg: [220, 16, 13],  ac: '#88C0D0', x: {'--text': '#E5E9F0', '--text-dim': '#AEB6C3', '--text-faint': '#939CAB', '--text-bright': '#ECEFF4'}}, l: {bg: [219, 28, 95],  ac: '#46698E'}},
+  {id: 'retro',    name: 'Retro',    d: {bg: [0, 0, 13],     ac: '#FE8019', x: {'--text': '#EBDBB2', '--text-dim': '#BDAE93', '--text-faint': '#A89984', '--text-bright': '#FBF1C7'}}, l: {bg: [48, 70, 89],   ac: '#AF3A03', x: {'--text': '#3C3836', '--text-dim': '#665C54', '--text-faint': '#7C6F64', '--text-bright': '#282828'}}},
+  {id: 'vampire',  name: 'Vampire',  d: {bg: [231, 15, 12],  ac: '#BD93F9', x: {'--text': '#F8F8F2', '--text-dim': '#B6B9C7', '--text-faint': '#9A9DB0', '--text-bright': '#FFFFFF'}}, l: {bg: [232, 24, 95],  ac: '#6E3BC4'}},
+  {id: 'tokyo',    name: 'Tokyo',    d: {bg: [235, 19, 11],  ac: '#7AA2F7', x: {'--text': '#C0CAF5', '--text-dim': '#8A94C4', '--text-faint': '#767FA8', '--text-bright': '#E4EAFF'}}, l: {bg: [230, 30, 94.5], ac: '#34548A'}},
+  {id: 'pastel',   name: 'Pastel',   d: {bg: [240, 21, 13],  ac: '#CBA6F7', x: {'--text': '#CDD6F4', '--text-dim': '#9AA3C7', '--text-faint': '#8188AB', '--text-bright': '#E6ECFF'}}, l: {bg: [220, 23, 95],  ac: '#7A2EC4'}},
+  {id: 'mousse',   name: 'Mousse',   d: {bg: [160, 10, 11],  ac: '#A7C080', x: {'--text': '#D3C6AA', '--text-dim': '#A29B84', '--text-faint': '#8C866F', '--text-bright': '#E8DFC5'}}, l: {bg: [90, 20, 93],   ac: '#4A7A46'}},
+  {id: 'estampe',  name: 'Estampe',  d: {bg: [240, 13, 12],  ac: '#7FB4CA', x: {'--text': '#DCD7BA', '--text-dim': '#A8A48D', '--text-faint': '#918D77', '--text-bright': '#EFEAD2'}}, l: {bg: [43, 30, 92],   ac: '#2D5F7A'}},
+  {id: 'solaire',  name: 'Solaire',  d: {bg: [192, 80, 10],  ac: '#CB4B16', x: {'--text': '#B9C4C4', '--text-dim': '#8CA0A0', '--text-faint': '#7A9090', '--text-bright': '#EEE8D5'}}, l: {bg: [44, 70, 94],   ac: '#1E6FA8'}},
+  {id: 'horizon',  name: 'Horizon',  d: {bg: [345, 14, 10],  ac: '#E95678', x: {'--text': '#EDE3E6', '--text-dim': '#BBA8AE', '--text-faint': '#A08D93', '--text-bright': '#FBF3F5'}}, l: {bg: [20, 55, 94],   ac: '#C4304E'}},
+  {id: 'sakura',   name: 'Sakura',   d: {bg: [340, 12, 8.5], ac: '#F08AAE'}, l: {bg: [345, 38, 95],   ac: '#B83A64'}},
+  {id: 'miel',     name: 'Miel',     d: {bg: [40, 18, 8.5],  ac: '#E8B420'}, l: {bg: [44, 52, 92.5],  ac: '#8A6410'}},
+  {id: 'terminal', name: 'Terminal', d: {bg: [145, 10, 6],   ac: '#4ADE80', x: {'--text': '#D8F0DC', '--text-dim': '#8FB89A', '--text-faint': '#78A183', '--text-bright': '#F0FFF4'}}, l: {bg: [140, 10, 95.5], ac: '#15803D'}},
+  {id: 'neon',     name: 'Neon',     d: {bg: [0, 0, 7],      ac: '#FF5C8A'}, l: {bg: [340, 8, 95.5],  ac: '#C42360'}},
+  {id: 'lagon',    name: 'Lagon',    d: {bg: [187, 28, 8.5], ac: '#4BC8BE'}, l: {bg: [180, 35, 94],   ac: '#0A7A70'}},
+  {id: 'rouille',  name: 'Rouille',  d: {bg: [204, 12, 9],   ac: '#DE7A44'}, l: {bg: [210, 14, 94.5], ac: '#B0521C'}},
+  {id: 'bordeaux', name: 'Bordeaux', d: {bg: [350, 16, 8.5], ac: '#E07A8A'}, l: {bg: [8, 28, 94.5],   ac: '#A03048'}},
+  {id: 'brume',    name: 'Brume',    d: {bg: [220, 3, 10.5], ac: '#C2C8D0'}, l: {bg: [220, 5, 95],    ac: '#3E4650'}},
+  {id: 'galerie',  name: 'Galerie',  d: {bg: [40, 5, 8],     ac: '#E8E2D2'}, l: {bg: [40, 12, 95.5],  ac: '#26221C'}},
+];
+
+function _hslHex(h, s, l) {
+  s = Math.max(0, Math.min(100, s)) / 100; l = Math.max(0, Math.min(100, l)) / 100;
+  const k = n => (n + ((h % 360) + 360) % 360 / 30) % 12;
+  const a = s * Math.min(l, 1 - l);
+  const f = n => Math.round(255 * (l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)))));
+  const to2 = v => v.toString(16).padStart(2, '0').toUpperCase();
+  return '#' + to2(f(0)) + to2(f(8)) + to2(f(4));
+}
+function _hexHsl(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = ((n >> 16) & 255) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2;
+  if (mx === mn) return [0, 0, l * 100];
+  const d = mx - mn;
+  const s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+  let h;
+  if (mx === r) h = ((g - b) / d + (g < b ? 6 : 0)) * 60;
+  else if (mx === g) h = ((b - r) / d + 2) * 60;
+  else h = ((r - g) / d + 4) * 60;
+  return [h, s * 100, l * 100];
+}
+function _hexRgb(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+function _darkRamp(bg) {
+  const [h, s, l] = bg;
+  return {
+    '--bg': _hslHex(h, s, l), '--surface': _hslHex(h, s + 1, l + 2.5),
+    '--surface2': _hslHex(h, s + 2, l + 6), '--surface3': _hslHex(h, s + 3.5, l + 10),
+    '--border': _hslHex(h, s + 3.5, l + 10), '--border-hover': _hslHex(h, s + 8, l + 20),
+  };
+}
+function _lightRamp(bg) {
+  const [h, s, l] = bg;
+  return {
+    '--bg': _hslHex(h, s, l), '--surface': _hslHex(h, s, Math.min(l + 2.5, 97)),
+    '--surface2': _hslHex(h, s + 6, l - 5.5), '--surface3': _hslHex(h, s + 8, l - 12),
+    '--border': _hslHex(h, s + 6, l - 14), '--border-hover': _hslHex(h, s + 4, l - 28),
+  };
+}
+function _accentVars(ac, mode) {
+  const [h, s, l] = _hexHsl(ac);
+  const [r, g, b] = _hexRgb(ac);
+  if (mode === 'dark') {
+    return {
+      '--accent': ac, '--accent-dim': _hslHex(h, s, l - 9),
+      '--accent-soft': _hslHex(h, 30, 17),
+      '--accent-glow': `rgba(${r},${g},${b},.06)`, '--accent-glow2': `rgba(${r},${g},${b},.14)`,
+      '--orange': ac, '--orange-dim': `rgba(${r},${g},${b},.14)`,
+    };
+  }
+  return {
+    '--accent': ac, '--accent-dim': _hslHex(h, s, Math.max(l - 8, 20)),
+    '--accent-soft': _hslHex(h, 55, 88),
+    '--accent-glow': `rgba(${r},${g},${b},.06)`, '--accent-glow2': `rgba(${r},${g},${b},.12)`,
+    '--orange': ac, '--orange-dim': `rgba(${r},${g},${b},.10)`,
+  };
+}
+
+// -> {dark: {...}, light: {...}} or null when the pref is empty/unknown.
+function computeThemeVars(pref) {
+  if (!pref) return null;
+  if (pref.preset === 'custom' && pref.custom) {
+    const c = pref.custom;
+    if (!c.darkBg || !c.darkAccent || !c.lightBg || !c.lightAccent) return null;
+    return {
+      dark: Object.assign(_darkRamp(_hexHsl(c.darkBg)), _accentVars(c.darkAccent, 'dark')),
+      light: Object.assign(_lightRamp(_hexHsl(c.lightBg)), _accentVars(c.lightAccent, 'light')),
+    };
+  }
+  const p = THEME_PRESETS.find(x => x.id === pref.preset);
+  if (!p) return null;
+  return {
+    dark: Object.assign(_darkRamp(p.d.bg), _accentVars(p.d.ac, 'dark'), p.d.x || {}),
+    light: Object.assign(_lightRamp(p.l.bg), _accentVars(p.l.ac, 'light'), p.l.x || {}),
+  };
+}
+
+function currentThemePref() {
+  try { return JSON.parse(localStorage.getItem('wt_theme_pref') || 'null'); } catch (_) { return null; }
+}
+
+function applyThemeVars() {
+  const root = document.documentElement;
+  THEME_MANAGED_VARS.forEach(v => root.style.removeProperty(v));
+  const vars = computeThemeVars(currentThemePref());
+  if (!vars) return;
+  const mode = root.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+  const set = vars[mode];
+  for (const k in set) root.style.setProperty(k, set[k]);
+}
+
+// Persist locally (pref + precomputed vars for the boot script), apply, and
+// mirror on the account when signed in. `pref === null` resets to the default.
+function setThemePref(pref, opts) {
+  try {
+    if (pref) {
+      localStorage.setItem('wt_theme_pref', JSON.stringify(pref));
+      const vars = computeThemeVars(pref);
+      if (vars) localStorage.setItem('wt_theme_vars', JSON.stringify(vars));
+      else localStorage.removeItem('wt_theme_vars');
+    } else {
+      localStorage.removeItem('wt_theme_pref');
+      localStorage.removeItem('wt_theme_vars');
+    }
+  } catch (_) {}
+  applyThemeVars();
+  _markActiveThemeCard();
+  if (!(opts && opts.localOnly) && typeof _syncThemeToServer === 'function') _syncThemeToServer(pref);
+}
+
+
+/* --- Themes page --- */
+function _themeSeedHexes(p) {
+  return {
+    darkBg: _hslHex(p.d.bg[0], p.d.bg[1], p.d.bg[2]), darkAccent: p.d.ac,
+    lightBg: _hslHex(p.l.bg[0], p.l.bg[1], p.l.bg[2]), lightAccent: p.l.ac,
+  };
+}
+
+function _markActiveThemeCard() {
+  const grid = $('themes-grid');
+  if (!grid) return;
+  const pref = currentThemePref();
+  const active = pref ? (pref.preset || '') : 'truffe';
+  grid.querySelectorAll('.theme-card').forEach(c =>
+    c.classList.toggle('active', c.dataset.theme === active));
+  const cc = $('theme-custom-card');
+  if (cc) cc.classList.toggle('active', active === 'custom');
+}
+
+function renderThemesPage() {
+  const grid = $('themes-grid');
+  if (!grid) return;
+  grid.innerHTML = THEME_PRESETS.map(p => {
+    const v = computeThemeVars({preset: p.id});
+    const d = v.dark, l = v.light;
+    return `<button type="button" class="theme-card" data-theme="${p.id}" onclick="pickThemePreset('${p.id}')">
+      <span class="theme-prev">
+        <span class="theme-prev-half" style="background:${d['--bg']}">
+          <span class="theme-prev-bar" style="background:${d['--surface2']}"></span>
+          <span class="theme-prev-dot" style="background:${d['--accent']}"></span>
+        </span>
+        <span class="theme-prev-half" style="background:${l['--bg']}">
+          <span class="theme-prev-bar" style="background:${l['--surface2']}"></span>
+          <span class="theme-prev-dot" style="background:${l['--accent']}"></span>
+        </span>
+      </span>
+      <span class="theme-card-name">${p.name}</span>
+    </button>`;
+  }).join('');
+  _initCustomEditor();
+  _markActiveThemeCard();
+}
+
+function pickThemePreset(id) {
+  const mode = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+  setThemePref({preset: id, mode});
+  _fillCustomInputsFromCurrent();
+}
+
+function _fillCustomInputsFromCurrent() {
+  const pref = currentThemePref();
+  let seeds;
+  if (pref && pref.preset === 'custom' && pref.custom) seeds = pref.custom;
+  else {
+    const p = THEME_PRESETS.find(x => x.id === ((pref && pref.preset) || 'truffe')) || THEME_PRESETS[0];
+    seeds = _themeSeedHexes(p);
+  }
+  [['cust-dark-bg', 'darkBg'], ['cust-dark-ac', 'darkAccent'],
+   ['cust-light-bg', 'lightBg'], ['cust-light-ac', 'lightAccent']].forEach(([id, k]) => {
+    const el = $(id); if (el && seeds[k]) el.value = seeds[k];
+  });
+}
+
+function _readCustomInputs() {
+  return {
+    darkBg: $('cust-dark-bg').value, darkAccent: $('cust-dark-ac').value,
+    lightBg: $('cust-light-bg').value, lightAccent: $('cust-light-ac').value,
+  };
+}
+
+function _initCustomEditor() {
+  _fillCustomInputsFromCurrent();
+  ['cust-dark-bg', 'cust-dark-ac', 'cust-light-bg', 'cust-light-ac'].forEach(id => {
+    const el = $(id);
+    if (!el || el._themeWired) return;
+    el._themeWired = true;
+    const mode = () => document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+    // Live preview while dragging the picker; persist (and sync) on release.
+    el.addEventListener('input', () => setThemePref({preset: 'custom', mode: mode(), custom: _readCustomInputs()}, {localOnly: true}));
+    el.addEventListener('change', () => setThemePref({preset: 'custom', mode: mode(), custom: _readCustomInputs()}));
+  });
+}
+
+function resetThemePref() {
+  setThemePref(null);
+  _fillCustomInputsFromCurrent();
+}
+
+applyThemeVars();
 
 /* ===== i18n (FR / EN) =====
    EN is the literal text in the HTML; only FR overrides live in the dict.
@@ -188,6 +437,17 @@ let LANG = 'en';
 const I18N = {
   fr: {
     'nav.history': 'Historique',
+    'themes.title': 'Apparence',
+    'themes.sub': "Choisissez un thème, ou composez le vôtre. Chaque thème a un visage sombre et un visage clair; le bouton Light/Dark de la barre de navigation bascule entre les deux. Votre choix est enregistré sur votre compte et vous suit sur tous vos appareils.",
+    'themes.custom': 'Palette personnalisée',
+    'themes.customsub': "Choisissez un fond et un accent pour chaque mode; surfaces, bordures et surlignages sont dérivés automatiquement pour que le résultat reste cohérent.",
+    'themes.darkface': 'Visage sombre',
+    'themes.lightface': 'Visage clair',
+    'themes.bg': 'Fond',
+    'themes.bg2': 'Fond',
+    'themes.accent': 'Accent',
+    'themes.accent2': 'Accent',
+    'themes.reset': 'Revenir au thème par défaut',
     'nav.signin': 'Connexion',
     'nav.scan': 'Analyser',
     'No published scans yet': 'Aucun scan publié pour l\'instant',
@@ -208,7 +468,7 @@ const I18N = {
     'home.cap.timeline': 'Chronologie',
     'home.cap.timeline.d': 'Quand chaque élément est apparu, et quand il a disparu.',
     'home.caption': 'Données publiques uniquement &middot; <a href="#/legal">Mentions légales</a>',
-    'home.version': 'WayTrace v1.7.1 &middot; hébergé &middot; <a href="https://github.com/thomashousset/WayTrace" target="_blank" rel="noopener">source</a>',
+    'home.version': 'WayTrace v1.7.2 &middot; hébergé &middot; <a href="https://github.com/thomashousset/WayTrace" target="_blank" rel="noopener">source</a> &middot; <a href="#/themes">thèmes</a>',
     'home.archivedby': 'Archives par',
     'Pages read from': 'Pages lues depuis',
     'Querying archive.org': 'Interrogation archive.org',
@@ -621,12 +881,12 @@ function navigate(hash) {
   const parts = (hash || '#/').replace('#/', '').split('/').filter(Boolean);
   // v2 public scan route: #/s/{url_id}
   let view = parts[0] === 's' ? 'scan-public' : (parts[0] || 'home');
-  const valid = new Set(['home', 'scope', 'history', 'scan-public', 'legal']);
+  const valid = new Set(['home', 'scope', 'history', 'scan-public', 'legal', 'themes']);
   if (!valid.has(view)) view = 'notfound';
   // 'results' stays here (not in `valid`): the public flow reuses view-results,
   // so navigate() must still deactivate it when leaving, even though there is no
   // longer a /#/results route.
-  const views = ['home', 'scope', 'results', 'history', 'scan-public', 'legal', 'admin', 'notfound'];
+  const views = ['home', 'scope', 'results', 'history', 'scan-public', 'legal', 'themes', 'admin', 'notfound'];
 
   views.forEach(v => {
     const el = $('view-' + v);
@@ -658,6 +918,8 @@ function navigate(hash) {
     loadScope(decodeURIComponent(parts[1]));
   } else if (view === 'history') {
     loadHistory();
+  } else if (view === 'themes') {
+    renderThemesPage();
   }
 }
 

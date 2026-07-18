@@ -96,6 +96,22 @@
        media query below kills the smooth-scroll for users who opt out. */
     html { scroll-behavior: smooth; }
     :root, html { accent-color: var(--accent); }
+    /* Scrollbar blends into the page. Styling ::-webkit-scrollbar opts Chrome
+       out of its overlay scrollbar, whose built-in gradient paints a dark
+       "shadow" band along the right edge; the painted track below matches the
+       background exactly so the band is gone and the thumb follows the theme.
+       scrollbar-color would re-enable native painting in Chrome, so it is
+       scoped to engines without ::-webkit-scrollbar (Firefox). */
+    :root { color-scheme: dark; }
+    [data-theme="light"] { color-scheme: light; }
+    @supports not selector(::-webkit-scrollbar) {
+      html { scrollbar-color: var(--surface3) var(--bg); }
+    }
+    ::-webkit-scrollbar { width: 11px; height: 11px; background: var(--bg); }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-corner { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--surface3); border-radius: 8px; border: 2px solid var(--bg); }
+    ::-webkit-scrollbar-thumb:hover { background: var(--border-hover); }
     /* Respect reduced-motion preferences: drop transitions + smooth scroll */
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after {
@@ -1542,13 +1558,14 @@
       background: var(--surface);
       border-left: 1px solid var(--border);
       border-top-left-radius: var(--radius-xl);
-      box-shadow: var(--shadow-lg);
+      /* Shadow only while open: parked off-screen, the 48px blur would bleed
+         back into the viewport as a permanent band along the right edge. */
       transform: translateX(100%);
       transition: transform .25s var(--ease-out);
       z-index: 210;
       display: flex; flex-direction: column;
     }
-    .exp-drawer.open { transform: translateX(0); }
+    .exp-drawer.open { transform: translateX(0); box-shadow: var(--shadow-lg); }
     .exp-header {
       background: var(--surface);
       border-top-left-radius: var(--radius-xl);
@@ -1639,13 +1656,13 @@
       background: var(--surface);
       border-left: 1px solid var(--border);
       border-top-left-radius: var(--radius-xl);
-      box-shadow: var(--shadow-lg);
+      /* Shadow only while open (see .exp-drawer). */
       transform: translateX(100%);
       transition: transform .25s var(--ease-out);
       z-index: 210;
       display: flex; flex-direction: column;
     }
-    .fd-drawer.open { transform: translateX(0); }
+    .fd-drawer.open { transform: translateX(0); box-shadow: var(--shadow-lg); }
     .fd-header {
       background: var(--surface);
       border-top-left-radius: var(--radius-xl);
@@ -2626,3 +2643,30 @@
 
 /* Turnstile bot-gate widget in the auth modal (empty/hidden when disabled). */
 .auth-turnstile:not(:empty) { margin: 4px 0 2px; display: flex; justify-content: center; }
+
+    /* ===== Themes page (Appearance) ===== */
+    .themes-page { max-width: 880px; margin: 0 auto; padding: 56px 24px 96px; }
+    .themes-page h1 { font-size: 26px; color: var(--text-bright); letter-spacing: -.01em; margin-bottom: 6px; }
+    .themes-sub { font-size: 13.5px; color: var(--text-dim); max-width: 640px; margin-bottom: 22px; }
+    .themes-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 12px; margin-bottom: 40px; }
+    .theme-card { display: flex; flex-direction: column; gap: 8px; padding: 10px; cursor: pointer;
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+      font-family: var(--font); text-align: left; transition: border-color .15s var(--ease-out), transform .15s var(--ease-out); }
+    .theme-card:hover { border-color: var(--border-hover); transform: translateY(-1px); }
+    .theme-card.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+    .theme-prev { display: flex; border-radius: 7px; overflow: hidden; height: 52px; border: 1px solid rgba(0,0,0,.25); }
+    .theme-prev-half { position: relative; flex: 1; }
+    .theme-prev-bar { position: absolute; left: 7px; right: 7px; top: 9px; height: 9px; border-radius: 3px; }
+    .theme-prev-dot { position: absolute; left: 7px; bottom: 8px; width: 15px; height: 15px; border-radius: 50%; }
+    .theme-card-name { font-size: 12.5px; font-weight: 600; color: var(--text); }
+    .theme-card.active .theme-card-name { color: var(--accent); }
+    .themes-custom-title { font-size: 15px; color: var(--accent); margin: 0 0 8px; }
+    .themes-custom { display: flex; gap: 28px; flex-wrap: wrap; padding: 16px 18px; margin-bottom: 18px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); }
+    .themes-custom.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+    .themes-custom-col { display: flex; flex-direction: column; gap: 10px; }
+    .themes-custom-head { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-faint); }
+    .themes-pick { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text); }
+    .themes-pick input[type="color"] { width: 44px; height: 30px; padding: 2px; border: 1px solid var(--border);
+      border-radius: 6px; background: var(--surface2); cursor: pointer; }
+    .themes-actions { display: flex; gap: 10px; }

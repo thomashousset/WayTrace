@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Single source of truth for the tool version, surfaced in the API (/api/health,
 # OpenAPI) and injected into the frontend footer.
-APP_VERSION = "1.7.1"
+APP_VERSION = "1.7.2"
 
 # Shared User-Agent for every archive.org request (CDX collector, page scraper,
 # favicon fetcher). One polite identity so the Internet Archive can attribute

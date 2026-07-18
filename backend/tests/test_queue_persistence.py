@@ -79,9 +79,10 @@ async def test_migration_v7_idempotent_after_partial_apply(tmp_path):
     re-running init_db on a DB already carrying the new columns is a no-op."""
     import aiosqlite
     p = str(tmp_path / "partial.db")
-    await dbmod.init_db(p)                       # full schema at v7
+    latest = max(v for v, _ in dbmod.MIGRATIONS)
+    await dbmod.init_db(p)                       # full schema at latest version
     conn = await aiosqlite.connect(p)
-    await conn.execute("PRAGMA user_version = 6")  # rewind so v7 re-runs
+    await conn.execute("PRAGMA user_version = 6")  # rewind so v7+ re-run
     await conn.commit()
     await conn.close()
     await dbmod.init_db(p)                       # must NOT raise duplicate column
@@ -89,4 +90,4 @@ async def test_migration_v7_idempotent_after_partial_apply(tmp_path):
     cur = await conn.execute("PRAGMA user_version")
     ver = (await cur.fetchone())[0]
     await conn.close()
-    assert ver == 7
+    assert ver == latest

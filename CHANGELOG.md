@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.7.2
+
+- **Make WayTrace yours.** New Appearance page (in the profile menu, or via the themes link in the footer): 20 hand-tuned themes, each with a dark and a light face, from classics like Truffe, Encre or Brume to full-mood palettes inspired by beloved editor colorschemes (Retro, Fjord, Vampire, Tokyo, Pastel, Estampe, Solaire...). A custom palette lets you pick a background and an accent per mode; the rest of the interface is derived automatically. Signed in, the theme is saved to your account and follows you across devices; otherwise it sticks to the browser.
+- **Cleaner right edge.** The export and detail drawers no longer bleed their shadow into the page while parked off-screen, and the scrollbar now blends into the page and follows the active theme.
+- **Fewer throwaway sign-ups.** The disposable-email blocklist grew by ~50 domains: the temp-mail.org rotating pool (lovadio.com and friends) and the current generation of temp-mail services.
+
 ## v1.7.1
 
 - **New look.** The dark theme trades its olive-tinted gray for a deep truffle brown, and the light theme becomes a cool porcelain white; two deliberately contrasting moods instead of one warm scheme stretched both ways.

@@ -41,6 +41,12 @@
     try {
       var t = localStorage.getItem('wt_theme');
       if (t === 'light') document.documentElement.setAttribute('data-theme', 'light');
+      // Custom palette (precomputed by the themes page): restore before paint too.
+      var tv = JSON.parse(localStorage.getItem('wt_theme_vars') || 'null');
+      if (tv) {
+        var set = (t === 'light' ? tv.light : tv.dark) || {};
+        for (var k in set) document.documentElement.style.setProperty(k, set[k]);
+      }
     } catch (_) {}
   </script>
 </head>
@@ -89,7 +95,7 @@
     </ul>
     <p class="home-wayback"><span data-i18n="home.archivedby">Data archived by</span> <a href="https://web.archive.org" target="_blank" rel="noopener"><img class="wb-logo" src="/icons/wayback.svg" alt="Wayback Machine"></a></p>
     <p class="home-caption" data-i18n-html="home.caption">Public data only &middot; <a href="#/legal">Legal &amp; licence</a></p>
-    <p class="home-version" data-i18n-html="home.version">WayTrace v1.7.1 &middot; hosted &middot; <a href="https://github.com/thomashousset/WayTrace" target="_blank" rel="noopener">source</a></p>
+    <p class="home-version" data-i18n-html="home.version">WayTrace v1.7.2 &middot; hosted &middot; <a href="https://github.com/thomashousset/WayTrace" target="_blank" rel="noopener">source</a> &middot; <a href="#/themes">themes</a></p>
     <p class="home-provenance" data-i18n="home.provenance">Open-source OSINT tool. The hosted build caps snapshots per scan; self-host it from GitHub to scan a domain in full.</p>
   </div>
 
@@ -221,6 +227,31 @@
     <h1 class="notfound-title">Page not found</h1>
     <p class="notfound-sub">This page does not exist or has moved.</p>
     <a href="#/" class="btn btn-accent">Back to WayTrace</a>
+  </div>
+</div>
+
+<div id="view-themes" class="view">
+  <div class="themes-page">
+    <h1 data-i18n="themes.title">Appearance</h1>
+    <p class="themes-sub" data-i18n="themes.sub">Pick a theme, or build your own. Each theme carries a dark and a light face; the Light/Dark button in the navbar switches between them. Your choice is saved to your account and follows you on any device.</p>
+    <div class="themes-grid" id="themes-grid"></div>
+    <h2 class="themes-custom-title" data-i18n="themes.custom">Custom palette</h2>
+    <p class="themes-sub" data-i18n="themes.customsub">Choose a background and an accent for each mode; surfaces, borders and highlights are derived automatically so the result always stays coherent.</p>
+    <div class="themes-custom" id="theme-custom-card">
+      <div class="themes-custom-col">
+        <div class="themes-custom-head" data-i18n="themes.darkface">Dark face</div>
+        <label class="themes-pick"><input type="color" id="cust-dark-bg"><span data-i18n="themes.bg">Background</span></label>
+        <label class="themes-pick"><input type="color" id="cust-dark-ac"><span data-i18n="themes.accent">Accent</span></label>
+      </div>
+      <div class="themes-custom-col">
+        <div class="themes-custom-head" data-i18n="themes.lightface">Light face</div>
+        <label class="themes-pick"><input type="color" id="cust-light-bg"><span data-i18n="themes.bg2">Background</span></label>
+        <label class="themes-pick"><input type="color" id="cust-light-ac"><span data-i18n="themes.accent2">Accent</span></label>
+      </div>
+    </div>
+    <div class="themes-actions">
+      <button class="btn" type="button" onclick="resetThemePref()" data-i18n="themes.reset">Reset to default</button>
+    </div>
   </div>
 </div>
 

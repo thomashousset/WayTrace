@@ -107,7 +107,7 @@ _LEGACY_ADHOC_MIGRATIONS: set[int] = {1, 2}
 # "duplicate column name" on the next boot and crash-loop the app). Statements
 # here are only forgiven for the "already applied" errors below, never for a
 # genuine failure.
-_IDEMPOTENT_MIGRATIONS: set[int] = {7}
+_IDEMPOTENT_MIGRATIONS: set[int] = {7, 8}
 _ALREADY_APPLIED = ("duplicate column name", "already exists")
 
 _db_path: str | None = None
