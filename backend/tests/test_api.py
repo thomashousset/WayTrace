@@ -22,6 +22,20 @@ async def reset_store():
     """Wipe the in-memory store between tests so per-IP cap doesn't bleed across them."""
     await store._reset_for_tests()
     yield
+    # Cancel stray fire-and-forget run_scan tasks BEFORE the loop closes.
+    # Since the restart-proof queue, run_scan writes to SQLite right away;
+    # an orphaned task mid-write strands a non-daemon aiosqlite thread when
+    # the loop closes, and that hangs interpreter shutdown after the run.
+    import asyncio as _asyncio
+    stray = [
+        t for t in _asyncio.all_tasks()
+        if t is not _asyncio.current_task()
+        and getattr(t.get_coro(), "__qualname__", "").startswith("run_scan")
+    ]
+    for t in stray:
+        t.cancel()
+    if stray:
+        await _asyncio.gather(*stray, return_exceptions=True)
     await store._reset_for_tests()
 
 
@@ -197,11 +211,16 @@ def test_hosted_ceiling_disabled_is_unlimited(monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_two_scans_same_domain_get_distinct_url_ids(client):
-    """v2 no longer dedups same-domain submissions; each call is its own scan."""
+async def test_second_scan_same_domain_attaches_to_live_one(client):
+    """Launch hardening: a domain already in flight is not scanned twice; the
+    second submission attaches to the live scan (force=True bypasses)."""
     r1 = await client.post("/api/scan", json={"domain": "dup.com"})
     r2 = await client.post("/api/scan", json={"domain": "dup.com"})
-    assert r1.json()["url_id"] != r2.json()["url_id"]
+    assert r2.json()["url_id"] == r1.json()["url_id"]
+    assert r2.json()["reused"] is True
+    assert r2.json()["live"] is True
+    r3 = await client.post("/api/scan", json={"domain": "dup.com", "force": True})
+    assert r3.json()["url_id"] != r1.json()["url_id"]
 
 
 @pytest.mark.anyio

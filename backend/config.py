@@ -3,12 +3,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Single source of truth for the tool version, surfaced in the API (/api/health,
 # OpenAPI) and injected into the frontend footer.
-APP_VERSION = "1.6.0"
+APP_VERSION = "1.7.0"
 
 # Shared User-Agent for every archive.org request (CDX collector, page scraper,
 # favicon fetcher). One polite identity so the Internet Archive can attribute
 # and contact us.
-USER_AGENT = f"WayTrace/{APP_VERSION} (OSINT research tool; +https://github.com/HXLLO/WayTrace)"
+USER_AGENT = f"WayTrace/{APP_VERSION} (OSINT research tool; +https://github.com/thomashousset/WayTrace)"
 
 
 class Settings(BaseSettings):
@@ -53,13 +53,17 @@ class Settings(BaseSettings):
     job_ttl_seconds: int = 7200
     max_active_jobs: int = 10
 
-    # v2 public-mode queue caps. Scans are I/O-bound on archive.org; keep only
-    # 2 running at once so the aggregate archive.org load stays low (politeness,
+    # v2 public-mode queue caps. Scans are I/O-bound on archive.org; keep few
+    # running at once so the aggregate archive.org load stays low (politeness,
     # not a memory limit) and extra scans queue rather than pile on. The global
-    # rate limiter above is the real ceiling regardless of this.
+    # rate limiter above is the real ceiling regardless of this, which is why
+    # the WAITING queue can be deep (waiting jobs send archive.org nothing):
+    # launch-day traffic queues up instead of getting "service full" errors.
+    # The per-IP cap is only an abuse net; per-account fairness comes from
+    # max_active_per_user (server build) and the fair scheduler.
     max_active_total: int = 1
-    max_queue_total: int = 15
-    max_active_per_ip: int = 1
+    max_queue_total: int = 100
+    max_active_per_ip: int = 2
     # Hard ceiling on snapshots scanned per scan on the HOSTED service, to keep
     # archive.org load bounded and scans fast. The selection stays representative
     # (year-proportional). Set to 0 to disable the ceiling entirely — that's the

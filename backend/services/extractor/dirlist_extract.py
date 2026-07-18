@@ -1,4 +1,4 @@
-"""Directory listing detection in archived HTML pages (passive)."""
+"""Directory listing detection in archived HTML pages."""
 from __future__ import annotations
 
 import re

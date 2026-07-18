@@ -187,6 +187,12 @@ class ScanCreateResponse(BaseModel):
     # True when an existing recent scan for this domain was returned instead of
     # launching a new one (the guardrail against re-scanning the same domain).
     reused: bool = False
+    # True when `reused` points at a scan still queued/running: the caller is
+    # attached to it and watches the same live progress.
+    live: bool = False
+    # How long scans are kept; lets the UI explain why a reused scan opens
+    # instantly instead of re-scanning.
+    retention_days: int | None = None
 
 
 class JobStatus(BaseModel):

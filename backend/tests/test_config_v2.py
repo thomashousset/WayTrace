@@ -9,12 +9,14 @@ def test_max_active_total_default():
 
 
 def test_max_queue_total_default():
-    assert settings.max_queue_total == 15
+    # Launch hardening: deep waiting queue (waiting jobs cost archive.org
+    # nothing; the rate governor is the real ceiling).
+    assert settings.max_queue_total == 100
 
 
 def test_max_active_per_ip_default():
-    # v1.5: one in-flight scan per client - a user can't stack a second.
-    assert settings.max_active_per_ip == 1
+    # Abuse net only (CGNAT-safe); per-account fairness is max_active_per_user.
+    assert settings.max_active_per_ip == 2
 
 
 def test_scan_retention_days_default():

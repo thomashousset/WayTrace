@@ -15,7 +15,7 @@ training sites. extracted as plain regex matches, no cryptographic
 checksum.
 
 The module deliberately avoids hitting any external API: WayTrace is a
-strictly passive OSINT tool.
+strictly archive-only OSINT tool.
 """
 from __future__ import annotations
 

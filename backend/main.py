@@ -38,6 +38,16 @@ async def lifespan(app: FastAPI):
     health.set_start_time()
     await init_db(settings.database_url)
 
+    # Maintenance banner state survives restarts (app_state KV).
+    from services import maintenance
+    await maintenance.load_from_db()
+
+    # Restart-proof queue: re-enqueue jobs that were queued/running when the
+    # previous process died (same job_id/url_id, so links keep working).
+    restored = await store.restore_pending_jobs()
+    if restored:
+        logger.info("Restored {} queued/running scan(s) from before the restart", restored)
+
     worker = asyncio.create_task(queue_worker_loop(store, scan.run_scan))
     cleaner = asyncio.create_task(cleanup_loop())
     try:
@@ -185,19 +195,26 @@ async def serve_robots():
     return PlainTextResponse("User-agent: *\nAllow: /\n")
 
 
+# Entry assets must revalidate on every load (no-cache still allows the
+# conditional-GET 304 path via ETag/Last-Modified). Without this, browsers
+# apply heuristic freshness and keep serving a stale styles.css/app.js for
+# days after a deploy.
+_REVALIDATE = {"Cache-Control": "no-cache"}
+
+
 @app.get("/styles.css", include_in_schema=False)
 async def serve_styles():
-    return FileResponse(FRONTEND_DIR / "styles.css", media_type="text/css")
+    return FileResponse(FRONTEND_DIR / "styles.css", media_type="text/css", headers=_REVALIDATE)
 
 
 @app.get("/app.js", include_in_schema=False)
 async def serve_app_js():
-    return FileResponse(FRONTEND_DIR / "app.js", media_type="text/javascript")
+    return FileResponse(FRONTEND_DIR / "app.js", media_type="text/javascript", headers=_REVALIDATE)
 
 
 @app.get("/")
 async def serve_frontend():
-    return FileResponse(FRONTEND_DIR / "index.html")
+    return FileResponse(FRONTEND_DIR / "index.html", headers=_REVALIDATE)
 
 
 # Direct share URLs like https://waytrace.org/s/abc123 (no hash fragment)
@@ -206,4 +223,4 @@ async def serve_frontend():
 # links return 404 and the scan is unreachable.
 @app.get("/s/{url_id}", include_in_schema=False)
 async def serve_scan_view(url_id: str):
-    return FileResponse(FRONTEND_DIR / "index.html")
+    return FileResponse(FRONTEND_DIR / "index.html", headers=_REVALIDATE)

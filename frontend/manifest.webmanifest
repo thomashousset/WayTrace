@@ -1,7 +1,7 @@
 {
   "name": "WayTrace",
   "short_name": "WayTrace",
-  "description": "Passive OSINT tool. Reconstruct a domain's public history from the Wayback Machine.",
+  "description": "OSINT recon tool. Reconstruct a domain's public history from the Wayback Machine.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#1C1B18",

@@ -4,12 +4,12 @@
 
 > **Internet n'oublie jamais.**
 
-Reconnaissance OSINT passive qui reconstruit l'historique numérique complet d'un domaine à partir de la Wayback Machine (archive.org). Saisissez un domaine. WayTrace récupère le HTML archivé sur des décennies, sélectionne les snapshots les plus révélateurs, et extrait **43 catégories** de renseignement. Chaque résultat porte des horodatages `first_seen` / `last_seen`, pour une chronologie complète de ce qui est apparu, a changé, puis disparu. Vous pouvez même faire une recherche plein-texte dans le contenu des pages archivées.
+Reconnaissance OSINT qui reconstruit l'historique numérique complet d'un domaine à partir de la Wayback Machine (archive.org). Saisissez un domaine. WayTrace récupère le HTML archivé sur des décennies, sélectionne les snapshots les plus révélateurs, et extrait **43 catégories** de renseignement. Chaque résultat porte des horodatages `first_seen` / `last_seen`, pour une chronologie complète de ce qui est apparu, a changé, puis disparu. Vous pouvez même faire une recherche plein-texte dans le contenu des pages archivées.
 
 **Aucun scan actif. Aucun brute-force. Aucun trafic vers la cible. Uniquement des données publiques d'archive.org.**
 
 [![En ligne sur waytrace.org](https://img.shields.io/badge/en%20ligne-waytrace.org-6f5bd6)](https://waytrace.org)
-[![tests](https://github.com/HXLLO/WayTrace/actions/workflows/ci.yml/badge.svg)](https://github.com/HXLLO/WayTrace/actions/workflows/ci.yml)
+[![tests](https://github.com/thomashousset/WayTrace/actions/workflows/ci.yml/badge.svg)](https://github.com/thomashousset/WayTrace/actions/workflows/ci.yml)
 ![Licence MIT](https://img.shields.io/badge/licence-MIT-blue)
 ![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-green)
@@ -223,7 +223,7 @@ Un scan terminé est adressé par un `url_id` de 24 caractères (un jeton de cap
 ### Docker (recommandé)
 
 ```bash
-git clone https://github.com/HXLLO/WayTrace.git
+git clone https://github.com/thomashousset/WayTrace.git
 cd WayTrace
 cp .env.example .env
 docker compose up -d

@@ -39,7 +39,7 @@ from services.filters import (
 )
 from services.ip_utils import get_client_ip
 from services.scraper import scrape_snapshots
-from store import store, PerIpLimitError, QueueFullError
+from store import store, PerIpLimitError, PerUserLimitError, QueueFullError
 
 router = APIRouter(prefix="/api", tags=["scan"])
 
@@ -101,12 +101,27 @@ async def run_scan(
     job = await store.get_job(job_id)
     if job is None:
         return
+    # The user may have cancelled/deleted this scan in the window between the
+    # queue worker promoting it and this task starting. Honour that: don't flip
+    # cancelled -> running (which would run the scan anyway and, worse, let
+    # _persist_and_finish re-insert the row delete_scan just hard-deleted).
+    if job.get("status") == "cancelled":
+        logger.info("Job {} was cancelled before start; skipping", job_id)
+        await store.finish_job(job_id)
+        return
     if config is None:
         config = job.get("config")
     if selected_snapshots is None:
         selected_snapshots = job.get("selected_snapshots")
 
     await store.update_job(job_id, status="running", step="Starting scan...")
+    # Mirror the transition to the persisted row (restart-proof queue): a
+    # restart re-enqueues 'running' rows from zero. Best-effort only.
+    try:
+        from db import update_job_queue_status
+        await update_job_queue_status(job["url_id"], "running")
+    except Exception:
+        pass
     logger.info("Scan started for job {}", job_id)
 
     domain = job["domain"]
@@ -143,7 +158,14 @@ async def _persist_and_finish(job_id: str, start: float) -> None:
     if live.get("status") == "cancelled":
         # The user deleted this scan while it was still running. Persisting it
         # now would re-insert the row that delete_scan just hard-deleted (and
-        # revive it with a fresh expiry). Free the slot and stop.
+        # revive it with a fresh expiry). Also drop the queued row written at
+        # submission time (restart-proof queue), so a cancelled scan can never
+        # be resurrected by the startup restore. Free the slot and stop.
+        try:
+            from db import delete_job as _delete_job
+            await _delete_job(live["url_id"])
+        except Exception:
+            logger.exception("Could not drop cancelled job row {}", job_id)
         await store.finish_job(job_id, duration_seconds=time.time() - start)
         return
     now = datetime.now(timezone.utc)
@@ -565,14 +587,29 @@ def _apply_hosted_ceiling(
 
 @router.post("/scan", response_model=ScanCreateResponse)
 async def create_scan(body: JobCreate, request: Request):
-    # Guardrail: if we already have a recent completed scan for this domain, return
-    # it instead of re-scanning (which would re-hammer archive.org for a domain we
-    # already have). "Scan more" sets force=True to run a fresh, denser scan.
-    _reuse_uid = None
+    # Guardrail: if this domain is already being scanned RIGHT NOW, attach the
+    # caller to that live scan instead of doubling the archive.org load (the
+    # launch-day case: many people submitting the same domain at once).
+    if not body.force and not body.selected_snapshots:
+        live_same = await store.find_live_job_for_domain(body.domain)
+        if live_same is not None:
+            return ScanCreateResponse(
+                job_id="", url_id=live_same["url_id"],
+                url=f"/s/{live_same['url_id']}", status=live_same["status"],
+                position=store.get_position(live_same["id"]) or 0,
+                eta_seconds=store.get_eta_seconds(live_same["id"]),
+                reused=True, live=True,
+                retention_days=settings.scan_retention_days,
+            )
+
+    # Guardrail: if we already have a recent completed scan for this domain
+    # (any account: the same public-archive data either way), return it instead
+    # of re-scanning (which would re-hammer archive.org for a domain we already
+    # have). "Scan more" sets force=True to run a fresh, denser scan.
     if not body.force and not body.selected_snapshots:
         from db import find_recent_scan_for_domain
         try:
-            existing = await find_recent_scan_for_domain(body.domain, user_id=_reuse_uid)
+            existing = await find_recent_scan_for_domain(body.domain)
         except Exception as exc:   # never let a lookup failure block a scan
             logger.debug("reuse lookup skipped: {}", exc)
             existing = None
@@ -581,6 +618,7 @@ async def create_scan(body: JobCreate, request: Request):
                 job_id="", url_id=existing["url_id"],
                 url=f"/s/{existing['url_id']}", status="completed",
                 position=0, eta_seconds=0, reused=True,
+                retention_days=settings.scan_retention_days,
             )
 
     # archive.org circuit breaker open: refuse fast, queue nothing, send no

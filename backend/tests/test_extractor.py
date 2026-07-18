@@ -236,8 +236,8 @@ class TestSocialPatterns:
         assert m and m.group(1) == "channelname"
 
     def test_github(self):
-        m = SOCIAL_PATTERNS["github"].search("https://github.com/HXLLO")
-        assert m and m.group(1) == "HXLLO"
+        m = SOCIAL_PATTERNS["github"].search("https://github.com/thomashousset")
+        assert m and m.group(1) == "thomashousset"
 
 
 # ---------------------------------------------------------------------------

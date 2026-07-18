@@ -79,6 +79,20 @@ MIGRATIONS: list[tuple[int, str]] = [
         DROP TABLE IF EXISTS crawl_state;
         DROP TABLE IF EXISTS domains;
     """),
+    # v7 restart-proof queue: queued/running jobs persist their submission
+    # payload so a container restart re-enqueues them instead of losing them.
+    # app_state is a tiny KV store (maintenance flag etc.).
+    (7, """
+        ALTER TABLE jobs ADD COLUMN job_id TEXT;
+        ALTER TABLE jobs ADD COLUMN config_json TEXT;
+        ALTER TABLE jobs ADD COLUMN selected_snapshots_json TEXT;
+        ALTER TABLE jobs ADD COLUMN publish_on_complete INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE jobs ADD COLUMN notify_email TEXT;
+        CREATE TABLE IF NOT EXISTS app_state (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        );
+    """),
 ]
 
 # Migrations whose OperationalError is expected and safe to swallow. v1/v2 ALTER
@@ -86,6 +100,15 @@ MIGRATIONS: list[tuple[int, str]] = [
 # fresh database they raise "no such table" and are simply skipped; v6 then drops
 # the tables from any pre-existing database.
 _LEGACY_ADHOC_MIGRATIONS: set[int] = {1, 2}
+
+# Migrations that must be idempotent: run each statement on its own and tolerate
+# a re-application (SQLite has no ALTER TABLE ADD COLUMN IF NOT EXISTS, so a
+# crash between two of v7's ALTERs and the version bump would otherwise raise
+# "duplicate column name" on the next boot and crash-loop the app). Statements
+# here are only forgiven for the "already applied" errors below, never for a
+# genuine failure.
+_IDEMPOTENT_MIGRATIONS: set[int] = {7}
+_ALREADY_APPLIED = ("duplicate column name", "already exists")
 
 _db_path: str | None = None
 
@@ -100,10 +123,31 @@ async def _set_user_version(db: aiosqlite.Connection, version: int) -> None:
     await db.execute(f"PRAGMA user_version = {int(version)}")
 
 
+async def _apply_idempotent_migration(db: aiosqlite.Connection, version: int, sql: str) -> None:
+    """Run a migration statement-by-statement, skipping any statement that has
+    already been applied (see _ALREADY_APPLIED). Lets a half-applied migration
+    from a crashed deploy finish cleanly on the next boot instead of crashing."""
+    for stmt in (s.strip() for s in sql.split(";")):
+        if not stmt:
+            continue
+        try:
+            await db.execute(stmt)
+        except aiosqlite.OperationalError as exc:
+            if any(marker in str(exc).lower() for marker in _ALREADY_APPLIED):
+                logger.debug("Migration v{} statement already applied: {}", version, exc)
+            else:
+                raise
+    logger.info("Applied schema migration v{} (idempotent)", version)
+
+
 async def _apply_migrations(db: aiosqlite.Connection) -> None:
     current = await _get_user_version(db)
     for version, sql in MIGRATIONS:
         if version <= current:
+            continue
+        if version in _IDEMPOTENT_MIGRATIONS:
+            await _apply_idempotent_migration(db, version, sql)
+            await _set_user_version(db, version)
             continue
         try:
             await db.executescript(sql)
@@ -124,7 +168,7 @@ async def init_db(db_path: str) -> None:
     """Create all tables if they don't exist, then apply pending migrations."""
     global _db_path
     _db_path = db_path
-    async with aiosqlite.connect(db_path) as db:
+    async with _connect(db_path) as db:
         await db.executescript(SCHEMA_SQL)
         await db.execute("PRAGMA journal_mode=WAL")
         await db.execute("PRAGMA foreign_keys=ON")
@@ -133,12 +177,34 @@ async def init_db(db_path: str) -> None:
     logger.info("Database initialized at {}", db_path)
 
 
+def _connect(path: str) -> aiosqlite.Connection:
+    """aiosqlite.connect with a DAEMON worker thread.
+
+    Each aiosqlite connection runs a non-daemon thread blocked on a queue. If
+    the owning coroutine is abandoned mid-close (event loop shutting down, task
+    cancelled during cleanup), that thread waits forever and blocks interpreter
+    exit - a hung `docker stop` in prod, a hung pytest run in dev. Daemonizing
+    is safe: WAL-mode SQLite is crash-consistent, so a write cut at hard exit
+    is no worse than a SIGKILL.
+
+    The daemon flag is a best-effort optimisation reached through aiosqlite's
+    private `_thread` attribute; if a future aiosqlite version renames or drops
+    it, we degrade to the (non-daemon) default rather than break every DB call.
+    """
+    conn = aiosqlite.connect(path)
+    try:
+        conn._thread.daemon = True   # before the first await starts the thread
+    except AttributeError:
+        logger.debug("aiosqlite worker thread not daemonizable on this version")
+    return conn
+
+
 async def get_db(db_path: str | None = None) -> aiosqlite.Connection:
     """Get a new database connection. Caller must close it."""
     path = db_path or _db_path
     if path is None:
         raise RuntimeError("Database not initialized ; call init_db first")
-    db = await aiosqlite.connect(path)
+    db = await _connect(path)
     db.row_factory = aiosqlite.Row
     await db.execute("PRAGMA foreign_keys=ON")
     # Wait for a lock instead of failing instantly: with several scans persisting
@@ -232,6 +298,106 @@ async def save_job(
             ),
         )
         await db.commit()
+    finally:
+        await db.close()
+
+
+async def get_app_state(key: str) -> str | None:
+    """Read a value from the tiny app_state KV table (maintenance flag etc.)."""
+    db = await get_db()
+    try:
+        cur = await db.execute("SELECT value FROM app_state WHERE key = ?", (key,))
+        row = await cur.fetchone()
+        return row["value"] if row else None
+    finally:
+        await db.close()
+
+
+async def set_app_state(key: str, value: str) -> None:
+    db = await get_db()
+    try:
+        await db.execute(
+            "INSERT INTO app_state (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (key, value),
+        )
+        await db.commit()
+    finally:
+        await db.close()
+
+
+async def save_queued_job(
+    *,
+    url_id: str,
+    job_id: str,
+    domain: str,
+    client_ip: str | None,
+    created_at: datetime,
+    expires_at: datetime,
+    user_id: int | None,
+    config_json: str | None,
+    selected_snapshots_json: str | None,
+    publish_on_complete: bool,
+    notify_email: str | None,
+) -> None:
+    """Persist a job at submission time (status 'queued') with its full
+    payload, so a restart can rebuild the in-memory queue. The final
+    save_job upsert overwrites status/meta/results when the scan ends."""
+    db = await get_db()
+    try:
+        await db.execute(
+            """INSERT INTO jobs
+                 (url_id, job_id, domain, client_ip, status, created_at, expires_at,
+                  is_published, meta, results, user_id, config_json,
+                  selected_snapshots_json, publish_on_complete, notify_email)
+               VALUES (?, ?, ?, ?, 'queued', ?, ?, 0, NULL, NULL, ?, ?, ?, ?, ?)
+               ON CONFLICT(url_id) DO UPDATE SET
+                 job_id = excluded.job_id,
+                 status = 'queued',
+                 config_json = excluded.config_json,
+                 selected_snapshots_json = excluded.selected_snapshots_json,
+                 publish_on_complete = excluded.publish_on_complete,
+                 notify_email = excluded.notify_email
+               """,
+            (
+                url_id, job_id, domain, client_ip,
+                _iso(created_at), _iso(expires_at), user_id,
+                config_json, selected_snapshots_json,
+                1 if publish_on_complete else 0, notify_email,
+            ),
+        )
+        await db.commit()
+    finally:
+        await db.close()
+
+
+async def update_job_queue_status(url_id: str, status: str) -> None:
+    """Best-effort status mirror (queued -> running) for the restart restore."""
+    db = await get_db()
+    try:
+        await db.execute("UPDATE jobs SET status = ? WHERE url_id = ?", (status, url_id))
+        await db.commit()
+    finally:
+        await db.close()
+
+
+async def load_resumable_jobs() -> list[dict]:
+    """Queued/running jobs from before a restart, oldest first."""
+    db = await get_db()
+    try:
+        now = _iso(datetime.now(timezone.utc))
+        cur = await db.execute(
+            """SELECT url_id, job_id, domain, client_ip, created_at, user_id,
+                      config_json, selected_snapshots_json, publish_on_complete,
+                      notify_email
+                 FROM jobs
+                WHERE status IN ('queued', 'running')
+                  AND job_id IS NOT NULL
+                  AND expires_at > ?
+                ORDER BY created_at ASC""",
+            (now,),
+        )
+        return [dict(r) for r in await cur.fetchall()]
     finally:
         await db.close()
 
@@ -379,9 +545,10 @@ async def find_recent_scan_for_domain(domain: str, user_id=None) -> dict | None:
     """The most recent COMPLETED, non-expired scan for this domain, or None.
 
     Guardrail against re-scanning a domain we already have (which re-hammers
-    archive.org). On the hosted build a user_id is passed so we only reuse the
-    caller's own scan; on the solo/self-hosted build user_id is None and any
-    recent scan of the domain qualifies."""
+    archive.org). Reuse works ACROSS accounts: a scan of the same domain
+    yields the same public-archive data whoever ran it, and the UI explains
+    the retention window. Pass user_id to restrict to one account's scans
+    (no current caller does; kept for flexibility)."""
     if not domain:
         return None
     db = await get_db()

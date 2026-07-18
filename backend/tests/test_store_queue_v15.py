@@ -1,4 +1,6 @@
-"""v1.5 queue policy: one scan at a time, one in-flight scan per client, queue 15."""
+"""Queue policy (launch hardening): one scan runs at a time, two in-flight
+scans per IP (abuse net; per-account fairness is max_active_per_user), and a
+deep waiting queue of 100 (waiting jobs send archive.org nothing)."""
 import pytest
 
 from store import JobStore, PerIpLimitError, QueueFullError
@@ -16,19 +18,20 @@ async def test_one_scan_active_rest_wait():
 
 
 @pytest.mark.asyncio
-async def test_one_inflight_scan_per_client():
+async def test_two_inflight_scans_per_client_max():
     store = JobStore()
     await store.create_job("a.com", client_ip="1.1.1.1")
+    await store.create_job("b.com", client_ip="1.1.1.1")
     with pytest.raises(PerIpLimitError):
-        await store.create_job("b.com", client_ip="1.1.1.1")  # same IP, already in flight
+        await store.create_job("c.com", client_ip="1.1.1.1")  # 3rd from same IP
 
 
 @pytest.mark.asyncio
-async def test_queue_hard_cap_at_15():
+async def test_queue_hard_cap_at_100():
     store = JobStore()
-    # 15 distinct clients fill 1 active + 14 waiting = 15 in flight (the cap).
-    for i in range(15):
-        await store.create_job(f"d{i}.com", client_ip=f"10.0.0.{i}")
-    assert len(store.active) + len(store.waiting) == 15
+    # 100 distinct clients fill 1 active + 99 waiting = 100 in flight (the cap).
+    for i in range(100):
+        await store.create_job(f"d{i}.com", client_ip=f"10.0.{i // 250}.{i % 250}")
+    assert len(store.active) + len(store.waiting) == 100
     with pytest.raises(QueueFullError):
-        await store.create_job("overflow.com", client_ip="10.0.0.200")
+        await store.create_job("overflow.com", client_ip="10.9.9.200")

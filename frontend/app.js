@@ -83,18 +83,57 @@ function _reportClientError(detail) {
 window.addEventListener('error', (e) => _reportClientError(e.error || e.message));
 window.addEventListener('unhandledrejection', (e) => _reportClientError(e.reason));
 
-// Poll archive.org health and surface a banner when it is slow or paused, so
-// users understand why a scan is delayed instead of seeing a silent failure.
-async function checkArchiveStatus() {
+// Poll the unified service status and surface a single banner with priority:
+// maintenance > archive paused > high traffic > archive slow. A run of genuine
+// NETWORK failures (the API unreachable, fetch throws) flips to a maintenance
+// notice; a mere non-200 (429/502/503 blip under launch load) does NOT, so a
+// busy moment never masquerades as an outage.
+let _statusNetFailStreak = 0;
+async function checkServiceStatus() {
   const el = $('archive-banner');
   if (!el) return;
+  let r;
   try {
-    const d = await (await fetch(API + '/api/archive-status')).json();
-    if (!d || d.state === 'ok') { el.hidden = true; return; }
-    el.className = 'archive-banner ' + (d.state === 'paused' ? 'paused' : 'slow');
-    el.textContent = _archiveStatusMessage(d);
-    el.hidden = false;
-  } catch (_) { el.hidden = true; }
+    r = await fetch(API + '/api/service-status');
+  } catch (_) {
+    // True network error: the server is unreachable, not just busy.
+    _statusNetFailStreak += 1;
+    if (_statusNetFailStreak >= 3) {
+      _showStatusBanner('maintenance', t('Maintenance in progress. WayTrace will be back shortly.'));
+    }
+    return;
+  }
+  _statusNetFailStreak = 0;
+  if (!r.ok) {
+    // Transient HTTP error (rate limit / proxy hiccup): leave the current
+    // banner as-is rather than declaring an outage.
+    return;
+  }
+  let d;
+  try { d = await r.json(); } catch (_) { return; }
+  const svc = (d && d.service) || {};
+  const arc = (d && d.archive) || {};
+  if (svc.state === 'maintenance') {
+    _showStatusBanner('maintenance', svc.maintenance_message ||
+      t('Maintenance in progress. Scanning may be unavailable for a short while.'));
+  } else if (arc.state === 'paused') {
+    _showStatusBanner('paused', _archiveStatusMessage(arc));
+  } else if (svc.state === 'busy') {
+    _showStatusBanner('busy',
+      t('WayTrace is a victim of its own success right now. New scans are queued and start as soon as a slot frees up.'));
+  } else if (arc.state === 'slow') {
+    _showStatusBanner('slow', _archiveStatusMessage(arc));
+  } else {
+    el.hidden = true;
+  }
+}
+
+function _showStatusBanner(kind, msg) {
+  const el = $('archive-banner');
+  if (!el) return;
+  el.className = 'archive-banner ' + kind;
+  el.textContent = msg;
+  el.hidden = false;
 }
 
 // Localise the archive.org banner client-side (the backend message is English
@@ -169,7 +208,7 @@ const I18N = {
     'home.cap.timeline': 'Chronologie',
     'home.cap.timeline.d': 'Quand chaque élément est apparu, et quand il a disparu.',
     'home.caption': 'Données publiques uniquement &middot; <a href="#/legal">Mentions légales</a>',
-    'home.version': 'WayTrace v1.6.0 &middot; hébergé &middot; <a href="https://github.com/HXLLO/WayTrace" target="_blank" rel="noopener">source</a>',
+    'home.version': 'WayTrace v1.6.0 &middot; hébergé &middot; <a href="https://github.com/thomashousset/WayTrace" target="_blank" rel="noopener">source</a>',
     'home.archivedby': 'Archives par',
     'Pages read from': 'Pages lues depuis',
     'Querying archive.org': 'Interrogation archive.org',
@@ -234,7 +273,6 @@ const I18N = {
     'Check your connection and try again.': 'Vérifiez votre connexion et réessayez.',
     'Retry': 'Réessayer',
     'Scan complete': 'Scan terminé',
-    'This domain was already scanned recently. Showing that scan.': 'Ce domaine a déjà été scanné récemment, affichage de ce scan.',
     'Filter extracted results': 'Filtrer les résultats extraits',
     'Search the archived pages': 'Chercher dans les pages archivées',
     'Copied': 'Copié',
@@ -249,7 +287,7 @@ const I18N = {
     // Legal page
     'legal.title': 'Mentions légales, licence et usage acceptable',
     'legal.updated': 'Dernière mise à jour 2026-06 · WayTrace',
-    'legal.note': "WayTrace est un outil OSINT <strong>passif</strong>. Il lit uniquement ce que l'Internet Archive (Wayback Machine) a <strong>déjà</strong> archivé publiquement. Il n'effectue <strong>aucun scan actif, sondage ou connexion</strong> sur un site cible, n'envoie aucun trafic vers la cible, et n'ajoute rien qui n'était pas déjà public. Cette page est fournie à titre de transparence et ne constitue pas un avis juridique.",
+    'legal.note': "WayTrace est un outil de reconnaissance OSINT. Il lit uniquement ce que l'Internet Archive (Wayback Machine) a <strong>déjà</strong> archivé publiquement. Il n'effectue <strong>aucun scan actif, sondage ou connexion</strong> sur un site cible, n'envoie aucun trafic vers la cible, et n'ajoute rien qui n'était pas déjà public. Cette page est fournie à titre de transparence et ne constitue pas un avis juridique.",
     'legal.h1': '1. Ce que fait WayTrace',
     'legal.p1': "WayTrace reconstruit l'histoire publique d'un domaine à partir des snapshots stockés par <a href=\"https://web.archive.org\" target=\"_blank\" rel=\"noopener\">archive.org</a>. Il récupère un échantillon représentatif de ces pages archivées et en extrait des signaux (technologies, endpoints, liens, identifiants, etc.) avec les dates où ils ont été vus. Toutes les données source étaient déjà publiques et archivées par un tiers avant tout scan. WayTrace est indépendant et non affilié à l'Internet Archive.",
     'legal.h2': '2. Usage autorisé',
@@ -351,6 +389,17 @@ const I18N = {
     'Archive.org is refusing connections from this server (it looks IP-blocked). Scanning is paused for about {n} min to let it recover.': "Archive.org refuse les connexions depuis ce serveur (IP vraisemblablement bloquée). Les scans sont en pause pendant environ {n} min, le temps que ça se rétablisse.",
     'Scanning is paused for about {s}s: archive.org is rate-limiting us. Please retry in a moment.': "Scans en pause pendant environ {s}s : archive.org nous limite. Réessayez dans un instant.",
     'Archive.org is slow right now; scans may take longer than usual.': "Archive.org est lent en ce moment ; les scans peuvent prendre plus de temps que d'habitude.",
+    'Maintenance in progress. Scanning may be unavailable for a short while.': 'Maintenance en cours. Le scan peut être indisponible quelques instants.',
+    'Maintenance in progress. WayTrace will be back shortly.': 'Maintenance en cours. WayTrace revient très vite.',
+    'WayTrace is a victim of its own success right now. New scans are queued and start as soon as a slot frees up.': "WayTrace est victime de son succès en ce moment. Les nouveaux scans sont mis en file et démarrent dès qu'une place se libère.",
+    'This domain is being scanned right now. Attaching you to the live scan.': 'Ce domaine est déjà en cours de scan. Vous rejoignez le scan en direct.',
+    'Already scanned recently. Scans are kept {n} days, so the results open instantly. Use Scan more for a fresh scan.': "Déjà scanné récemment. Les scans sont conservés {n} jours, les résultats s'ouvrent donc instantanément. Utilisez Scan more pour un scan frais.",
+    'You already have a scan in flight. Find it in My scans.': 'Vous avez déjà un scan en cours. Retrouvez-le dans Mes scans.',
+    'Running': 'En cours',
+    'In queue': "En file d'attente",
+    'position {n}': 'position {n}',
+    'starts in about {eta}': 'démarre dans environ {eta}',
+    'Cancel scan': 'Annuler le scan',
     'Search': 'Rechercher',
     'Search a word in the archived page content…': 'Rechercher un mot dans le contenu des pages archivées…',
     'Searching…': 'Recherche…',
@@ -1289,7 +1338,7 @@ async function loadHomeFeed() {
   const emptyEl = $('home-feed-empty');
   if (!listEl) return;
   try {
-    const resp = await fetch(API + '/api/feed?limit=20');
+    const resp = await fetch(API + '/api/feed?limit=6');
     if (!resp.ok) {
       _feedError(listEl, emptyEl);
       return;
@@ -1368,8 +1417,8 @@ window.addEventListener('DOMContentLoaded', () => {
   }
   initLang();
   navigate(location.hash || '#/');
-  checkArchiveStatus();
-  setInterval(checkArchiveStatus, 60000);
+  checkServiceStatus();
+  setInterval(checkServiceStatus, 60000);
   // Event delegation for the findings table. one listener handles row
   // open + row copy-button, survives every re-render without inline
   // handlers so untrusted finding values never reach an HTML attribute
@@ -2063,7 +2112,7 @@ function updateScopeEstimate() {
   if (note) {
     note.hidden = false;
     note.classList.toggle('is-capped', capped);
-    const repo = '<a href="https://github.com/HXLLO/WayTrace" target="_blank" rel="noopener">github.com/HXLLO/WayTrace</a>';
+    const repo = '<a href="https://github.com/thomashousset/WayTrace" target="_blank" rel="noopener">github.com/thomashousset/WayTrace</a>';
     if (capped) {
       note.innerHTML = LANG === 'fr'
         ? `Ce domaine compte <strong>${available.toLocaleString()}</strong> snapshots, plus que les <strong>${SCOPE_CAP.toLocaleString()}</strong> que le service hébergé analyse par scan. WayTrace va donc échantillonner proportionnellement sur toutes les années. Pour un scan complet sans échantillonnage, <strong>resserrez la plage de dates</strong> ci-dessus (calendrier) ou <strong>baissez la densité</strong> pour tomber sous ${SCOPE_CAP.toLocaleString()} ; pour analyser tout le domaine en pleine profondeur, lancez WayTrace en local : ${repo}.`
@@ -2107,6 +2156,11 @@ async function launchScopedScan() {
     });
     if (resp.status === 429) {
       const d = await resp.json().catch(() => ({}));
+      if (d.detail?.error === 'per_user_limit') {
+        showToast(t('You already have a scan in flight. Find it in My scans.'));
+        location.hash = '#/history';
+        return;
+      }
       throw new Error(d.detail?.message || 'You already have scans in flight from this connection.');
     }
     if (resp.status === 503) {
@@ -2118,9 +2172,14 @@ async function launchScopedScan() {
       throw new Error(err.detail || 'Scan failed');
     }
     const data = await resp.json();
-    // Guardrail: the server returned an existing recent scan for this domain
-    // instead of re-scanning it. Tell the user why they landed on results.
-    if (data.reused) showToast(t('This domain was already scanned recently. Showing that scan.'));
+    // Guardrail: the server returned an existing scan for this domain instead
+    // of re-scanning it. Tell the user why they landed on results.
+    if (data.reused && data.live) {
+      showToast(t('This domain is being scanned right now. Attaching you to the live scan.'));
+    } else if (data.reused) {
+      showToast(t('Already scanned recently. Scans are kept {n} days, so the results open instantly. Use Scan more for a fresh scan.')
+        .replace('{n}', data.retention_days || 14));
+    }
     location.hash = '#/s/' + encodeURIComponent(data.url_id);
   } catch (e) {
     showError('error-scope', e.message);

@@ -1,6 +1,6 @@
 """Extractor for favicon and brand-icon URLs from HTML.
 
-Sources captured (passive. we never fetch the assets themselves):
+Sources captured (we never fetch the assets themselves):
   - <link rel="icon|shortcut icon|alternate icon|apple-touch-icon|
                 apple-touch-icon-precomposed|mask-icon|fluid-icon">
   - <link rel="manifest">                  -> type="manifest"

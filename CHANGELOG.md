@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.7.0
+
+- **The scan queue survives a restart.** Queued and running scans are now persisted, so a redeploy or a crash no longer drops them: on restart they are re-queued under the same link, and a scan that was mid-run simply starts over. Finished scans were already saved; this closes the gap for the ones still in flight.
+- **Same domain, one scan.** When a domain is already being scanned, a second request for it joins that run instead of launching a duplicate, so simultaneous interest in one domain doesn't double the load on archive.org. "Scan more" still forces a fresh, denser scan.
+- **A single status line for how the service is doing.** One banner now reports the state from a single endpoint: a high-traffic notice when scans are queuing up, the archive.org health (slow / paused) as before, and a maintenance notice if the service becomes unreachable. A brief hiccup no longer reads as an outage.
+- **Lighter homepage.** The recent-scans feed shows the six most recent published scans instead of twenty.
+- **Reliability.** The schema migration is now idempotent, so a deploy interrupted mid-migration can't wedge the app on its next boot; the SQLite worker shuts down cleanly (no hung `docker stop`); and a scan cancelled at the instant it starts is honoured instead of running to completion anyway.
+
+## v1.6.2
+
+- **Fresh UI after every deploy.** `index.html`, `styles.css` and `app.js` are now served with `Cache-Control: no-cache`: browsers revalidate on each load (cheap 304 when unchanged) instead of heuristically keeping a stale copy for days after a release.
+
+## v1.6.1
+
+- **Quieter notes.** The colored left-border callout style is retired everywhere (legal note, scan-setup intro, error banner, admin alerts): notes are now uniform quiet cards, and the scan-setup intro reads as plain page copy so the setup cards stand out.
+- **Copy.** WayTrace now describes itself as an OSINT recon tool through the Wayback Machine (page title, social metadata, PWA manifest, legal page in both languages).
+
 ## v1.6.0
 
 - **Redesigned report, two views.** The results page is rebuilt around how an investigation actually reads:

@@ -11,9 +11,12 @@ restarts. Running scans at restart time die and need to be re-submitted.
 from __future__ import annotations
 
 import asyncio
+import json
 import uuid
 from collections import deque
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+
+from loguru import logger
 
 from config import settings
 from services.ids import generate_url_id
@@ -25,6 +28,10 @@ class PerIpLimitError(Exception):
 
 class QueueFullError(Exception):
     """Raised when the global active+waiting queue is at its hard cap."""
+
+
+class PerUserLimitError(Exception):
+    """Raised when an account already has its max scans in flight."""
 
 
 class JobStore:
@@ -91,13 +98,109 @@ class JobStore:
             else:
                 self.waiting.append(job_id)
                 position = len(self.waiting)
-            return {
+            res = {
                 "job_id": job_id,
                 "url_id": url_id,
                 "status": "queued",
                 "position": position,
                 "eta_seconds": int(self.avg_scan_seconds * max(position - 1, 0)),
             }
+
+        # Best-effort persistence so a restart re-enqueues this job instead of
+        # losing it. Outside the lock, and never blocks or fails the submission
+        # (tests and the public build may run without an initialized DB).
+        try:
+            from db import save_queued_job
+            await save_queued_job(
+                url_id=url_id, job_id=job_id, domain=domain,
+                client_ip=client_ip, created_at=now,
+                expires_at=now + timedelta(days=settings.scan_retention_days),
+                user_id=user_id,
+                config_json=config.model_dump_json()
+                if config is not None and hasattr(config, "model_dump_json") else None,
+                selected_snapshots_json=json.dumps(selected_snapshots)
+                if selected_snapshots else None,
+                publish_on_complete=bool(publish_on_complete),
+                notify_email=notify_email,
+            )
+        except Exception as exc:
+            logger.debug("queue persistence skipped for {}: {}", job_id, exc)
+        return res
+
+    async def restore_pending_jobs(self) -> int:
+        """Rebuild queued/running jobs persisted before a restart.
+
+        Every restored job re-enters the WAITING queue (a job that was mid-run
+        restarts from zero; its url_id and job_id are preserved so links and
+        pollers keep working). Returns the number restored."""
+        try:
+            from db import load_resumable_jobs
+            rows = await load_resumable_jobs()
+        except Exception as exc:
+            logger.debug("queue restore skipped: {}", exc)
+            return 0
+        restored = 0
+        for row in rows:
+            try:
+                if await self._restore_one(row):
+                    restored += 1
+            except Exception:
+                logger.exception("Could not restore job {}", row.get("url_id"))
+                # Don't leave a phantom 'queued'/'running' row that can never
+                # run (e.g. a config_json the current schema can't parse): mark
+                # it failed so it stops showing as in-flight and isn't retried
+                # on every subsequent restart.
+                url_id = row.get("url_id")
+                if url_id:
+                    try:
+                        from db import update_job_queue_status
+                        await update_job_queue_status(url_id, "failed")
+                    except Exception:
+                        logger.debug("could not mark unrestorable job {} failed", url_id)
+        return restored
+
+    async def _restore_one(self, row: dict) -> bool:
+        config = None
+        if row.get("config_json"):
+            from models import ScanConfig
+            config = ScanConfig.model_validate_json(row["config_json"])
+        selected = (
+            json.loads(row["selected_snapshots_json"])
+            if row.get("selected_snapshots_json") else None
+        )
+        try:
+            created = datetime.strptime(
+                row["created_at"], "%Y-%m-%dT%H:%M:%SZ"
+            ).replace(tzinfo=timezone.utc)
+        except (ValueError, TypeError):
+            created = datetime.now(timezone.utc)
+        job_id = row["job_id"]
+        async with self._lock:
+            if job_id in self._jobs:
+                return False
+            ip = row.get("client_ip") or "0.0.0.0"
+            self._jobs[job_id] = {
+                "id": job_id,
+                "url_id": row["url_id"],
+                "domain": row["domain"],
+                "client_ip": ip,
+                "status": "queued",
+                "progress": 0,
+                "step": "Queued",
+                "created_at": created,
+                "updated_at": datetime.now(timezone.utc),
+                "meta": None,
+                "results": None,
+                "config": config,
+                "selected_snapshots": selected,
+                "publish_on_complete": bool(row.get("publish_on_complete")),
+                "user_id": row.get("user_id"),
+                "notify_email": row.get("notify_email"),
+            }
+            self._url_id_to_job[row["url_id"]] = job_id
+            self.per_ip_count[ip] = self.per_ip_count.get(ip, 0) + 1
+            self.waiting.append(job_id)
+            return True
 
     @staticmethod
     def _owner_key(job: dict | None) -> object:
@@ -139,6 +242,22 @@ class JobStore:
     # ------------------------------------------------------------------
     # Lookups + updates
     # ------------------------------------------------------------------
+
+    async def find_live_job_for_domain(self, domain: str) -> dict | None:
+        """Oldest queued/running job for this domain, or None.
+
+        Launch-day guardrail: when several people submit the same domain at
+        once, later submissions attach to the scan already in flight instead
+        of doubling the archive.org load."""
+        async with self._lock:
+            candidates = [
+                j for j in self._jobs.values()
+                if j.get("domain") == domain
+                and j.get("status") in ("queued", "running")
+            ]
+            if not candidates:
+                return None
+            return min(candidates, key=lambda j: j["created_at"])
 
     async def get_job(self, job_id: str) -> dict | None:
         async with self._lock:
@@ -195,26 +314,40 @@ class JobStore:
             self._jobs.pop(job_id, None)
 
     async def cancel_job(self, job_id: str) -> bool:
-        """User-initiated cancellation. Returns True if cancelled, False otherwise."""
+        """User-initiated cancellation. Returns True if cancelled, False otherwise.
+
+        A job that never started (still WAITING) is fully removed here: it will
+        never reach finish_job, so leaving it in _jobs would leak memory and keep
+        serving a phantom 'cancelled' page after delete_scan hard-deleted the DB
+        row. A job that is ALREADY RUNNING is only flagged cancelled; its running
+        task's finally -> _persist_and_finish -> finish_job does the cleanup and
+        the per-IP release (so the slot is freed exactly once)."""
         async with self._lock:
             job = self._jobs.get(job_id)
             if job is None:
                 return False
             if job["status"] not in ("queued", "running"):
                 return False
+            job["status"] = "cancelled"
+            job["step"] = "Cancelled"
+            if job_id in self.active:
+                # Running (or promoted-but-not-yet-started): let finish_job clean
+                # up so active/per-IP are released exactly once.
+                return True
+            # Waiting and will never start: remove it now, releasing the slot.
             try:
                 self.waiting.remove(job_id)
             except ValueError:
                 pass
-            if job_id in self.active:
-                self.active.remove(job_id)
             ip = job.get("client_ip")
             if ip and self.per_ip_count.get(ip, 0) > 0:
                 self.per_ip_count[ip] -= 1
                 if self.per_ip_count[ip] == 0:
                     self.per_ip_count.pop(ip, None)
-            job["status"] = "cancelled"
-            job["step"] = "Cancelled"
+            url_id = job.get("url_id")
+            if url_id:
+                self._url_id_to_job.pop(url_id, None)
+            self._jobs.pop(job_id, None)
             return True
 
     # ------------------------------------------------------------------

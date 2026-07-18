@@ -794,14 +794,6 @@
       line-height: 1.55; margin-top: 8px; max-width: 760px;
     }
     .results-meta .rm-explain b { color: var(--text-dim); font-weight: 600; }
-    .results-meta .rm-warn {
-      font-family: var(--font); font-size: 13px; line-height: 1.5;
-      margin-top: 10px; max-width: 760px;
-      padding: 9px 12px; border-radius: var(--radius);
-      color: var(--text-dim); background: var(--surface2);
-      border: 1px solid var(--border); border-left: 3px solid var(--warn);
-    }
-    .results-meta .rm-warn b { color: var(--warn); font-weight: 600; }
     .results-actions { display: flex; gap: 6px; flex-shrink: 0; flex-wrap: wrap; align-items: center; }
     /* Expires badge under the v2 action row. Pill-shaped so it reads as a
        status indicator, not a button. Subtle border + dim color keeps it
@@ -963,11 +955,11 @@
     .scope-cap-note.is-capped { border-color: var(--accent-dim); background: var(--accent-glow, rgba(199,84,31,.08)); color: var(--text-bright); }
     .scope-cap-note a { color: var(--accent); }
 
-    /* Guided intro at the top of the scope step */
+    /* Guided intro at the top of the scope step. Plain text (no card chrome)
+       so it reads as page copy and the bordered scope-cards below stand out. */
     .scope-intro {
       font-size: 13px; line-height: 1.6; color: var(--text-dim);
-      border: 1px solid var(--border); border-left: 3px solid var(--accent);
-      border-radius: 10px; background: var(--surface2); padding: 12px 15px; margin: 4px 0 18px;
+      max-width: 72ch; padding: 0 2px; margin: 4px 0 18px;
     }
     .scope-intro b { color: var(--text); }
     .scope-step-badge {
@@ -1299,8 +1291,7 @@
 
     /* ===== ERROR ===== */
     .error-msg {
-      background: var(--red-dim); border: 1px solid rgba(182,59,40,.22);
-      border-left: 4px solid var(--red);
+      background: var(--red-dim); border: 1px solid rgba(182,59,40,.35);
       border-radius: var(--radius); padding: 10px 14px;
       color: var(--red); font-size: 13px; margin-bottom: 16px;
       display: none;
@@ -1828,7 +1819,7 @@
 
     .nav-theme-btn { font-family: var(--mono); letter-spacing: .04em; }
 
-    /* archive.org health banner (slow / paused) */
+    /* service status banner (archive.org health, WayTrace load, maintenance) */
     .archive-banner[hidden] { display: none; }
     .archive-banner {
       padding: 9px 16px; text-align: center; font-size: 13px; font-weight: 500;
@@ -1836,6 +1827,10 @@
     }
     .archive-banner.slow { background: rgba(216,166,87,.16); color: var(--warn); border-bottom-color: rgba(216,166,87,.4); }
     .archive-banner.paused { background: rgba(232,112,96,.18); color: var(--red, var(--accent)); border-bottom-color: var(--red, var(--accent)); }
+    /* WayTrace's own load (deep queue), quieter than an archive.org problem */
+    .archive-banner.busy { background: var(--accent-glow2); color: var(--accent); border-bottom-color: rgba(232,122,72,.35); }
+    /* Admin maintenance flag, or the API not answering at all */
+    .archive-banner.maintenance { background: rgba(232,112,96,.14); color: var(--red, var(--accent)); border-bottom-color: rgba(232,112,96,.35); }
 
     .notfound-page { max-width: 480px; margin: 0 auto; padding: 100px 24px; text-align: center; }
     .notfound-code { font-family: var(--mono); font-size: 64px; font-weight: 700; color: var(--accent); letter-spacing: -.02em; }
@@ -1851,7 +1846,7 @@
     .legal-page li { margin: 3px 0; }
     .legal-page strong { color: var(--text); font-weight: 600; }
     .legal-page a { color: var(--accent); }
-    .legal-note { border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 10px; background: var(--surface2); padding: 14px 16px; margin: 14px 0; font-size: 13px; color: var(--text-dim); }
+    .legal-note { border: 1px solid var(--border); border-radius: 10px; background: var(--surface2); padding: 14px 16px; margin: 14px 0; font-size: 13px; line-height: 1.6; color: var(--text-dim); }
     .legal-back { display: inline-block; margin-top: 32px; }
 
 
@@ -1889,6 +1884,22 @@
     .myscans-pub.on { color: var(--accent); background: var(--accent-glow); }
     .myscans-pub.off { color: var(--text-faint); }
     .myscans-date { font-family: var(--mono); font-size: 12px; color: var(--text-faint); text-align: right; }
+    /* In-flight scans (queued/running): rendered above the archive, ticking */
+    .myscans-live { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+    .myscans-row.live { grid-template-columns: 10px 1fr auto minmax(0, 220px) 28px; background: var(--surface2, var(--surface)); }
+    .myscans-livedot { width: 8px; height: 8px; border-radius: 50%; }
+    .myscans-livedot.running { background: var(--accent); animation: wt-live-pulse 1.4s ease-in-out infinite; }
+    .myscans-livedot.queued { background: var(--warn); animation: wt-live-pulse 2.2s ease-in-out infinite; }
+    .myscans-state { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--text); white-space: nowrap; }
+    .myscans-eta { font-size: 12px; color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
+    @keyframes wt-live-pulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+
+    /* Admin: maintenance banner toggle */
+    .admin-maint-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .admin-maint-state { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; padding: 3px 8px; border-radius: var(--radius); }
+    .admin-maint-state.on { color: var(--red); background: var(--red-dim); }
+    .admin-maint-state.off { color: var(--text-faint); background: var(--surface2, var(--surface)); }
+    .admin-maint-msg { font-size: 12px; color: var(--text-dim); }
 
 
 

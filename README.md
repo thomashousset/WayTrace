@@ -9,7 +9,7 @@ Reconstruct the complete digital history of any domain from the Wayback Machine 
 **No active scanning. No brute-forcing. No traffic to the target. Only public data from archive.org.**
 
 [![Live at waytrace.org](https://img.shields.io/badge/live-waytrace.org-6f5bd6)](https://waytrace.org)
-[![tests](https://github.com/HXLLO/WayTrace/actions/workflows/ci.yml/badge.svg)](https://github.com/HXLLO/WayTrace/actions/workflows/ci.yml)
+[![tests](https://github.com/thomashousset/WayTrace/actions/workflows/ci.yml/badge.svg)](https://github.com/thomashousset/WayTrace/actions/workflows/ci.yml)
 ![MIT License](https://img.shields.io/badge/license-MIT-blue)
 ![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-green)
@@ -223,7 +223,7 @@ A finished scan is addressed by a 24-character `url_id` (a capability token). Sc
 ### Docker (recommended)
 
 ```bash
-git clone https://github.com/HXLLO/WayTrace.git
+git clone https://github.com/thomashousset/WayTrace.git
 cd WayTrace
 cp .env.example .env
 docker compose up -d
