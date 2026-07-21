@@ -136,6 +136,13 @@
     <div class="scope-sub" id="scope-sub">Tune the scan before launching it.</div>
     <div class="scope-loading" id="scope-loading" data-i18n="Querying archive.org for subdomains...">Querying archive.org for subdomains...</div>
 
+    <div class="scope-empty" id="scope-empty" hidden>
+      <svg class="feed-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/><path d="M8 11h6"/></svg>
+      <div class="feed-empty-title" data-i18n="No archived pages for this domain">No archived pages for this domain</div>
+      <div class="feed-empty-sub" data-i18n="The Wayback Machine has no archived HTML pages for this domain, so there is nothing to scan. Check the spelling, try it without a subdomain, or scan a different domain.">The Wayback Machine has no archived HTML pages for this domain, so there is nothing to scan. Check the spelling, try it without a subdomain, or scan a different domain.</div>
+      <button class="btn btn-accent scope-empty-btn" type="button" onclick="location.hash='#/';document.getElementById('domain-input').focus()" data-i18n="New Scan">New Scan</button>
+    </div>
+
     <div class="scope-adv" id="scope-adv" style="display:none">
       <div class="scope-intro">
         WayTrace reads only what the <b>Wayback Machine</b> already archived for this

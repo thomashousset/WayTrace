@@ -721,6 +721,8 @@ const I18N = {
     'Archived pages were analysed but no signals matched any category. Try a wider date range or a denser snapshot selection.': "Des pages archivées ont été analysées mais aucun signal ne correspond à une catégorie. Essayez une plage de dates plus large ou une sélection plus dense.",
     'Could not enumerate subdomains': "Impossible d'énumérer les sous-domaines",
     'No archived pages found for this domain.': "Aucune page archivée trouvée pour ce domaine.",
+    'No archived pages for this domain': "Aucune page archivée pour ce domaine",
+    'The Wayback Machine has no archived HTML pages for this domain, so there is nothing to scan. Check the spelling, try it without a subdomain, or scan a different domain.': "La Wayback Machine n’a aucune page HTML archivée pour ce domaine, il n’y a donc rien à analyser. Vérifiez l’orthographe, essayez sans sous-domaine, ou analysez un autre domaine.",
     // --- Category labels (English value used as key) ---
     'Emails': 'E-mails',
     'API keys': 'Clés API',
@@ -1784,6 +1786,8 @@ async function loadScope(domain) {
   { const c = $('scope-intro-cap'); if (c) c.textContent = SCOPE_CAP.toLocaleString(); }
   { const intro = document.querySelector('.scope-intro'); if (intro) intro.style.display = ''; }
   $('scope-loading').style.display = '';
+  $('scope-loading').textContent = t('Querying archive.org for subdomains...');
+  { const e = $('scope-empty'); if (e) e.hidden = true; }
   $('scope-adv').style.display = 'none';
   renderScopePresets();
   renderScopeChips();
@@ -1806,7 +1810,7 @@ async function loadScope(domain) {
     _scopePathGroups = data.path_groups || [];
 
     if (subs.length === 0) {
-      $('scope-loading').textContent = t('No archived pages found for this domain.');
+      showScopeEmpty();
       return;
     }
 
@@ -1859,6 +1863,19 @@ function _applyScopePrefill() {
   }
   const pubEl = document.getElementById('scope-publish-on-complete');
   if (pubEl && typeof p.publish === 'boolean') pubEl.checked = p.publish;
+}
+
+// Preflight succeeded but archive.org has zero HTML captures for this domain:
+// there is genuinely nothing to scan. The old code only swapped the spinner's
+// text and returned, so the infinite CSS spinner kept turning and the user was
+// dead-ended with no way out. Kill the spinner, hide the tuner, and show a clear
+// empty state with a one-click way back to a new scan.
+function showScopeEmpty() {
+  $('scope-loading').style.display = 'none';
+  $('scope-adv').style.display = 'none';
+  { const intro = document.querySelector('.scope-intro'); if (intro) intro.style.display = 'none'; }
+  const sub = $('scope-sub'); if (sub) sub.textContent = '';
+  const el = $('scope-empty'); if (el) el.hidden = false;
 }
 
 function showFallbackScopeUI(domain, detailMsg) {

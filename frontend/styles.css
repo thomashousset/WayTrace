@@ -707,6 +707,11 @@
     @media (prefers-reduced-motion: reduce) {
       .scope-loading::before { animation-duration: 4s; }
     }
+    .scope-empty {
+      display: flex; flex-direction: column; align-items: center; text-align: center;
+      padding: 56px 24px 40px;
+    }
+    .scope-empty-btn { margin-top: 22px; }
     .scope-total {
       font-size: 12px; color: var(--text-dim); margin-left: auto;
       font-family: var(--mono);
