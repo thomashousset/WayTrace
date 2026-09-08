@@ -10,7 +10,7 @@ import aiohttp
 from loguru import logger
 
 from config import settings
-from services import archive_health, archive_rate
+from services import archive_health, archive_rate, identity
 from services.scraper import _get_global_sem  # shared archive.org concurrency cap
 
 CDX_URL = "https://web.archive.org/cdx/search/cdx"
@@ -134,8 +134,9 @@ async def cdx_size_probe(
     """
     url = f"{CDX_URL}?url=*.{domain}/*&showNumPages=true"
     timeout = aiohttp.ClientTimeout(total=request_timeout)
+    headers = {"User-Agent": await identity.current_user_agent()}
     try:
-        async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
             async with archive_rate.slot(_get_global_sem()), session.get(url, allow_redirects=False) as resp:
                 if resp.status != 200:
                     return {
@@ -284,7 +285,13 @@ async def fetch_cdx_snapshots(
             f"{archive_health.seconds_remaining()}s before more requests"
         )
 
-    async with aiohttp.ClientSession(timeout=timeout) as session:
+    # Same identity as the scraper (services/identity.py). archive.org's only
+    # written requirement for automated access is a descriptive User-Agent
+    # naming the tool and its version; this session used to send none, so every
+    # index request went out as aiohttp's default "Python/3.x aiohttp/3.y".
+    # The session headers cover the resume pages too, which reuse it.
+    headers = {"User-Agent": await identity.current_user_agent()}
+    async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
         for attempt in range(1 + retries):
             # Honour the wall-clock budget BEFORE issuing another retry.
             # Without this a 120s-per-request timeout × 4 retries can sit

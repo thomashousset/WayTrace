@@ -15,7 +15,8 @@ from store import store
 
 WAYBACK_URL = "https://web.archive.org/web/{timestamp}id_/{url}"
 
-# Single-source User-Agent reused by the CDX collector and this scraper.
+# Single-source User-Agent, shared with the CDX client (services/cdx.py) so
+# archive.org sees one identity for all of this instance's traffic.
 from services import identity
 
 # Upper bound on a honored Retry-After. 600 s is long enough to survive a
