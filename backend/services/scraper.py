@@ -15,8 +15,7 @@ from store import store
 
 WAYBACK_URL = "https://web.archive.org/web/{timestamp}id_/{url}"
 
-# Single-source User-Agent, shared with the CDX client (services/cdx.py) so
-# archive.org sees one identity for all of this instance's traffic.
+# Single-source User-Agent reused by the CDX collector and this scraper.
 from services import identity
 
 # Upper bound on a honored Retry-After. 600 s is long enough to survive a
@@ -117,14 +116,21 @@ def _orig_response_headers(headers) -> dict:
 
 
 async def scrape_snapshots(
-    snapshots: list[dict], job_id: str, on_page=None
+    snapshots: list[dict], job_id: str, on_page=None, stats: dict | None = None
 ) -> list[dict]:
     """Scrape the selected archived pages.
 
     `on_page`, if given, is an async callback invoked with each page result as it
     completes (best-effort, wrapped so it can never affect scraping). It lets the
     caller start extraction WHILE pages are still downloading (overlap), for a
-    live-findings scan. It touches none of the anti-block logic below."""
+    live-findings scan. It touches none of the anti-block logic below.
+
+    `stats`, if given, is filled in with how the scrape ENDED: whether the
+    wall-clock budget cut it short and how many pages were dropped. The caller
+    needs this to tell the user that a report covers part of the selection,
+    which it cannot infer reliably from the counts alone."""
+    if stats is not None:
+        stats.update({"budget_exhausted": False, "dropped": 0, "requested": len(snapshots)})
     semaphore = asyncio.Semaphore(settings.max_concurrent_scrapes)
     timeout = aiohttp.ClientTimeout(total=settings.archive_request_timeout)
     connector = aiohttp.TCPConnector(
@@ -411,6 +417,9 @@ async def scrape_snapshots(
                 for t in pending:
                     t.cancel()
                 await asyncio.gather(*pending, return_exceptions=True)
+                if stats is not None:
+                    stats["budget_exhausted"] = True
+                    stats["dropped"] = dropped
                 logger.warning(
                     "Scrape budget {}s reached for job {}: kept {} pages, "
                     "dropped {} slow/pending", budget, job_id, len(results), dropped,

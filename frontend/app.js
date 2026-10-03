@@ -1981,6 +1981,11 @@ const CAT_LABELS = {
   crypto_addresses: 'Crypto wallets',
   directory_listings: 'Directory listings',
   bug_bounty_programs: 'Bug bounty programs',
+  support_chat: 'Chat & support widgets',
+  email_marketing: 'Marketing & CRM',
+  payment_processors: 'Payment & commerce',
+  mobile_apps: 'Mobile apps',
+  cdn_accounts: 'Media & content CDNs',
 };
 
 function catLabel(key) {
@@ -1994,9 +1999,9 @@ function catLabel(key) {
    falls into "Other" so the picker always covers the full choice set. */
 const CAT_GROUPS = [
   {key: 'setup.grp.sensitive', en: 'Sensitive exposure',   cats: ['api_keys', 'cloud_buckets', 'connection_strings', 'jwt_tokens', 'internal_ips', 'hidden_fields', 'directory_listings', 'crypto_addresses', 'pgp_keys']},
-  {key: 'setup.grp.identity',  en: 'Identity & pivots',     cats: ['emails', 'subdomains', 'persons', 'phones', 'organizations', 'addresses', 'social_profiles', 'github_repos', 'french_business_ids', 'endpoints', 'auth_providers']},
-  {key: 'setup.grp.tech',      en: 'Tech & infrastructure', cats: ['technologies', 'hosting', 'http_headers', 'favicons', 'js_urls', 'assets', 'iframe_sources', 'captcha_providers', 'status_pages']},
-  {key: 'setup.grp.analytics', en: 'Analytics & tracking',  cats: ['analytics_trackers', 'analytics_ids', 'adsense_ids', 'cookie_consent', 'verification_tags']},
+  {key: 'setup.grp.identity',  en: 'Identity & pivots',     cats: ['emails', 'subdomains', 'persons', 'phones', 'organizations', 'addresses', 'social_profiles', 'github_repos', 'french_business_ids', 'endpoints', 'auth_providers', 'mobile_apps']},
+  {key: 'setup.grp.tech',      en: 'Tech & infrastructure', cats: ['technologies', 'hosting', 'http_headers', 'favicons', 'js_urls', 'assets', 'iframe_sources', 'captcha_providers', 'status_pages', 'cdn_accounts', 'payment_processors']},
+  {key: 'setup.grp.analytics', en: 'Analytics & tracking',  cats: ['analytics_trackers', 'analytics_ids', 'adsense_ids', 'cookie_consent', 'verification_tags', 'support_chat', 'email_marketing']},
   {key: 'setup.grp.content',   en: 'Content & metadata',    cats: ['meta_info', 'html_titles', 'html_comments', 'outgoing_links', 'linked_documents', 'rss_feeds', 'sitemaps_and_robots', 'bug_bounty_programs', 'job_boards']},
 ];
 
@@ -2286,6 +2291,7 @@ window.addEventListener('DOMContentLoaded', () => {
   }
   initLang();
   applyInstanceDefaults();
+  _captureVisitSource();
   navigate(location.hash || '#/');
   checkServiceStatus();
   setInterval(checkServiceStatus, 60000);
@@ -3204,14 +3210,32 @@ function renderResultsHeader(info) {
         + (dedup ? `, <b>${n(dedup)}</b> duplicates skipped` : '')
         + (blocked ? `, <b>${n(blocked)}</b> pages archive.org rate-limited this run` : '')
         + `${range ? `, spanning ${esc(range)}` : ''}.`;
+    /* Coverage. "snapshots analysed" was the SELECTED count, so a run that hit
+       the download budget read as complete while covering a fraction of its own
+       selection. Show the ratio instead, and say so in one calm line when the
+       selection was not exhausted. A partial scan is a normal outcome on a big
+       domain, not a failure, so it gets a statistic and not a warning. */
+    const attempted = (typeof m.pages_attempted === 'number') ? m.pages_attempted : ana;
+    const partial = !!m.truncated && ana > 0 && attempted < ana;
+    const pct = (ana > 0) ? Math.round((attempted / ana) * 100) : 100;
+    const coverage = partial
+      ? (LANG === 'fr'
+          ? `Couverture partielle : <b>${n(attempted)}</b> des <b>${n(ana)}</b> captures retenues ont été traitées (${pct} %), `
+            + `le budget de téléchargement a été atteint avant la fin de la sélection. `
+            + `Relancez avec « Scanner plus » pour poursuivre sur les captures restantes.`
+          : `Partial coverage: <b>${n(attempted)}</b> of the <b>${n(ana)}</b> selected captures were processed (${pct}%), `
+            + `the download budget ran out before the end of the selection. `
+            + `Use "Scan more" to continue on the remaining captures.`)
+      : '';
     el.innerHTML =
       `<div class="rm-line">`
       + `<span class="rm-stat"><span class="rm-num">${n(fnd)}</span> ${t('findings')}</span>`
-      + `<span class="rm-stat"><span class="rm-num">${n(ana)}</span> ${t('snapshots analysed')}</span>`
+      + `<span class="rm-stat"><span class="rm-num">${n(attempted)}${partial ? ` / ${n(ana)}` : ''}</span> ${t('snapshots analysed')}</span>`
       + `<span class="rm-stat"><span class="rm-num">${n(scr)}</span> ${t('pages scraped')}</span>`
       + (range ? `<span class="rm-range">${esc(range)}</span>` : '')
       + `</div>`
-      + `<div class="rm-explain">${explain}</div>`;
+      + `<div class="rm-explain">${explain}</div>`
+      + (coverage ? `<div class="rm-explain">${coverage}</div>` : '');
   } else {
     const crawl = info.crawl || {};
     const parts = [];
@@ -3286,6 +3310,11 @@ const CAT_DESCRIPTIONS = {
   social_profiles: 'Linked social-media profiles.',
   html_comments: 'HTML comments in source. Often leak tooling, TODOs and internal notes.',
   assets: 'Static asset files (JS, CSS, images) referenced by the site.',
+  support_chat: 'Live-chat / helpdesk widgets and their tenant id (Intercom, Crisp, Tawk.to, Drift, Zendesk...). The id clusters sites run by one operator.',
+  email_marketing: 'Marketing-automation / CRM embeds and their account id (Mailchimp, HubSpot, Marketo, Klaviyo, Pardot...). Pivot on the shared account.',
+  payment_processors: 'Checkout stacks and merchant ids (Shopify store, PayPal button, Paddle vendor, Gumroad, Snipcart...). Same id elsewhere means the same seller.',
+  mobile_apps: 'Linked iOS / Android apps from app-banner and App Links meta tags and store links. Pivot to the app listing (developer, reviews, versions).',
+  cdn_accounts: 'Media/content/search SaaS account ids in asset URLs (Cloudinary cloud, Contentful space, Sanity project, Algolia app, imgix...). Account-scoped operator pivot.',
 };
 
 let _v2DomainInfoCache = null;

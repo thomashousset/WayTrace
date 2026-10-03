@@ -586,6 +586,8 @@ def test_extract_all_has_all_categories():
         "github_repos", "sitemaps_and_robots", "pgp_keys",
         "bug_bounty_programs", "captcha_providers", "status_pages",
         "job_boards", "auth_providers", "html_titles",
+        "support_chat", "email_marketing", "payment_processors",
+        "mobile_apps", "cdn_accounts",
     }
     assert set(results.keys()) == expected_keys
 

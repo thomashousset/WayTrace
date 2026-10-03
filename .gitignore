@@ -23,6 +23,9 @@ waytrace.db
 waytrace.db-wal
 waytrace.db-shm
 
+# the private line so ops config has a history and an off-machine copy; the
+# public build drops the whole directory (see build_public.py).
+
 # IDE
 .vscode/
 .idea/
@@ -40,9 +43,11 @@ docker-compose.override.yml
 # Logs
 *.log
 
-# Runtime data (SQLite, CDX cache, reference datasets fetched on demand)
+# Runtime data (SQLite, CDX cache, logs, reference datasets fetched on demand)
 backend/data/*
 !backend/data/extensions.txt
+cdx-cache/
+logs/
 
 # Testing
 .coverage
@@ -52,4 +57,7 @@ htmlcov/
 # Distribution
 *.tar.gz
 *.whl
+
+# IP, real url_ids, defence layout) and the public tree is generated from the
+# TRACKED files, so tracking one would publish it. Kept on disk only.
 

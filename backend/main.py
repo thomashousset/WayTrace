@@ -19,6 +19,23 @@ from services.background_tasks import queue_worker_loop, cleanup_loop
 from store import store
 
 
+def _log_file_path() -> Path | None:
+    """Where the persistent log goes, or None if we cannot write one.
+
+    Beside the database, which is the only directory a deployment guarantees to
+    keep. The container's stdout log is attached to the container, so rebuilding
+    the image destroys it: that is how the record of twenty-three failed scans
+    was lost. Never fatal, a container that cannot write a log must still serve.
+    """
+    try:
+        base = Path(settings.log_dir) if settings.log_dir else \
+            Path(settings.database_url).expanduser().resolve().parent / "logs"
+        base.mkdir(parents=True, exist_ok=True)
+        return base / "waytrace.log"
+    except OSError:
+        return None
+
+
 def _configure_logging() -> None:
     logger.remove()
     fmt = (
@@ -28,6 +45,30 @@ def _configure_logging() -> None:
         "<level>{message}</level>"
     )
     logger.add(sys.stderr, format=fmt, level=settings.log_level)
+
+    # Persistent copy, so a deploy stops costing the diagnostic history.
+    #
+    # Retention deliberately tracks the scan retention window rather than being
+    # generous: these lines name the domains that were scanned, and on this
+    # service a domain is an investigation target. The log must not outlive the
+    # scan it describes. 0 retention days (self-host "keep forever") means no
+    # deletion here either.
+    #
+    # It carries no url_id: uvicorn's access log is a stdlib logger writing
+    # straight to stdout, it never reaches this sink, and it is switched off in
+    # the image anyway.
+    path = _log_file_path()
+    if path is not None:
+        days = settings.scan_retention_days
+        try:
+            logger.add(
+                path, format=fmt, level=settings.log_level,
+                rotation="20 MB",
+                retention=(f"{days} days" if days > 0 else None),
+                compression="gz", encoding="utf-8",
+            )
+        except OSError as exc:
+            logger.warning("Could not open the persistent log at {}: {}", path, exc)
 
 
 _configure_logging()

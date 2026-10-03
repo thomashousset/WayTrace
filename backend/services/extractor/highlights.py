@@ -272,6 +272,53 @@ def compute_highlights(results: dict, domain: str) -> list[dict]:
             "Lookup fingerprint on keys.openpgp.org / keybase to map to identities",
         )
 
+    # Third-party SaaS tenant ids: the account identifier is the operator
+    # pivot (same id on another domain ⇒ same owner).
+    support_chat = [c for c in results.get("support_chat", []) if c.get("tenant_id")]
+    if support_chat:
+        _add(
+            "PIVOT", "support_chat",
+            f"{len(support_chat)} chat/support widget tenant id(s)",
+            ", ".join(f"{c.get('vendor', '')}:{c.get('tenant_id', '')}" for c in support_chat[:5]),
+            "Same Intercom app_id / Crisp id / Zendesk subdomain across sites ⇒ same operator",
+        )
+
+    email_marketing = [c for c in results.get("email_marketing", []) if c.get("account_id")]
+    if email_marketing:
+        _add(
+            "PIVOT", "email_marketing",
+            f"{len(email_marketing)} marketing-account id(s)",
+            ", ".join(f"{c.get('platform', '')}:{c.get('account_id', '')}" for c in email_marketing[:5]),
+            "HubSpot portal / Mailchimp audience / Marketo munchkin id clusters sites on one account",
+        )
+
+    payments = [c for c in results.get("payment_processors", []) if c.get("merchant_id")]
+    if payments:
+        _add(
+            "PIVOT", "payment_processors",
+            f"{len(payments)} merchant id(s)",
+            ", ".join(f"{c.get('processor', '')}:{c.get('merchant_id', '')}" for c in payments[:5]),
+            "A Shopify store number / PayPal button / Paddle vendor reused elsewhere ⇒ same seller",
+        )
+
+    cdn_accounts = results.get("cdn_accounts", [])
+    if cdn_accounts:
+        _add(
+            "PIVOT", "cdn_accounts",
+            f"{len(cdn_accounts)} media/content SaaS account id(s)",
+            ", ".join(f"{c.get('vendor', '')}:{c.get('account_id', '')}" for c in cdn_accounts[:5]),
+            "Cloudinary cloud / Contentful space / Algolia app id is account-scoped ⇒ same operator",
+        )
+
+    mobile_apps = results.get("mobile_apps", [])
+    if mobile_apps:
+        _add(
+            "PIVOT", "mobile_apps",
+            f"{len(mobile_apps)} linked mobile app(s)",
+            ", ".join(a.get("pivot_url", "") for a in mobile_apps[:5]),
+            "App Store / Play listing carries the developer name, reviews and version history",
+        )
+
     # security.txt and ads.txt are PIVOT-grade discoveries: security.txt
     # exposes a contact channel + scope; ads.txt links to ad networks.
     pivot_disclosures = [

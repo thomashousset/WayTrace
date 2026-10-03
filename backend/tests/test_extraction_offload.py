@@ -42,7 +42,7 @@ async def test_extraction_runs_off_the_event_loop(fresh_db, monkeypatch):
     monkeypatch.setattr(scan_module, "store", fresh)
 
     # Two fake pages, streamed to the on_page hook like the real scraper.
-    async def _fake_scrape(selected, job_id, on_page=None):
+    async def _fake_scrape(selected, job_id, on_page=None, stats=None):
         out = [
             {"timestamp": "20200101000000", "url": "http://ex.com/", "html": "<html></html>", "error": None},
             {"timestamp": "20210101000000", "url": "http://ex.com/a", "html": "<html></html>", "error": None},
@@ -116,7 +116,7 @@ async def test_live_counts_pushed_during_extraction(fresh_db, monkeypatch):
     monkeypatch.setattr(store_module, "store", fresh)
     monkeypatch.setattr(scan_module, "store", fresh)
 
-    async def _fake_scrape(selected, job_id, on_page=None):
+    async def _fake_scrape(selected, job_id, on_page=None, stats=None):
         # 60 fake html pages streamed to on_page -> multiple batches (25 each).
         out = [
             {"timestamp": f"20{10+i:02d}0101000000", "url": f"http://ex.com/{i}", "html": "<html></html>", "error": None}
@@ -171,7 +171,7 @@ async def test_extraction_overlaps_download(fresh_db, monkeypatch):
 
     emitted = {"n": 0}
 
-    async def _slow_scrape(selected, job_id, on_page=None):
+    async def _slow_scrape(selected, job_id, on_page=None, stats=None):
         out = []
         for i in range(60):
             p = {"timestamp": f"20{10+i:02d}0101000000", "url": f"http://ex.com/{i}", "html": "<html></html>", "error": None}
@@ -226,7 +226,7 @@ async def test_scan_timeout_cancels_the_scrape_task(fresh_db, monkeypatch):
     emitted = {"n": 0}
     cancelled = {"v": False}
 
-    async def _endless_scrape(selected, job_id, on_page=None):
+    async def _endless_scrape(selected, job_id, on_page=None, stats=None):
         try:
             for i in range(10000):
                 p = {"timestamp": "20200101000000", "url": f"http://ex.com/{i}", "html": "<html></html>", "error": None}

@@ -27,6 +27,8 @@ async def health():
         active_jobs=active,
         uptime_seconds=round(time.monotonic() - _start_time, 1),
         version=APP_VERSION,
+        commit=settings.waytrace_commit,
+        built_at=settings.waytrace_built_at,
     )
 
 

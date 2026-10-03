@@ -16,7 +16,7 @@ def caps(monkeypatch):
 async def test_finds_live_job_same_domain():
     s = JobStore()
     first = await s.create_job("dup.com", "1.1.1.1", user_id=1)
-    live = await s.find_live_job_for_domain("dup.com")
+    live = await s.find_live_job_for_domain("dup.com", 1)
     assert live is not None
     assert live["url_id"] == first["url_id"]
 
@@ -25,7 +25,7 @@ async def test_finds_live_job_same_domain():
 async def test_no_live_job_other_domain():
     s = JobStore()
     await s.create_job("dup.com", "1.1.1.1")
-    assert await s.find_live_job_for_domain("other.com") is None
+    assert await s.find_live_job_for_domain("other.com", None) is None
 
 
 @pytest.mark.asyncio
@@ -33,7 +33,7 @@ async def test_finished_job_not_returned():
     s = JobStore()
     first = await s.create_job("dup.com", "1.1.1.1")
     await s.finish_job(first["job_id"])
-    assert await s.find_live_job_for_domain("dup.com") is None
+    assert await s.find_live_job_for_domain("dup.com", None) is None
 
 
 @pytest.mark.asyncio
@@ -41,7 +41,7 @@ async def test_cancelled_job_not_returned():
     s = JobStore()
     first = await s.create_job("dup.com", "1.1.1.1")
     await s.cancel_job(first["job_id"])
-    assert await s.find_live_job_for_domain("dup.com") is None
+    assert await s.find_live_job_for_domain("dup.com", None) is None
 
 
 @pytest.mark.asyncio
@@ -49,8 +49,31 @@ async def test_oldest_live_job_wins():
     s = JobStore()
     first = await s.create_job("dup.com", "1.1.1.1")
     await s.create_job("dup.com", "2.2.2.2")   # forced duplicate (force=True path)
-    live = await s.find_live_job_for_domain("dup.com")
+    live = await s.find_live_job_for_domain("dup.com", None)
     assert live["url_id"] == first["url_id"]
+
+
+@pytest.mark.asyncio
+async def test_live_attach_never_crosses_accounts():
+    """Account 2 must not be attached to account 1's running scan of the same
+    domain. Attaching would disclose both the report and the fact that somebody
+    else is investigating that target right now."""
+    s = JobStore()
+    await s.create_job("target.example", "1.1.1.1", user_id=1)
+    assert await s.find_live_job_for_domain("target.example", 2) is None
+    assert await s.find_live_job_for_domain("target.example", None) is None
+    own = await s.find_live_job_for_domain("target.example", 1)
+    assert own is not None
+
+
+@pytest.mark.asyncio
+async def test_live_attach_still_works_without_accounts():
+    """Self-hosted build: no accounts, every job is unowned, dedupe still
+    attaches a double submission to the scan already in flight."""
+    s = JobStore()
+    first = await s.create_job("dup.com", "1.1.1.1")
+    live = await s.find_live_job_for_domain("dup.com", None)
+    assert live is not None and live["url_id"] == first["url_id"]
 
 
 @pytest.mark.asyncio

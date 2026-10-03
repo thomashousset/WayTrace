@@ -107,7 +107,7 @@ _LEGACY_ADHOC_MIGRATIONS: set[int] = {1, 2}
 # "duplicate column name" on the next boot and crash-loop the app). Statements
 # here are only forgiven for the "already applied" errors below, never for a
 # genuine failure.
-_IDEMPOTENT_MIGRATIONS: set[int] = {7, 8}
+_IDEMPOTENT_MIGRATIONS: set[int] = {7, 8, 9}
 _ALREADY_APPLIED = ("duplicate column name", "already exists")
 
 _db_path: str | None = None
@@ -556,14 +556,23 @@ async def list_recent_scans(limit: int = 50) -> list[dict]:
         await db.close()
 
 
-async def find_recent_scan_for_domain(domain: str, user_id=None) -> dict | None:
-    """The most recent COMPLETED, non-expired scan for this domain, or None.
+async def find_recent_scan_for_domain(domain: str, owner_id: int | None) -> dict | None:
+    """The OWNER's most recent completed, non-expired scan of this domain.
 
-    Guardrail against re-scanning a domain we already have (which re-hammers
-    archive.org). Reuse is instance-wide: a scan of the same domain yields
-    the same public-archive data whoever ran it, and the UI explains the
-    retention window. Pass user_id to restrict the match to one owner
-    (no current caller does; kept for flexibility)."""
+    Guardrail against re-scanning a domain we already have, which would hammer
+    archive.org for data we hold. It is scoped to a single owner, always, and
+    owner_id is a required argument so no future caller can reuse across
+    accounts by forgetting it.
+
+    Why the scoping matters more than the saved request: on this service a
+    domain is an investigation target. Handing someone else's report to whoever
+    submits the same domain discloses both the findings and the fact that the
+    domain is being looked at, which is the more sensitive of the two.
+
+    owner_id=None means the anonymous owner, which is the self-hosted build
+    where there are no accounts and every scan is unowned. It does NOT mean
+    "any owner"; see find_public_demo_scan for the one deliberate exception.
+    """
     if not domain:
         return None
     db = await get_db()
@@ -571,12 +580,39 @@ async def find_recent_scan_for_domain(domain: str, user_id=None) -> dict | None:
         now = _iso(datetime.now(timezone.utc))
         sql = ("""SELECT url_id, domain, created_at FROM jobs
                   WHERE domain = ? AND status = 'completed' AND expires_at > ?""")
-        params = [domain, now]
-        if user_id is not None:
+        params: list = [domain, now]
+        if owner_id is None:
+            sql += " AND user_id IS NULL"
+        else:
             sql += " AND user_id = ?"
-            params.append(user_id)
+            params.append(owner_id)
         sql += " ORDER BY created_at DESC LIMIT 1"
         cur = await db.execute(sql, params)
+        row = await cur.fetchone()
+        return dict(row) if row else None
+    finally:
+        await db.close()
+
+
+async def find_public_demo_scan(domain: str) -> dict | None:
+    """Most recent completed scan of the operator's demo domain, any owner.
+
+    The single place where a scan crosses account boundaries, and only because
+    the operator asked for it: /api/example-scan is dead unless
+    EXAMPLE_SCAN_DOMAIN names a domain, which is a deliberate decision to
+    publish one report as a product demo. Never reachable for anything else.
+    """
+    if not domain:
+        return None
+    db = await get_db()
+    try:
+        now = _iso(datetime.now(timezone.utc))
+        cur = await db.execute(
+            """SELECT url_id, domain, created_at FROM jobs
+               WHERE domain = ? AND status = 'completed' AND expires_at > ?
+               ORDER BY created_at DESC LIMIT 1""",
+            (domain, now),
+        )
         row = await cur.fetchone()
         return dict(row) if row else None
     finally:

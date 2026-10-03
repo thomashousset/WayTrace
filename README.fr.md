@@ -2,7 +2,7 @@
 
 [English](README.md) · **Français**
 
-WayTrace reconstruit l'histoire publique d'un domaine à partir de la Wayback Machine (archive.org). Vous donnez un domaine ; l'outil lit le HTML qu'archive.org a déjà enregistré au fil des ans, choisit les instantanés les plus révélateurs à travers le temps, et en extrait **43 catégories** de renseignement, des e-mails et sous-domaines aux secrets exposés, technologies et personnes. Chaque trouvaille porte les dates `first_seen` et `last_seen` dans l'archive : vous obtenez une chronologie de ce qui est apparu, a changé et a disparu, pas seulement un instantané d'aujourd'hui.
+WayTrace reconstruit l'histoire publique d'un domaine à partir de la Wayback Machine (archive.org). Vous donnez un domaine ; l'outil lit le HTML qu'archive.org a déjà enregistré au fil des ans, choisit les instantanés les plus révélateurs à travers le temps, et en extrait **48 catégories** de renseignement, des e-mails et sous-domaines aux secrets exposés, technologies et personnes. Chaque trouvaille porte les dates `first_seen` et `last_seen` dans l'archive : vous obtenez une chronologie de ce qui est apparu, a changé et a disparu, pas seulement un instantané d'aujourd'hui.
 
 **L'outil ne touche jamais la cible.** Aucun scan de port, aucun brute force, aucune énumération DNS, aucun trafic vers le domaine lui-même. Chaque octet vient de l'archive publique d'archive.org. La cible ne vous voit jamais.
 
@@ -98,7 +98,7 @@ Un scan est un pipeline en quatre phases. Seules les phases 3 et 4 sollicitent a
                                ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │  4 · Extraction                                                     │
-│  Parser avec selectolax (en C), lancer 43 extracteurs de catégorie  │
+│  Parser avec selectolax (en C), lancer 48 extracteurs de catégorie  │
 │  (regex + DOM + JSON-LD), agréger first_seen / last_seen /          │
 │  occurrences, et estampiller chaque trouvaille de sa capture source │
 └──────────────────────────────┬──────────────────────────────────────┘
@@ -125,7 +125,7 @@ Au lancement, les snapshots exacts que vous avez choisis sont envoyés directeme
 
 ## Ce qui est extrait
 
-43 catégories. Chaque trouvaille suit `first_seen`, `last_seen` et `occurrences`, et retient la page archivée dont elle provient.
+48 catégories. Chaque trouvaille suit `first_seen`, `last_seen` et `occurrences`, et retient la page archivée dont elle provient.
 
 **Personnes et contact**
 `emails` · `phones` · `persons` · `organizations` · `addresses` · `social_profiles`
@@ -139,12 +139,17 @@ Au lancement, les snapshots exacts que vous avez choisis sont envoyés directeme
 **Traçage et identifiants**
 `analytics_trackers` · `analytics_ids` · `adsense_ids` · `verification_tags` · `cookie_consent` · `captcha_providers` · `auth_providers` · `github_repos` · `bug_bounty_programs` · `job_boards` · `french_business_ids`
 
+**Business et intégrations SaaS**
+`support_chat` · `email_marketing` · `payment_processors` · `cdn_accounts` · `mobile_apps`
+
 **Structure et contenu**
 `endpoints` · `js_urls` · `iframe_sources` · `outgoing_links` · `linked_documents` · `assets` · `sitemaps_and_robots` · `rss_feeds` · `html_comments` · `meta_info` · `html_titles`
 
 Quelques-unes valent d'être soulignées :
 
 - **api_keys** couvre AWS, Google, Stripe, SendGrid, webhooks Slack, jetons GitHub, et des motifs modernes à faible faux positif (Supabase, DigitalOcean, Shopify, Linear, npm). Toujours traité comme une fuite.
+- **support_chat / email_marketing / payment_processors / cdn_accounts** extraient l'identifiant de compte ou de tenant des embeds SaaS tiers (app_id Intercom, portail HubSpot, boutique Shopify, cloud Cloudinary, app Algolia...). Le même identifiant sur un autre domaine relie les deux sites au même opérateur.
+- **mobile_apps** relie le domaine à ses applications iOS / Android via les balises meta app-banner et App Links et les liens de store, avec pivot vers la fiche du store (éditeur, avis, historique des versions).
 - **cloud_buckets** repère les URL S3, GCS, Azure Blob et DigitalOcean Spaces, refuge habituel du stockage public mal configuré.
 - **connection_strings** reconnaît MySQL, Postgres, Mongo, Redis, AMQP, MSSQL et plus ; les identifiants sont masqués en sortie.
 - **subdomains** fait remonter les hôtes dev / staging / api / internes encore référencés par de vieilles pages longtemps après leur extinction.
@@ -180,7 +185,7 @@ Les catégories qui ont trouvé quelque chose sont présentées en premier. Les 
 
 Le résultat est une page unique avec deux vues entre lesquelles vous basculez.
 
-**Catégories** (par défaut) est un rail de toutes les 43 catégories, celles avec trouvailles d'abord (avec compteurs), les vides présentes mais repliées. Vous ouvrez une catégorie à la fois ; son panneau montre les trouvailles (valeur, occurrences, first/last-seen, lien vers la capture source) et, en dessous, sa propre activité : une piste par valeur montrant quand elle est apparue et a disparu, plus un fil de changements daté. « Tout afficher » aplatit d'un coup toutes les catégories trouvées.
+**Catégories** (par défaut) est un rail de toutes les 48 catégories, celles avec trouvailles d'abord (avec compteurs), les vides présentes mais repliées. Vous ouvrez une catégorie à la fois ; son panneau montre les trouvailles (valeur, occurrences, first/last-seen, lien vers la capture source) et, en dessous, sa propre activité : une piste par valeur montrant quand elle est apparue et a disparu, plus un fil de changements daté. « Tout afficher » aplatit d'un coup toutes les catégories trouvées.
 
 **Activité** permet de cocher des catégories et des pivots individuels (un sous-domaine précis, un traceur, un favicon, une personne) pour composer une chronologie partagée sur un même axe d'années : chevauchements et disparitions se lisent d'un coup d'œil. Elle inclut la galerie d'évolution des favicons et un fil de changements global.
 
@@ -287,7 +292,7 @@ backend/
     archive_rate.py   gouverneur adaptatif (AIMD) de débit + concurrence, partagé
     archive_health.py disjoncteur : bridage vs détection de vrai blocage d'IP
     runtime_config.py registre des réglages modifiables derrière le panneau Réglages
-    extractor/        un module par catégorie (43) + finalize + highlights
+    extractor/        un module par catégorie (48) + finalize + highlights
 
 frontend/             index.html + styles.css + app.js : JS vanilla, sans étape de
                       build, thèmes sombre/clair, bilingue EN/FR, rapport à deux vues

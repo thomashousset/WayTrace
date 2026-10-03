@@ -71,6 +71,11 @@ from .captcha_providers_extract import extract_captcha_providers
 from .status_pages_extract import extract_status_pages
 from .job_boards_extract import extract_job_boards
 from .auth_providers_extract import extract_auth_providers
+from .support_chat_extract import extract_support_chat
+from .email_marketing_extract import extract_email_marketing
+from .payment_processors_extract import extract_payment_processors
+from .mobile_apps_extract import extract_mobile_apps
+from .cdn_accounts_extract import extract_cdn_accounts
 from .http_headers_extract import extract_http_headers
 
 
@@ -1193,6 +1198,11 @@ CATEGORY_EXTRACTORS: dict[str, Callable[[ExtractionContext], None]] = {
     "status_pages": lambda ctx: extract_status_pages(ctx.raw_text, ctx.month, ctx.accum),
     "job_boards": lambda ctx: extract_job_boards(ctx.raw_text, ctx.month, ctx.accum),
     "auth_providers": lambda ctx: extract_auth_providers(ctx.raw_text, ctx.month, ctx.accum),
+    "support_chat": lambda ctx: extract_support_chat(ctx.raw_text, ctx.month, ctx.accum),
+    "email_marketing": lambda ctx: extract_email_marketing(ctx.raw_text, ctx.month, ctx.accum),
+    "payment_processors": lambda ctx: extract_payment_processors(ctx.raw_text, ctx.month, ctx.accum),
+    "mobile_apps": lambda ctx: extract_mobile_apps(ctx.tree, ctx.raw_text, ctx.month, ctx.accum),
+    "cdn_accounts": lambda ctx: extract_cdn_accounts(ctx.raw_text, ctx.month, ctx.accum),
 }
 
 

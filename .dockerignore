@@ -37,3 +37,7 @@ backend/tests/
 # Dockerfile itself doesn't need to be in the context root
 Dockerfile
 docker-compose*.yml
+
+# Deployment config: the image only ever COPYs backend/ and frontend/, so this
+# is pure build-context weight, and it must never be bakeable into a layer.
+deploy/

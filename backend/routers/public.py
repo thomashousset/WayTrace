@@ -17,7 +17,7 @@ from loguru import logger
 from config import settings
 from db import (
     delete_job,
-    find_recent_scan_for_domain,
+    find_public_demo_scan,
     get_job_by_url_id,
     search_scan_pages,
     list_recent_scans,
@@ -145,7 +145,9 @@ async def get_example_scan():
     domain = settings.example_scan_domain
     if not domain:
         raise HTTPException(status_code=404, detail="No example scan configured")
-    row = await find_recent_scan_for_domain(domain)
+    # The one lookup that deliberately ignores ownership: the operator named
+    # this domain in EXAMPLE_SCAN_DOMAIN precisely so its report is public.
+    row = await find_public_demo_scan(domain)
     if row is None:
         raise HTTPException(status_code=404, detail="Example scan not ready yet")
     return {"url_id": row["url_id"], "domain": row["domain"]}

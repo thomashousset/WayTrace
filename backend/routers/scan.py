@@ -88,6 +88,56 @@ def format_sse_event(event_id: int, event_type: str, data: dict) -> str:
 # Scan pipeline (CDX -> filter -> scrape, with extraction overlapping the scrape)
 # ---------------------------------------------------------------------------
 
+# Failure taxonomy. Every scan that failed in production carried an empty
+# meta, so "why did these 23 scans fail" could only be answered from container
+# logs that a rebuild destroys. The cause is now part of the record.
+#
+# The codes are deliberately coarse and stable: they name what the operator can
+# act on, not the exception class. `detail` keeps the raw text, bounded, for the
+# cases the taxonomy has not met yet.
+_FAILURE_SIGNATURES: tuple[tuple[str, str, str], ...] = (
+    # (code, substring to look for, message shown to the person who ran the scan)
+    ("cdx_unreachable", "cdx api unreachable",
+     "archive.org did not return the snapshot index in time"),
+    ("cdx_malformed", "malformed json",
+     "archive.org returned an unusable snapshot index"),
+    ("archive_paused", "rate-limiting us",
+     "archive.org is rate-limiting this server; scanning is paused"),
+    ("archive_paused", "cooling down",
+     "archive.org is rate-limiting this server; scanning is paused"),
+)
+
+
+def classify_failure(exc: BaseException) -> tuple[str, str]:
+    """Map an exception to (code, user-facing message).
+
+    Mega-domains (google.com, instagram.com, mail.ru) exhaust the CDX budget
+    before a single page is downloaded, which is by far the most common failure
+    and is not the user's fault, so it gets its own code and its own sentence
+    instead of a bare "Scan failed"."""
+    if isinstance(exc, asyncio.TimeoutError):
+        return "scan_timeout", f"Timed out after {settings.scan_timeout_seconds // 60}min"
+    text = str(exc).lower()
+    for code, needle, message in _FAILURE_SIGNATURES:
+        if needle in text:
+            return code, message
+    return "unexpected", "Scan failed"
+
+
+def _failure_meta(domain: str, code: str, exc: BaseException, start: float) -> dict:
+    """Minimal, durable record of why a scan failed. No results, no page data:
+    just enough to answer 'why did this fail' months later without logs."""
+    return {
+        "domain": domain,
+        "error": code,
+        # Bounded and type-prefixed: a RuntimeError with an empty str() is
+        # exactly what made the CDX timeouts unreadable in the logs.
+        "error_detail": f"{type(exc).__name__}: {exc}"[:300],
+        "failed_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "scan_duration_seconds": round(time.time() - start, 1),
+    }
+
+
 async def run_scan(
     job_id: str,
     config: ScanConfig | None = None,
@@ -132,19 +182,25 @@ async def run_scan(
             _scan_pipeline(job_id, domain, start, config, selected_snapshots),
             timeout=settings.scan_timeout_seconds,
         )
-    except asyncio.TimeoutError:
+    except asyncio.TimeoutError as exc:
         logger.warning("Job {} timed out after {}s", job_id, settings.scan_timeout_seconds)
+        code, message = classify_failure(exc)
         await store.update_job(
-            job_id,
-            status="failed",
-            step=f"Timed out after {settings.scan_timeout_seconds // 60}min",
+            job_id, status="failed", step=message,
+            meta=_failure_meta(domain, code, exc, start),
         )
     except Exception as exc:
-        logger.exception("Scan failed for job {}: {!r}", job_id, exc)
+        code, message = classify_failure(exc)
+        # A CDX budget exhaustion on a mega-domain is an expected outcome, not a
+        # defect: log it at warning without the traceback so real bugs stay
+        # visible in the log stream.
+        if code == "unexpected":
+            logger.exception("Scan failed for job {}: {!r}", job_id, exc)
+        else:
+            logger.warning("Scan failed for job {} ({}): {}", job_id, code, exc)
         await store.update_job(
-            job_id,
-            status="failed",
-            step="Scan failed",
+            job_id, status="failed", step=message,
+            meta=_failure_meta(domain, code, exc, start),
         )
     finally:
         await _persist_and_finish(job_id, start)
@@ -274,6 +330,9 @@ async def _scan_pipeline(
                         "pages_scraped": 0,
                         "pages_failed": 0,
                         "pages_deduped": 0,
+                        "pages_attempted": 0,
+                        "truncated": False,
+                        "truncation_reason": None,
                         "date_first_seen": None,
                         "date_last_seen": None,
                         "scan_duration_seconds": round(time.time() - start, 1),
@@ -310,7 +369,10 @@ async def _scan_pipeline(
         async def _on_page(p):
             await _q.put(p)
 
-        scrape_task = asyncio.ensure_future(scrape_snapshots(selected, job_id, on_page=_on_page))
+        scrape_stats: dict = {}
+        scrape_task = asyncio.ensure_future(
+            scrape_snapshots(selected, job_id, on_page=_on_page, stats=scrape_stats)
+        )
         scrape_task.add_done_callback(lambda _t: _q.put_nowait(_DONE))
 
         def _process_batch(batch):
@@ -394,6 +456,22 @@ async def _scan_pipeline(
         except Exception as exc:
             logger.debug("page-text indexing skipped for job {}: {}", job_id, exc)
 
+        # Coverage. `snapshots_analyzed` has always been the SELECTED count, not
+        # the fetched one, so a scan that stopped at the wall-clock budget looked
+        # complete while covering a fraction of its own selection. Record the
+        # gap rather than leaving the reader to subtract two numbers whose
+        # meaning is not obvious.
+        pages_attempted = len(pages)
+        truncated = pages_attempted < len(selected)
+        truncation_reason = None
+        if truncated:
+            truncation_reason = (
+                "scrape_budget" if scrape_stats.get("budget_exhausted") else "incomplete"
+            )
+            logger.info(
+                "Partial coverage for job {}: {}/{} selected snapshots fetched ({})",
+                job_id, pages_attempted, len(selected), truncation_reason,
+            )
         duration = round(time.time() - start, 1)
         meta = {
             "domain": domain,
@@ -403,6 +481,9 @@ async def _scan_pipeline(
             "pages_failed": pages_failed,
             "pages_blocked": pages_blocked,
             "pages_deduped": pages_deduped,
+            "pages_attempted": pages_attempted,
+            "truncated": truncated,
+            "truncation_reason": truncation_reason,
             "date_first_seen": date_first,
             "date_last_seen": date_last,
             "scan_duration_seconds": duration,
@@ -599,11 +680,16 @@ def _apply_hosted_ceiling(
 
 @router.post("/scan", response_model=ScanCreateResponse)
 async def create_scan(body: JobCreate, request: Request):
-    # Guardrail: if this domain is already being scanned RIGHT NOW, attach the
-    # caller to that live scan instead of doubling the archive.org load (the
-    # launch-day case: many people submitting the same domain at once).
+    # Who owns the scan about to be created. None on the self-hosted build,
+    # which has no accounts. Every deduplication lookup below is scoped to this
+    # value: a scan never crosses an account boundary, because on this service
+    # the domain itself is the sensitive part.
+    owner_id: int | None = None
+    # Guardrail: if this caller already has this domain in flight, attach them
+    # to that scan instead of doubling the archive.org load (double submit, two
+    # tabs, a refresh mid-queue).
     if not body.force and not body.selected_snapshots:
-        live_same = await store.find_live_job_for_domain(body.domain)
+        live_same = await store.find_live_job_for_domain(body.domain, owner_id)
         if live_same is not None:
             return ScanCreateResponse(
                 job_id="", url_id=live_same["url_id"],
@@ -614,14 +700,16 @@ async def create_scan(body: JobCreate, request: Request):
                 retention_days=settings.scan_retention_days,
             )
 
-    # Guardrail: if we already have a recent completed scan for this domain
-    # (whoever ran it: the same public-archive data either way), return it
-    # instead of re-scanning (which would re-hammer archive.org for a domain we
-    # already have). "Scan more" sets force=True to run a fresh, denser scan.
+    # Guardrail: if this caller already has a recent completed scan of this
+    # domain, return it instead of re-scanning, which would re-hammer
+    # archive.org for data they already hold. "Scan more" sets force=True to run
+    # a fresh, denser scan. Scoped to the caller: another account's scan of the
+    # same domain is none of their business, and its existence is itself the
+    # disclosure.
     if not body.force and not body.selected_snapshots:
         from db import find_recent_scan_for_domain
         try:
-            existing = await find_recent_scan_for_domain(body.domain)
+            existing = await find_recent_scan_for_domain(body.domain, owner_id)
         except Exception as exc:   # never let a lookup failure block a scan
             logger.debug("reuse lookup skipped: {}", exc)
             existing = None

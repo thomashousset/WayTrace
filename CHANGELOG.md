@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.9.0
+
+- **Your scans stay yours.** A finished scan was reused across accounts: submitting a domain someone else had scanned in the last 14 days returned their report, and the interface presented it as a fast result. For people investigating live targets that disclosed both the findings and the fact that the domain was being looked at. Deduplication now only ever matches your own scans, and the same applies to attaching to a scan already running. A self-hosted instance, which has no accounts, is unaffected.
+- **Reports say how much they cover.** A scan that ran out of its download budget looked exactly like a complete one, because the "snapshots analysed" figure counted the captures selected, not the captures actually fetched. Roughly four scans in ten were affected. Reports now show the captures processed against the captures selected, with one line explaining when the budget ran out first, and the scan record carries the truncation as a fact you can query.
+- **Failures say why.** A failed scan used to record nothing at all, so the cause lived only in container logs that a rebuild erased. Each failure now names its reason, and the message tells you which one it was: archive.org not returning the snapshot index in time (what happens on very large domains), returning an unusable index, or rate-limiting the server.
+- **A deploy no longer costs the diagnostics.** The application log and the archive.org index cache lived inside the container image, so every rebuild destroyed the log history and threw away a cache that exists to keep load off archive.org. Both now sit with the database, in the directory a deployment keeps. Log retention follows scan retention, because those lines name the domains that were scanned.
+- **Fewer copies of your scan links.** The scan address is a capability: whoever has it can read the report. It was written in full into the web server's access log and into the application's own request log. The proxy now redacts it and the duplicate request log is off, while the traffic data needed to understand a spike is untouched, and kept far longer than the previous 24 hours.
+- **Knowing what is deployed.** `/api/health` reports the exact commit and build time of the running image.
+- **Five new extraction categories, 43 to 48.** Live-chat and helpdesk widgets, marketing and CRM embeds, payment and commerce stacks, linked mobile apps, and media/content CDN accounts. Each one exposes the third-party account identifier, which is scoped to the operator rather than to the site: the same identifier on another domain means the same owner behind both.
+
 ## v1.8.2
 
 - **First-run setup for self-hosted instances.** On first launch a skippable wizard configures the instance name, default theme, operator identity, and default extraction categories. Everything stays editable afterwards in Settings, and a "Run setup again" button reopens it.

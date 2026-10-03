@@ -210,6 +210,11 @@ class HealthResponse(BaseModel):
     active_jobs: int
     uptime_seconds: float
     version: str
+    # Short hash of the commit this image was built from, and when it was built.
+    # Baked in at build time (Dockerfile ARG), so "what is running" is a question
+    # with an answer instead of a file-by-file comparison. Empty on a source run.
+    commit: str = ""
+    built_at: str = ""
 
 
 class StatsResponse(BaseModel):

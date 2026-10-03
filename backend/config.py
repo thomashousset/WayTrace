@@ -14,7 +14,7 @@ ENV_FILES = (_REPO_ROOT / ".env", Path(".env"))
 
 # Single source of truth for the tool version, surfaced in the API (/api/health,
 # OpenAPI) and injected into the frontend footer.
-APP_VERSION = "1.8.2"
+APP_VERSION = "1.9.0"
 
 
 class Settings(BaseSettings):
@@ -94,7 +94,7 @@ class Settings(BaseSettings):
     # before; the hosted service leaves them empty too. instance_name brands
     # the UI, operator_contact is folded into the archive.org User-Agent (see
     # services/identity.py), default_theme is applied before paint when the
-    # browser has no saved theme, and default_categories (empty = all 43)
+    # browser has no saved theme, and default_categories (empty = all 48)
     # narrows extraction for scans submitted without an explicit set.
     instance_name: str = ""
     operator_contact: str = ""
@@ -105,6 +105,13 @@ class Settings(BaseSettings):
     # archive.org politeness settings from the UI, persisted in app_state.
     # Enabled on a self-hosted install; your machine, your rules.
     config_panel_enabled: bool = True
+
+    # Build identity, baked into the image by the Dockerfile (WAYTRACE_COMMIT /
+    # WAYTRACE_BUILT_AT build args) and surfaced by /api/health. Answering "what
+    # exactly is running" should not require diffing checksums against git.
+    # Empty when running from source, which is the honest answer there.
+    waytrace_commit: str = ""
+    waytrace_built_at: str = ""
 
     # Security: hide OpenAPI schema + Swagger UI by default in prod.
     # Set EXPOSE_API_DOCS=1 in dev/local for interactive exploration.
@@ -134,6 +141,12 @@ class Settings(BaseSettings):
     scrape_delay_max: float = 1.2
     scrape_max_retries: int = 3
     log_level: str = "INFO"
+    # Both default to "" meaning "beside the database", which is the directory
+    # every deployment already keeps (the /data volume under Docker). Before
+    # that, both lived in the container's ephemeral layer: every rebuild wiped
+    # the CDX cache and destroyed the only record of why a scan failed.
+    cdx_cache_dir: str = ""
+    log_dir: str = ""
 
     # CORS
     cors_origins: str = "http://localhost:5173,http://localhost:3000"

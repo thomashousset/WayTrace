@@ -2,7 +2,7 @@
 
 **English** · [Français](README.fr.md)
 
-WayTrace reconstructs the public history of a domain from the Wayback Machine (archive.org). You give it a domain; it reads the HTML that archive.org already saved over the years, picks the most revealing snapshots across time, and pulls out **43 categories** of intelligence, from emails and subdomains to exposed secrets, tech stacks and people. Every finding is stamped with when it `first_seen` and `last_seen` in the archive, so you get a timeline of what appeared, changed, and disappeared, not just a snapshot of today.
+WayTrace reconstructs the public history of a domain from the Wayback Machine (archive.org). You give it a domain; it reads the HTML that archive.org already saved over the years, picks the most revealing snapshots across time, and pulls out **48 categories** of intelligence, from emails and subdomains to exposed secrets, tech stacks and people. Every finding is stamped with when it `first_seen` and `last_seen` in the archive, so you get a timeline of what appeared, changed, and disappeared, not just a snapshot of today.
 
 **It never touches the target.** No port scan, no brute force, no DNS enumeration, no traffic of any kind to the domain itself. Every byte comes from archive.org's public archive. The target never sees you.
 
@@ -98,7 +98,7 @@ A scan is a four-phase pipeline. Only phases 3 and 4 touch archive.org for conte
                                ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │  4 · Extract                                                        │
-│  Parse with selectolax (C-based), run 43 category extractors        │
+│  Parse with selectolax (C-based), run 48 category extractors        │
 │  (regex + DOM + JSON-LD), aggregate first_seen / last_seen /        │
 │  occurrences, and stamp each finding with its source capture        │
 └──────────────────────────────┬──────────────────────────────────────┘
@@ -125,7 +125,7 @@ When you launch, the exact snapshots you chose are sent straight to phase 3, ski
 
 ## What it extracts
 
-43 categories. Every finding tracks `first_seen`, `last_seen`, and `occurrences`, and records the archived page it came from.
+48 categories. Every finding tracks `first_seen`, `last_seen`, and `occurrences`, and records the archived page it came from.
 
 **People and contact**
 `emails` · `phones` · `persons` · `organizations` · `addresses` · `social_profiles`
@@ -139,12 +139,17 @@ When you launch, the exact snapshots you chose are sent straight to phase 3, ski
 **Tracking and identifiers**
 `analytics_trackers` · `analytics_ids` · `adsense_ids` · `verification_tags` · `cookie_consent` · `captcha_providers` · `auth_providers` · `github_repos` · `bug_bounty_programs` · `job_boards` · `french_business_ids`
 
+**Business and SaaS integrations**
+`support_chat` · `email_marketing` · `payment_processors` · `cdn_accounts` · `mobile_apps`
+
 **Structure and content**
 `endpoints` · `js_urls` · `iframe_sources` · `outgoing_links` · `linked_documents` · `assets` · `sitemaps_and_robots` · `rss_feeds` · `html_comments` · `meta_info` · `html_titles`
 
 A few worth calling out:
 
 - **api_keys** covers AWS, Google, Stripe, SendGrid, Slack webhooks, GitHub tokens, and modern low-false-positive patterns (Supabase, DigitalOcean, Shopify, Linear, npm). Always treated as a leak.
+- **support_chat / email_marketing / payment_processors / cdn_accounts** pull the tenant or account ID out of third-party SaaS embeds (Intercom app_id, HubSpot portal, Shopify store, Cloudinary cloud, Algolia app...). The same ID on another domain ties both sites to one operator.
+- **mobile_apps** links the domain to its iOS / Android apps via app-banner and App Links meta tags and store links, pivoting to the store listing (developer, reviews, version history).
 - **cloud_buckets** finds S3, GCS, Azure Blob and DigitalOcean Spaces URLs, the usual home of misconfigured public storage.
 - **connection_strings** matches MySQL, Postgres, Mongo, Redis, AMQP, MSSQL and more; credentials are masked in the output.
 - **subdomains** surfaces dev / staging / api / internal hosts still referenced by old pages long after they went dark.
@@ -180,7 +185,7 @@ Categories that found something are surfaced first. The empty ones stay visible 
 
 The result is a single page with two views you switch between.
 
-**Categories** (default) is a rail of all 43 categories, the ones with findings first (with counts), the empty ones present but collapsed. You open one category at a time; its panel shows the findings (value, occurrences, first/last-seen, link to the source capture) and, below, its own activity: a lane per value showing when it appeared and disappeared, plus a dated change feed. "Show all" flattens every found category at once.
+**Categories** (default) is a rail of all 48 categories, the ones with findings first (with counts), the empty ones present but collapsed. You open one category at a time; its panel shows the findings (value, occurrences, first/last-seen, link to the source capture) and, below, its own activity: a lane per value showing when it appeared and disappeared, plus a dated change feed. "Show all" flattens every found category at once.
 
 **Activity** lets you tick categories and individual pivots (a specific subdomain, tracker, favicon or person) to compose a shared timeline on one year axis, so overlaps and disappearances read at a glance. It includes the favicon-evolution gallery and a global change feed.
 
@@ -287,7 +292,7 @@ backend/
     archive_rate.py   shared adaptive (AIMD) rate + concurrency governor
     archive_health.py circuit breaker: throttle vs hard IP-block detection
     runtime_config.py live-tunable registry behind the Settings panel
-    extractor/        one module per category (43) + finalize + highlights
+    extractor/        one module per category (48) + finalize + highlights
 
 frontend/             index.html + styles.css + app.js: vanilla JS, no build
                       step, dark/light themes, bilingual EN/FR, two-view report

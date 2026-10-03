@@ -29,6 +29,8 @@ ALL_CATEGORIES = [
     "github_repos", "sitemaps_and_robots", "pgp_keys",
     "bug_bounty_programs", "captcha_providers", "status_pages",
     "job_boards", "auth_providers",
+    "support_chat", "email_marketing", "payment_processors",
+    "mobile_apps", "cdn_accounts",
 ]
 
 
@@ -492,6 +494,61 @@ def finalize_accum(accum: dict, categories: list[str] | None = None) -> dict:
                     **e,
                 }
                 for k, e in accum.get("auth_providers", {}).items()
+            ]
+        ),
+        "support_chat": _cat("support_chat",
+            [
+                {
+                    "vendor": e.pop("vendor", ""),
+                    "tenant_id": e.pop("tenant_id", ""),
+                    "pivot_url": e.pop("pivot_url", ""),
+                    **e,
+                }
+                for k, e in accum.get("support_chat", {}).items()
+            ]
+        ),
+        "email_marketing": _cat("email_marketing",
+            [
+                {
+                    "platform": e.pop("platform", ""),
+                    "account_id": e.pop("account_id", ""),
+                    "pivot_url": e.pop("pivot_url", ""),
+                    **e,
+                }
+                for k, e in accum.get("email_marketing", {}).items()
+            ]
+        ),
+        "payment_processors": _cat("payment_processors",
+            [
+                {
+                    "processor": e.pop("processor", ""),
+                    "merchant_id": e.pop("merchant_id", ""),
+                    "pivot_url": e.pop("pivot_url", ""),
+                    **e,
+                }
+                for k, e in accum.get("payment_processors", {}).items()
+            ]
+        ),
+        "mobile_apps": _cat("mobile_apps",
+            [
+                {
+                    "store": e.pop("store", ""),
+                    "app_id": e.pop("app_id", ""),
+                    "pivot_url": e.pop("pivot_url", ""),
+                    **e,
+                }
+                for k, e in accum.get("mobile_apps", {}).items()
+            ]
+        ),
+        "cdn_accounts": _cat("cdn_accounts",
+            [
+                {
+                    "vendor": e.pop("vendor", ""),
+                    "account_id": e.pop("account_id", ""),
+                    "pivot_url": e.pop("pivot_url", ""),
+                    **e,
+                }
+                for k, e in accum.get("cdn_accounts", {}).items()
             ]
         ),
     }

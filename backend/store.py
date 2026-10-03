@@ -251,16 +251,23 @@ class JobStore:
     # Lookups + updates
     # ------------------------------------------------------------------
 
-    async def find_live_job_for_domain(self, domain: str) -> dict | None:
-        """Oldest queued/running job for this domain, or None.
+    async def find_live_job_for_domain(self, domain: str, owner_id: int | None) -> dict | None:
+        """The OWNER's oldest queued/running job for this domain, or None.
 
-        Launch-day guardrail: when several people submit the same domain at
-        once, later submissions attach to the scan already in flight instead
-        of doubling the archive.org load."""
+        Guardrail against the same person submitting the same domain twice: the
+        second submission attaches to the scan already in flight instead of
+        doubling the archive.org load.
+
+        Scoped to one owner, like find_recent_scan_for_domain and for the same
+        reason: attaching across accounts would tell the caller that somebody
+        else is scanning that domain right now, and then hand them the report.
+        owner_id=None is the anonymous owner (self-hosted build), not a
+        wildcard."""
         async with self._lock:
             candidates = [
                 j for j in self._jobs.values()
                 if j.get("domain") == domain
+                and j.get("user_id") == owner_id
                 and j.get("status") in ("queued", "running")
             ]
             if not candidates:

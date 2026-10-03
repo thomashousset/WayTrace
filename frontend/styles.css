@@ -255,6 +255,9 @@
       cursor: pointer; transition: all .15s var(--ease-out);
       display: flex; align-items: center; gap: 6px;
     }
+    /* display:flex above otherwise defeats the [hidden] attribute (the
+       Settings button must stay gone when the config panel is off). */
+    .nav-btn[hidden] { display: none; }
     .nav-btn:hover {
       background: var(--surface2);
       border-color: var(--border);

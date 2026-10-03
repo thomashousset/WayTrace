@@ -70,6 +70,25 @@ async def test_health(client):
 
 
 @pytest.mark.anyio
+async def test_health_reports_build_identity(client, monkeypatch):
+    """/api/health names the image it is running, so "what is deployed" is a
+    question with an answer. Empty from source, the exact commit from a built
+    image; either way the fields are always present."""
+    from config import settings
+
+    resp = await client.get("/api/health")
+    data = resp.json()
+    assert "commit" in data and "built_at" in data
+    assert data["commit"] == ""   # tests run from source, not from an image
+
+    monkeypatch.setattr(settings, "waytrace_commit", "deadbee")
+    monkeypatch.setattr(settings, "waytrace_built_at", "2026-09-06T00:00:00Z")
+    data = (await client.get("/api/health")).json()
+    assert data["commit"] == "deadbee"
+    assert data["built_at"] == "2026-09-06T00:00:00Z"
+
+
+@pytest.mark.anyio
 async def test_stats(client):
     resp = await client.get("/api/stats")
     assert resp.status_code == 200

@@ -80,6 +80,20 @@ def _item_value(category: str, item: dict) -> str | None:
         return item.get("pivot_url") or f"{item.get('platform','')}/{item.get('slug','')}"
     if category == "auth_providers":
         return item.get("pivot_url") or f"{item.get('platform','')}/{item.get('tenant','')}"
+    if category == "support_chat":
+        tid = item.get("tenant_id") or ""
+        return f"{item.get('vendor','')}:{tid}" if tid else item.get("vendor")
+    if category == "email_marketing":
+        acct = item.get("account_id") or ""
+        return f"{item.get('platform','')}:{acct}" if acct else item.get("platform")
+    if category == "payment_processors":
+        mid = item.get("merchant_id") or ""
+        return f"{item.get('processor','')}:{mid}" if mid else item.get("processor")
+    if category == "mobile_apps":
+        return item.get("pivot_url") or f"{item.get('store','')}:{item.get('app_id','')}"
+    if category == "cdn_accounts":
+        acct = item.get("account_id") or ""
+        return f"{item.get('vendor','')}:{acct}" if acct else item.get("vendor")
     # Categories whose accumulator items don't carry a top-level "value"
     # key. Without these branches the fallback `item.get("value")` returns
     # None and the finding is silently dropped at the persistence layer
