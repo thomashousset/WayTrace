@@ -93,6 +93,38 @@ MIGRATIONS: list[tuple[int, str]] = [
             value TEXT
         );
     """),
+    # v13 archive.org incident log, one row per ABNORMAL response (never per
+    # request: the successes are already counted elsewhere and a row each would
+    # bury the signal).
+    #
+    # It exists because the four failure families used to reach the circuit
+    # breaker through a single call, record_failure(), and on the index path
+    # through a single `except` clause. A 429 is a working service asking us to
+    # slow down; a TCP refusal is a damaged IP reputation; repeated 503s are
+    # their outage (measured 2026-09-07 at under 10 % of our own ceiling, from a
+    # fresh IP). Three causes, three opposite corrections, one counter each.
+    #
+    # No url_id, no user_id, no client_ip, and its own retention: like
+    # scan_activity it must outlive the scans so an incident in September can be
+    # compared with one in July, which is impossible while the only record lives
+    # in jobs.meta and dies with the purge.
+    (13, """
+        CREATE TABLE IF NOT EXISTS archive_events (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            occurred_at    TEXT NOT NULL,
+            endpoint       TEXT NOT NULL,
+            kind           TEXT NOT NULL,
+            http_status    INTEGER,
+            retry_after    INTEGER,
+            retry_after_raw TEXT,
+            server_time_ms INTEGER,
+            elapsed_ms     INTEGER,
+            rate_at_event  REAL,
+            domain         TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_archive_events_at ON archive_events(occurred_at);
+        CREATE INDEX IF NOT EXISTS idx_archive_events_kind ON archive_events(kind, occurred_at);
+    """),
 ]
 
 # Migrations whose OperationalError is expected and safe to swallow. v1/v2 ALTER
@@ -107,7 +139,7 @@ _LEGACY_ADHOC_MIGRATIONS: set[int] = {1, 2}
 # "duplicate column name" on the next boot and crash-loop the app). Statements
 # here are only forgiven for the "already applied" errors below, never for a
 # genuine failure.
-_IDEMPOTENT_MIGRATIONS: set[int] = {7, 8, 9, 10}
+_IDEMPOTENT_MIGRATIONS: set[int] = {7, 8, 9, 10, 11, 12, 13}
 _ALREADY_APPLIED = ("duplicate column name", "already exists")
 
 _db_path: str | None = None
@@ -302,17 +334,23 @@ async def save_job(
         await db.close()
 
 
-async def count_jobs_last_days(days: int = 7) -> int:
-    """Scans submitted in the rolling last N days, any status. created_at is
-    ISO with a 'T'; datetime('now') uses a space, so normalise before comparing."""
+async def last_scan_created_at() -> str | None:
+    """When the most recent scan was submitted, ISO, or None on an empty base.
+
+    Any status: a scan that is still running is the freshest sign of life there
+    is, and waiting for it to finish would make the homepage claim the service
+    is idler than it is.
+
+    No time window. If the last scan is forty days old the honest answer is
+    "forty days ago", not "none": the caller is reporting freshness, and hiding
+    an old timestamp behind a cutoff would be the same flattery as the weekly
+    counter this replaced.
+    """
     db = await get_db()
     try:
-        cur = await db.execute(
-            "SELECT COUNT(*) FROM jobs WHERE replace(created_at, 'T', ' ') >= datetime('now', ?)",
-            (f"-{int(days)} days",),
-        )
+        cur = await db.execute("SELECT MAX(created_at) FROM jobs")
         row = await cur.fetchone()
-        return int(row[0]) if row else 0
+        return row[0] if row and row[0] else None
     finally:
         await db.close()
 
@@ -451,9 +489,8 @@ async def delete_job(url_id: str) -> bool:
     """Hard-delete a single job row by url_id. Returns True if a row was removed.
 
     The jobs table is self-contained (findings live in the row's JSON
-    ``results`` column), so a single DELETE fully removes the scan; the public
-    feed excludes it immediately since list_feed only returns existing rows.
-    Also drops the scan's full-text page index.
+    ``results`` column), so a single DELETE fully removes the scan. Also drops
+    the scan's full-text page index, which lives in its own table.
     """
     db = await get_db()
     try:

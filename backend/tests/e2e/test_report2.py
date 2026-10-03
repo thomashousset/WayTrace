@@ -290,7 +290,10 @@ def test_applyfilters_is_null_safe_without_the_old_table(live_server, page):
 def test_empty_scan_shows_a_no_findings_state(live_server, page):
     _open_with(page, live_server, [])   # a scan that found nothing
     assert page.locator("#r2-main .r2-noresults").count() == 1
-    assert "43" in page.locator("#r2-main .r2-noresults").inner_text()
+    # The count comes from the category list, so the test reads it the same way
+    # rather than pinning a number: a hardcoded 43 is what let the UI drift.
+    total = page.evaluate("REPORT2_SCOPE.length")
+    assert str(total) in page.locator("#r2-main .r2-noresults").inner_text()
 
 
 def test_rail_keyboard_navigation(live_server, page):
@@ -330,9 +333,9 @@ def test_summary_strip_shows_stats(live_server, page):
     _open_with(page, live_server, PRES)
     txt = page.locator("#r2-summary").inner_text()
     assert "3" in txt          # 3 findings
-    assert "43" in txt         # X/43 categories
+    assert str(page.evaluate("REPORT2_SCOPE.length")) in txt   # X/N categories
     # Presence segmented control present with live/gone counts.
-    assert page.locator("#r2-summary .r2-preseg").count() == 3
+    assert page.locator("#r2-summary .wt-tab").count() == 3
 
 
 def test_presence_filter_narrows_to_still_present(live_server, page):
@@ -342,11 +345,11 @@ def test_presence_filter_narrows_to_still_present(live_server, page):
     assert page.locator("#r2-main .r2-row", has_text="live@x.com").count() == 1
     assert page.locator("#r2-main .r2-row", has_text="gone@x.com").count() == 1
     # Click "Still present" -> only the live one remains.
-    page.locator(".r2-preseg", has_text="Still present").click()
+    page.locator(".wt-tab", has_text="Still present").click()
     assert page.locator("#r2-main .r2-row", has_text="live@x.com").count() == 1
     assert page.locator("#r2-main .r2-row", has_text="gone@x.com").count() == 0
     # "Disappeared" -> only the gone one.
-    page.locator(".r2-preseg", has_text="Disappeared").click()
+    page.locator(".wt-tab", has_text="Disappeared").click()
     assert page.locator("#r2-main .r2-row", has_text="gone@x.com").count() == 1
     assert page.locator("#r2-main .r2-row", has_text="live@x.com").count() == 0
 
@@ -385,7 +388,7 @@ def test_presence_bound_stable_after_opening_an_old_category(live_server, page):
     page.locator(".r2-rlink", has_text="Emails").first.click()
     # Now filter to "Still present": ONLY www.x.com (2025) should qualify; the 2018
     # emails must NOT be counted live.
-    page.locator(".r2-preseg", has_text="Still present").click()
+    page.locator(".wt-tab", has_text="Still present").click()
     page.locator(".r2-rlink", has_text="Subdomains").first.click()
     assert page.locator("#r2-main .r2-row", has_text="www.x.com").count() == 1
     page.locator(".r2-rlink", has_text="Emails").first.click()
@@ -416,7 +419,7 @@ def test_copy_column_respects_presence_filter(live_server, page):
     page.context.grant_permissions(["clipboard-read", "clipboard-write"])
     _open_with(page, live_server, GLOBALHI)
     page.locator(".r2-rlink", has_text="Subdomains").first.click()
-    page.locator(".r2-preseg", has_text="Disappeared").click()
+    page.locator(".wt-tab", has_text="Disappeared").click()
     # Subdomains has only the live www.x.com -> under "Disappeared" nothing shows,
     # so copy column copies nothing (not the full category).
     page.locator(".r2-rlink", has_text="Emails").first.click()
@@ -445,3 +448,112 @@ def test_favicon_source_url_with_quote_does_not_inject(live_server, page):
     assert "window.__xss" not in (img.first.get_attribute("onerror") or "")
     # And nothing executed.
     assert page.evaluate("() => window.__xss") in (None, 0)
+
+
+def test_switching_language_relabels_the_report_without_losing_the_place(live_server, page, tmp_path):
+    """applyI18n only repaints data-i18n elements, so the report, which builds
+    every label in JS, kept whatever language it first rendered in. Switching
+    to English on a French report changed nothing at all."""
+    import json
+    from datetime import datetime, timedelta, timezone
+    # A scan with two categories, so there is a place to be in.
+    import sqlite3
+    import urllib.request
+    now = datetime.now(timezone.utc)
+    payload = {
+        "url_id": "langswitch0000000000000", "domain": "lang-demo.com",
+        "status": "completed",
+        "results": {
+            "emails": [{"value": "a@lang-demo.com", "first_seen": "2019-01",
+                        "last_seen": "2021-01", "occurrences": 3}],
+            "subdomains": [{"value": "api.lang-demo.com", "first_seen": "2018-01",
+                            "last_seen": "2022-01", "occurrences": 9}],
+        },
+    }
+    page.goto(live_server + "/", wait_until="networkidle")
+    page.evaluate("(p) => { window.__T = p; }", payload)
+    page.evaluate("""() => {
+      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+      renderPublicScan(window.__T);
+    }""")
+    page.evaluate("() => setLang('fr')")
+    page.wait_for_timeout(500)
+    page.evaluate("() => report2OpenCat('subdomains')")
+    page.wait_for_timeout(300)
+    before = page.evaluate("() => report2State.openCat")
+    fr = page.evaluate("() => [...document.querySelectorAll('.wt-tab')].map(e => e.innerText.trim())")
+
+    page.evaluate("() => setLang('en')")
+    page.wait_for_timeout(600)
+    en = page.evaluate("() => [...document.querySelectorAll('.wt-tab')].map(e => e.innerText.trim())")
+    assert fr != en, "the report ignored the language switch"
+    assert any("All" in t for t in en)
+    # and the reader is still where they were
+    assert page.evaluate("() => report2State.openCat") == before
+
+
+def test_the_report_prints_legibly_under_every_palette(live_server, page):
+    """The print block repaints the design tokens, but the themes page applies
+    a palette as inline styles on documentElement, and inline beats any
+    stylesheet rule. Ten of the twenty presets retint the text ramp, and those
+    printed near-white on white paper: the exact bug the print block exists to
+    prevent, still live for half the palettes."""
+    page.goto(live_server + "/", wait_until="networkidle")
+    page.emulate_media(media="print")
+    worst = []
+    for preset in ("truffe", "fjord", "retro", "vampire", "tokyo", "pastel",
+                   "mousse", "estampe", "solaire", "horizon", "terminal"):
+        page.evaluate("(p) => setThemePref({preset: p, mode: 'dark'})", preset)
+        page.wait_for_timeout(120)
+        ratio = page.evaluate("""() => {
+          const cs = getComputedStyle(document.body);
+          const lum = (c) => {
+            const [r, g, b] = c.match(/\\d+/g).slice(0, 3).map(Number).map(v => v / 255);
+            const f = (v) => v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+            return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+          };
+          const a = lum(cs.backgroundColor), b = lum(cs.color);
+          return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+        }""")
+        if ratio < 4.5:
+            worst.append((preset, round(ratio, 2)))
+    assert worst == [], f"unreadable on paper: {worst}"
+
+
+def _header_text(page, meta):
+    page.evaluate("""(m) => {
+      renderResultsHeader({name: 'x.test', scanMeta: m, total_findings: 12});
+    }""", meta)
+    page.wait_for_timeout(120)
+    return page.inner_text("#res-meta")
+
+
+def test_the_coverage_sentence_never_invents_a_zero(live_server, page):
+    """A written 0 is a fact; a missing key is not zero. The sentence ran the
+    page count through Number(v || 0), so a scan whose meta had no
+    pages_scraped announced "0 pages were retrieved and analysed" directly
+    under a headline saying thousands of snapshots were analysed, with the
+    findings from those pages listed below it."""
+    page.goto(live_server + "/", wait_until="networkidle")
+    page.evaluate("() => setLang('en')")
+
+    # A real zero, written by the no-HTML-snapshots path, must still be said.
+    real_zero = _header_text(page, {"snapshots_analyzed": 0, "pages_scraped": 0,
+                                    "total_snapshots_found": 40})
+    assert "0" in real_zero
+
+    # An absent count must not become one. Match on a standalone zero: the
+    # fallback value 4,800 ends in "0 pages" as a substring.
+    import re
+    bare_zero = re.compile(r"(?<![\d,])0 pages")
+    unknown = _header_text(page, {"snapshots_analyzed": 4800,
+                                  "total_snapshots_found": 5200})
+    assert not bare_zero.search(unknown), unknown
+    # Name the count in the sentence, not merely somewhere in the block: the
+    # headline above says "4,800 snapshots analysed" too, so a looser check
+    # passes even when the fallback is gone. Mutation testing caught that.
+    assert "4,800 pages" in unknown or "4800 pages" in unknown, unknown
+
+    # Nothing known at all: no number claimed.
+    silent = _header_text(page, {"total_findings": 12})
+    assert not bare_zero.search(silent), silent

@@ -31,14 +31,30 @@ def compute_highlights(results: dict, domain: str) -> list[dict]:
     """Analyze extraction results and generate prioritized OSINT highlights."""
     highlights: list[dict] = []
 
-    def _add(severity: str, category: str, title: str, detail: str, pivot_tip: str) -> None:
-        highlights.append({
+    def _add(
+        severity: str,
+        category: str,
+        title: str,
+        detail: str,
+        pivot_tip: str,
+        values: list | None = None,
+    ) -> None:
+        """*values* names the findings this highlight covers, and must be given
+        whenever the highlight describes only some of its category. A reader
+        that cannot tell which values are meant has to apply the severity to
+        the whole category, which is how a public-by-design key ended up
+        labelled a leak alongside the secret one next to it. Left out, the
+        highlight is understood to cover everything in its category."""
+        entry = {
             "severity": severity,
             "category": category,
             "title": title,
             "detail": detail,
             "pivot_tip": pivot_tip,
-        })
+        }
+        if values is not None:
+            entry["values"] = [v for v in values if v]
+        highlights.append(entry)
 
     # ----- LEAK: things the target didn't mean to publish ----------------
     api_keys = results.get("api_keys", [])
@@ -51,6 +67,7 @@ def compute_highlights(results: dict, domain: str) -> list[dict]:
             f"{len(secret_keys)} secret API key(s) exposed ({', '.join(sorted(types))})",
             ", ".join(k.get("value", "")[:20] + "..." for k in secret_keys[:5]),
             "Test if key is still active; rotate if you own it",
+            values=[k.get("value") for k in secret_keys],
         )
     if public_keys:
         types = set(k.get("type", "Unknown") for k in public_keys)
@@ -59,6 +76,7 @@ def compute_highlights(results: dict, domain: str) -> list[dict]:
             f"{len(public_keys)} public-by-design API key(s) ({', '.join(sorted(types))})",
             ", ".join(k.get("value", "")[:20] + "..." for k in public_keys[:5]),
             "Frontend SDK / OAuth client IDs cluster sites on the same operator account",
+            values=[k.get("value") for k in public_keys],
         )
 
     cloud_buckets = results.get("cloud_buckets", [])
@@ -78,6 +96,7 @@ def compute_highlights(results: dict, domain: str) -> list[dict]:
             f"{len(cred_conns)} connection string(s) with credentials ({', '.join(sorted(types))})",
             ", ".join(c.get("value", "")[:60] for c in cred_conns[:3]),
             "Credentials were in the archived HTML. assume compromised, rotate",
+            values=[x.get("value") for x in cred_conns],
         )
 
     dirlistings = results.get("directory_listings", [])
@@ -87,6 +106,7 @@ def compute_highlights(results: dict, domain: str) -> list[dict]:
             f"{len(dirlistings)} directory listing(s) exposed in archive",
             ", ".join(d.get("path", "") for d in dirlistings[:5]),
             "Check if the listed files are still reachable",
+            values=[x.get("value") for x in dirlistings],
         )
 
     sensitive_jwts = [j for j in results.get("jwt_tokens", []) if j.get("sensitive_claims")]
@@ -96,6 +116,7 @@ def compute_highlights(results: dict, domain: str) -> list[dict]:
             f"{len(sensitive_jwts)} JWT token(s) with sensitive claims",
             ", ".join(", ".join(j.get("sensitive_claims", []))[:60] for j in sensitive_jwts[:3]),
             "Decode claims; if alg is 'none' or RS256→HS256 is accepted, test forged signatures",
+            values=[x.get("value") for x in sensitive_jwts],
         )
 
     ips = results.get("internal_ips", [])
@@ -105,6 +126,7 @@ def compute_highlights(results: dict, domain: str) -> list[dict]:
             f"{len(ips)} internal IP address(es) leaked",
             ", ".join(i.get("ip", "") for i in ips[:5]),
             "169.254.169.254 = AWS IMDS SSRF evidence; RFC1918 IPs map internal network topology",
+            values=[x.get("value") for x in ips],
         )
 
     # ----- PIVOT: the next breadcrumb ------------------------------------
@@ -132,6 +154,7 @@ def compute_highlights(results: dict, domain: str) -> list[dict]:
             f"{len(named_emails)} named mailbox(es) @{domain}",
             ", ".join(e.get("value", "") for e in named_emails[:5]),
             "Cross-check on HIBP, LinkedIn, GitHub commits. Staff naming scheme = guessable peers",
+            values=[x.get("value") for x in named_emails],
         )
 
     endpoints = results.get("endpoints", [])
@@ -142,6 +165,7 @@ def compute_highlights(results: dict, domain: str) -> list[dict]:
             f"{len(interesting_endpoints)} admin / API / auth endpoint(s) archived",
             ", ".join(e.get("path", "") for e in interesting_endpoints[:5]),
             "Check each path live. old staging paths often survive deploys",
+            values=[x.get("value") for x in interesting_endpoints],
         )
 
     trackers = results.get("analytics_trackers", [])
@@ -152,6 +176,7 @@ def compute_highlights(results: dict, domain: str) -> list[dict]:
             f"{len(trackers)} analytics tracker ID(s) ({', '.join(sorted(types))})",
             ", ".join(f"{t.get('type', '')}:{t.get('id', '')}" for t in trackers[:5]),
             "Same tracker ID across domains ⇒ same operator. Use PublicWWW / BuiltWith for pivot",
+            values=[x.get("value") for x in trackers],
         )
 
     persons = results.get("persons", [])
@@ -199,6 +224,7 @@ def compute_highlights(results: dict, domain: str) -> list[dict]:
             f"{len(changed_favs)} favicon change(s) detected",
             ", ".join(f.get("url", "")[:60] for f in changed_favs[:3]),
             "Hash the favicon with mmh3 → Shodan http.favicon.hash: and Censys services.http.response.favicons.hash",
+            values=[x.get("value") for x in changed_favs],
         )
 
     crypto = results.get("crypto_addresses", [])
@@ -209,6 +235,7 @@ def compute_highlights(results: dict, domain: str) -> list[dict]:
             f"{len(crypto)} cryptocurrency address(es) ({', '.join(sorted(types))})",
             ", ".join(c.get("address", "")[:20] + "..." for c in crypto[:3]),
             "Trace on blockchain explorer; same address across domains ⇒ same operator",
+            values=[x.get("value") for x in crypto],
         )
 
     verif = results.get("verification_tags", [])
@@ -219,6 +246,7 @@ def compute_highlights(results: dict, domain: str) -> list[dict]:
             f"{len(verif)} domain verification tag(s) ({', '.join(sorted(services))})",
             ", ".join(f"{v.get('service', '')}:{v.get('verification_id', '')[:20]}" for v in verif[:3]),
             "Some services (google-site-verification) chain to the registrant account",
+            values=[x.get("value") for x in verif],
         )
 
     adsense = results.get("adsense_ids", [])
@@ -239,6 +267,7 @@ def compute_highlights(results: dict, domain: str) -> list[dict]:
             f"{len(hidden)} hidden form field(s)",
             ", ".join(f"{h.get('name', '')}={h.get('value', '')[:30]}" for h in hidden[:3]),
             "Check for CSRF tokens, workflow states, internal IDs",
+            values=[x.get("value") for x in pubs],
         )
 
     sensitive_js = [
@@ -251,6 +280,7 @@ def compute_highlights(results: dict, domain: str) -> list[dict]:
             f"{len(sensitive_js)} sensitive URL(s) in JavaScript",
             ", ".join(u.get("url", "")[:80] for u in sensitive_js[:3]),
             "Archive.org caches unminified bundles. scan for endpoints / API shape clues",
+            values=[x.get("value") for x in sensitive_js],
         )
 
     github_repos = results.get("github_repos", [])
@@ -299,6 +329,7 @@ def compute_highlights(results: dict, domain: str) -> list[dict]:
             f"{len(payments)} merchant id(s)",
             ", ".join(f"{c.get('processor', '')}:{c.get('merchant_id', '')}" for c in payments[:5]),
             "A Shopify store number / PayPal button / Paddle vendor reused elsewhere ⇒ same seller",
+            values=[x.get("value") for x in payments],
         )
 
     cdn_accounts = results.get("cdn_accounts", [])
@@ -332,6 +363,7 @@ def compute_highlights(results: dict, domain: str) -> list[dict]:
             f"{len(pivot_disclosures)} disclosure file(s) ({', '.join(kinds)})",
             ", ".join(s.get("url", "")[:80] for s in pivot_disclosures[:3]),
             "Fetch directly: security.txt → researcher contact; ads.txt → ad network pivots",
+            values=[x.get("value") for x in pivot_disclosures],
         )
 
     # ----- CONTEXT: understanding the target -----------------------------
@@ -379,6 +411,7 @@ def compute_highlights(results: dict, domain: str) -> list[dict]:
             f"{len(informational_sitemaps)} sitemap/robots/humans file(s) ({', '.join(kinds)})",
             ", ".join(s.get("url", "")[:80] for s in informational_sitemaps[:3]),
             "Sitemaps enumerate site structure; humans.txt sometimes exposes the team",
+            values=[x.get("value") for x in informational_sitemaps],
         )
 
     # ----- BACKGROUND: bundled once so the panel isn't cluttered ---------
@@ -399,6 +432,7 @@ def compute_highlights(results: dict, domain: str) -> list[dict]:
             (", ".join(f"{s.get('platform', '')}:{s.get('handle', '')}" for s in socials[:3])
              if socials else ""),
             "Useful for profile confirmation and content-timing checks",
+            values=[x.get("value") for x in socials],
         )
 
     highlights.sort(key=lambda h: (SEVERITY_ORDER.get(h["severity"], 99), h["category"]))

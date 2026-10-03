@@ -92,24 +92,35 @@ async def test_worker_loop_swallows_errors_and_keeps_running():
     s = JobStore()
     calls = []
 
-    async def fake_take_next_raises():
+    async def fake_run(jid):
+        pass
+
+    # Wait for the third tick instead of sleeping a fixed 0.1s and hoping three
+    # 0.01s ticks fit inside it. They did on an idle machine and did not under
+    # the full suite, which made this fail for reasons that had nothing to do
+    # with the behaviour under test. The generous ceiling is only there so a
+    # loop that really does die still fails the test rather than hanging.
+    reached = asyncio.Event()
+
+    async def fake_take_next_raises_and_signal():
         calls.append(1)
+        if len(calls) >= 3:
+            reached.set()
         if len(calls) < 3:
             raise RuntimeError("boom")
         return None
 
-    s.take_next = fake_take_next_raises  # type: ignore[assignment]
-
-    async def fake_run(jid):
-        pass
+    s.take_next = fake_take_next_raises_and_signal  # type: ignore[assignment]
 
     task = asyncio.create_task(queue_worker_loop(s, fake_run, tick_seconds=0.01))
-    await asyncio.sleep(0.1)
-    task.cancel()
     try:
-        await task
-    except asyncio.CancelledError:
-        pass
+        await asyncio.wait_for(reached.wait(), timeout=10)
+    finally:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
     assert len(calls) >= 3  # loop kept ticking past the exceptions
 
 

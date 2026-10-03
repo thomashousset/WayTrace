@@ -10,7 +10,7 @@ import aiohttp
 from loguru import logger
 
 from config import settings
-from services import archive_health, archive_rate
+from services import archive_events, archive_health, archive_rate, identity
 from services.filters import is_usable_capture  # the HTML/200 selection CDX used to do
 from services.scraper import _get_global_sem  # shared archive.org concurrency cap
 
@@ -100,6 +100,30 @@ def _attempt_timeout(deadline: float, request_timeout: int, now: float | None = 
     """
     remaining = deadline - (time.monotonic() if now is None else now)
     return max(0.0, min(float(request_timeout), remaining))
+
+
+async def _record_index_failure(
+    exc: BaseException, domain: str, started: float, *, endpoint: str,
+) -> None:
+    """Log one index-phase failure under its real name.
+
+    A ClientResponseError carries the status archive.org actually returned, so a
+    503 is recorded as their outage rather than as our expiry. Anything else is
+    a network-level failure, where only a TCP refusal means "this IP is being
+    rejected".
+    """
+    if isinstance(exc, aiohttp.ClientResponseError):
+        kind = archive_events.classify_status(exc.status) or "http_5xx"
+        status = exc.status
+    else:
+        kind = archive_events.classify_exception(exc)
+        status = None
+    await archive_events.record(
+        kind, endpoint=endpoint, http_status=status,
+        elapsed_ms=int((time.monotonic() - started) * 1000),
+        rate_at_event=archive_rate.current_rate_per_minute(),
+        domain=domain,
+    )
 
 
 def build_cdx_params(
@@ -195,8 +219,9 @@ async def cdx_size_probe(
     """
     url = f"{CDX_URL}?url=*.{domain}/*&showNumPages=true"
     timeout = aiohttp.ClientTimeout(total=request_timeout)
+    headers = {"User-Agent": await identity.current_user_agent()}
     try:
-        async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
             async with archive_rate.slot(_get_global_sem()), session.get(url, allow_redirects=False) as resp:
                 if resp.status != 200:
                     return {
@@ -345,7 +370,13 @@ async def fetch_cdx_snapshots(
             f"{archive_health.seconds_remaining()}s before more requests"
         )
 
-    async with aiohttp.ClientSession(timeout=timeout) as session:
+    # Same identity as the scraper (services/identity.py). archive.org's only
+    # written requirement for automated access is a descriptive User-Agent
+    # naming the tool and its version; this session used to send none, so every
+    # index request went out as aiohttp's default "Python/3.x aiohttp/3.y".
+    # The session headers cover the resume pages too, which reuse it.
+    headers = {"User-Agent": await identity.current_user_agent()}
+    async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
         for attempt in range(1 + retries):
             # Honour the wall-clock budget BEFORE issuing another retry.
             # Without this a 120s-per-request timeout × 4 retries can sit
@@ -360,6 +391,12 @@ async def fetch_cdx_snapshots(
             # busy. What is recorded below is the HTTP request alone.
             _request_seconds = 0.0
             _rate_limited = False
+            # Start of the attempt, including the wait for a permit and a rate
+            # token. _request_start below times the HTTP call alone and feeds
+            # record_latency; this one times what the incident log reports, so a
+            # failure that happened while queueing is not read as archive.org
+            # being slow.
+            _attempt_start = time.monotonic()
             try:
                 async with archive_rate.slot(_get_global_sem()):
                     # Recomputed here, not before the slot: waiting for a permit
@@ -386,6 +423,15 @@ async def fetch_cdx_snapshots(
                             # holds one of the few global permits.
                             archive_health.record_failure()
                             _rate_limited = True
+                            await archive_events.record(
+                                "http_429", endpoint="cdx", http_status=429,
+                                retry_after_raw=resp.headers.get("Retry-After"),
+                                server_time_ms=archive_events.server_time_ms_from(
+                                    resp.headers),
+                                elapsed_ms=int((time.monotonic() - _attempt_start) * 1000),
+                                rate_at_event=archive_rate.current_rate_per_minute(),
+                                domain=domain,
+                            )
                         else:
                             resp.raise_for_status()
                             raw = await resp.read()
@@ -394,6 +440,12 @@ async def fetch_cdx_snapshots(
             except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
                 last_error = exc
                 archive_health.record_failure()
+                # Name what happened. This single branch used to swallow a 503,
+                # an expiry and a TCP refusal alike, which is why an IP block
+                # during the index phase was indistinguishable from a slow
+                # archive.org. The breaker's behaviour is deliberately left
+                # untouched here: this lot observes, it does not yet correct.
+                await _record_index_failure(exc, domain, _attempt_start, endpoint="cdx")
                 if archive_health.is_open():
                     # archive.org is unhealthy; bail out instead of hammering.
                     break
@@ -518,6 +570,7 @@ async def _fetch_cdx_resume(
         params = build_cdx_params(domain, resume_key=current_key)
 
         throttled = False
+        _attempt_start = time.monotonic()
         try:
             async with archive_rate.slot(_get_global_sem()):
                 # Same clamp as the first page: a page started just under the
@@ -530,6 +583,23 @@ async def _fetch_cdx_resume(
                     kwargs["timeout"] = aiohttp.ClientTimeout(total=left)
                 async with session.get(CDX_URL, params=params,
                                        allow_redirects=False, **kwargs) as resp:
+                    # Counted under their own endpoint: a resume page is not
+                    # bounded by `limit` the way the first one is, so the two do
+                    # not break for the same reasons and merging them would hide
+                    # that. This whole branch used to `break` in silence, so a
+                    # resume page answering 503 existed nowhere.
+                    _incident = archive_events.classify_status(resp.status)
+                    if _incident is not None:
+                        await archive_events.record(
+                            _incident, endpoint="cdx_resume",
+                            http_status=resp.status,
+                            retry_after_raw=resp.headers.get("Retry-After"),
+                            server_time_ms=archive_events.server_time_ms_from(
+                                resp.headers),
+                            elapsed_ms=int((time.monotonic() - _attempt_start) * 1000),
+                            rate_at_event=archive_rate.current_rate_per_minute(),
+                            domain=domain,
+                        )
                     if resp.status == 429:
                         throttled = True
                     elif resp.status != 200:
@@ -538,6 +608,8 @@ async def _fetch_cdx_resume(
                     else:
                         raw = await resp.read()
         except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+            await _record_index_failure(exc, domain, _attempt_start,
+                                        endpoint="cdx_resume")
             logger.warning("CDX resume fetch failed on page {}: {}", page + 1, exc)
             break
 

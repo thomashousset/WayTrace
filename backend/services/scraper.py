@@ -9,7 +9,7 @@ import aiohttp
 from loguru import logger
 
 from config import settings
-from services import archive_health, archive_rate
+from services import archive_events, archive_health, archive_rate
 from services.net_guard import GuardedResolver, guarded_wayback_get
 from store import store
 
@@ -226,6 +226,7 @@ async def scrape_snapshots(
                         "html": None, "error": "blocked",
                     }
                     break
+                _attempt_start = time.monotonic()
                 try:
                     # Process-wide rate ceiling: spaces requests so a burst
                     # never exceeds archive.org's tolerance (IP-block guard).
@@ -233,6 +234,16 @@ async def scrape_snapshots(
                     async with guarded_wayback_get(session, url) as resp:
                         status = resp.status
                         retry_after = _parse_retry_after(resp.headers.get("Retry-After"))
+                        _incident = archive_events.classify_status(status)
+                        if _incident is not None:
+                            await archive_events.record(
+                                _incident, endpoint="replay", http_status=status,
+                                retry_after_raw=resp.headers.get("Retry-After"),
+                                server_time_ms=archive_events.server_time_ms_from(
+                                    resp.headers),
+                                elapsed_ms=int((time.monotonic() - _attempt_start) * 1000),
+                                rate_at_event=archive_rate.current_rate_per_minute(),
+                            )
                         if status == 429:
                             archive_health.record_failure()
                             _rate_limit_hits["count"] += 1
@@ -313,6 +324,14 @@ async def scrape_snapshots(
                             break
                 except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
                     is_throttle = isinstance(exc, _THROTTLE_ERRORS)
+                    # A refusal and a mid-flight drop are counted apart: only the
+                    # first says this IP is being rejected, and it is the number
+                    # a rollback decision reads.
+                    await archive_events.record(
+                        archive_events.classify_exception(exc), endpoint="replay",
+                        elapsed_ms=int((time.monotonic() - _attempt_start) * 1000),
+                        rate_at_event=archive_rate.current_rate_per_minute(),
+                    )
                     logger.debug(
                         "Scrape failed for {} (attempt {}/{}): {}",
                         url, attempt + 1, 1 + settings.scrape_max_retries, exc,

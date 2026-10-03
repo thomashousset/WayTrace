@@ -28,11 +28,23 @@ _ua_cache: str | None = None
 _id_lock = asyncio.Lock()
 
 
+# 4 bytes, not 3. At 3 bytes (16.7M values) a thousand installs already carry a
+# ~3% chance that two of them share an id, and five thousand make a collision
+# more likely than not. Two instances sharing an id is exactly the failure this
+# whole mechanism exists to prevent: archive.org can no longer tell a polite
+# instance from an impolite one. 4 bytes drops five thousand installs to ~0.3%
+# and costs two characters in the header.
+_ID_BYTES = 4
+
+
 async def get_instance_id() -> str:
-    """Stable per-instance token (6 hex chars). Generated once, then persisted
-    in app_state and cached in memory; never rotates. A DB failure degrades to
-    an ephemeral in-memory id rather than failing the caller's request (the UA
-    is on the archive.org hot path and must never raise)."""
+    """Stable per-instance token (hex). Generated once, then persisted in
+    app_state and cached in memory; **never rotates** - a rotating id would read
+    as evasion to archive.org, which is the opposite of the point. Instances
+    created before _ID_BYTES grew keep their shorter id for the same reason.
+    A DB failure degrades to an ephemeral in-memory id rather than failing the
+    caller's request (the UA is on the archive.org hot path and must never
+    raise)."""
     global _instance_id
     if _instance_id is not None:
         return _instance_id
@@ -45,12 +57,12 @@ async def get_instance_id() -> str:
             if stored:
                 _instance_id = stored.strip()
             else:
-                _instance_id = secrets.token_hex(3)
+                _instance_id = secrets.token_hex(_ID_BYTES)
                 await set_app_state(_STATE_KEY, _instance_id)
         except Exception:
             # Persist failed: use a process-lifetime id so requests still go out.
             if _instance_id is None:
-                _instance_id = secrets.token_hex(3)
+                _instance_id = secrets.token_hex(_ID_BYTES)
     return _instance_id
 
 

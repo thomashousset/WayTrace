@@ -1,6 +1,12 @@
+# A scan URL carries a 24-char url_id that is the credential: whoever holds
+# the link reads the scan. Nothing on the site links to one, so a crawler only
+# finds a scan if the person who ran it posted the link somewhere, which is
+# exactly when indexing it would turn their share into a permanent record.
+# The pages themselves also send X-Robots-Tag: noindex, for the crawler that
+# fetched the URL without reading this file.
 User-agent: *
 Allow: /$
-Allow: /s/
 Allow: /icons/
 Allow: /manifest.webmanifest
+Disallow: /s/
 Disallow: /api/

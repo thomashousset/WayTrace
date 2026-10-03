@@ -5,7 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>WayTrace · OSINT recon through the Wayback Machine</title>
   <meta name="description" content="OSINT recon tool. Reconstruct a domain's public history from what the Wayback Machine has already archived. Educational, professional, and defensive use only.">
-  <meta name="theme-color" content="#1C1B18">
+  <!-- The default palette's ground. app.js keeps it in step with the
+       mode and the themes page from there on. -->
+  <meta name="theme-color" content="#151311">
   <meta name="color-scheme" content="dark light">
 
   <!-- Preconnect to the font CDN so the woff2 fetch can start in parallel
@@ -63,6 +65,7 @@
   </script>
 </head>
 <body>
+<a class="skip-link" href="#wt-main" data-i18n="skip.main">Skip to the main content</a>
 
 <!-- Navbar -->
 <nav class="navbar">
@@ -74,25 +77,30 @@
     <button class="nav-scan-btn" id="scan-btn" onclick="startScan()" data-i18n="nav.scan">Scan</button>
   </div>
   <div class="nav-actions">
-    <button class="nav-btn nav-theme-btn" id="theme-btn" onclick="toggleTheme()" type="button" aria-label="Toggle light or dark theme" title="Toggle light or dark theme">
-      <span class="nav-btn-text" id="theme-btn-label">Light</span>
-    </button>
-    <div class="lang-switch" id="lang-switch" role="group" aria-label="Language / Langue">
-      <button class="lang-opt" data-lang="en" type="button" onclick="setLang('en')" title="English"><span class="lang-flag">🇬🇧</span><span class="lang-code">EN</span></button>
-      <button class="lang-opt" data-lang="fr" type="button" onclick="setLang('fr')" title="Français"><span class="lang-flag">🇫🇷</span><span class="lang-code">FR</span></button>
-    </div>
     <button class="nav-btn" id="history-btn" onclick="location.hash='#/history'" data-i18n="nav.history">History</button>
     <button class="nav-btn" id="nav-settings-btn" hidden onclick="location.hash='#/config'" data-i18n="nav.settings">Settings</button>
+    <div class="nav-menu" id="pref-wrap">
+      <button class="nav-icon" id="pref-btn" type="button" aria-haspopup="menu" aria-expanded="false"
+              onclick="togglePrefMenu()" aria-label="Appearance and language" title="Appearance and language">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18c1 0 1.6-.7 1.6-1.5 0-.5-.2-.8-.5-1.1-.3-.3-.5-.7-.5-1.1 0-.8.7-1.5 1.5-1.5H16a5 5 0 0 0 5-5c0-4.4-4-8-9-8z"/><circle cx="7.5" cy="11.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="10.5" cy="7.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="15" cy="8.5" r="1.1" fill="currentColor" stroke="none"/></svg>
+      </button>
+      <div class="nav-drop" id="pref-menu" role="menu" hidden></div>
+    </div>
+    <a class="nav-icon" id="source-btn" href="https://github.com/thomashousset/WayTrace" target="_blank" rel="noopener" aria-label="Source on GitHub" title="Source on GitHub">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C6.5 2 2 6.6 2 12.2c0 4.5 2.9 8.3 6.8 9.7.5.1.7-.2.7-.5v-1.7c-2.8.6-3.4-1.4-3.4-1.4-.4-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.6 2.4 1.1 3 .9.1-.7.4-1.1.6-1.4-2.2-.3-4.6-1.2-4.6-5.1 0-1.1.4-2 1-2.7-.1-.3-.4-1.3.1-2.7 0 0 .8-.3 2.7 1a9 9 0 0 1 5 0c1.9-1.3 2.7-1 2.7-1 .5 1.4.2 2.4.1 2.7.6.7 1 1.6 1 2.7 0 3.9-2.3 4.8-4.6 5 .4.3.7 1 .7 2v3c0 .3.2.6.7.5A10.2 10.2 0 0 0 22 12.2C22 6.6 17.5 2 12 2z"/></svg>
+    </a>
   </div>
 </nav>
 <div id="archive-banner" class="archive-banner" hidden role="status"></div>
 
 
-<!-- Views -->
+<!-- Views. Wrapped in a main landmark so a screen reader can jump past the
+     navigation, and reachable by keyboard through the skip link above. -->
+<main id="wt-main">
 <div id="view-home" class="view">
   <div class="home-hero">
     <h1 class="home-title">Way<span>Trace</span></h1>
-    <p class="home-tagline" data-i18n="home.tagline">The internet never forgets.</p>
+    <p class="home-tagline" data-i18n-html="home.tagline">The internet <span class="dotmark">never forgets.</span></p>
     <p class="home-sub" data-i18n-html="home.sub">OSINT tool for researchers and professionals. Reveal what a domain has exposed over time (emails, subdomains, tech, leaks) from the <a href="https://web.archive.org" target="_blank" rel="noopener">Wayback Machine</a> archive.</p>
     <form class="home-search" onsubmit="event.preventDefault(); document.getElementById('domain-input').value = this.querySelector('.home-search-input').value.trim(); if (document.getElementById('domain-input').value) startAdvancedScan();">
       <input class="home-search-input" type="text" placeholder="example.com" spellcheck="false" autocomplete="off" autocapitalize="off" autofocus>
@@ -101,19 +109,22 @@
     <p class="home-hint" data-i18n-html="home.hint">
       Press <kbd>Enter</kbd> to choose subdomains, dates and density before launching.
     </p>
-    <button class="home-example-btn" type="button" onclick="location.hash='#/history'">
-      <svg class="home-example-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-      <span data-i18n="home.historybtn">Scan history</span>
-    </button>
-    <div class="home-status" id="home-status" hidden>
-      <div class="hs-label" data-i18n="home.status.label">Service status</div>
-      <div class="hs-line" id="home-status-line"></div>
-    </div>
-    <p class="home-wayback"><span data-i18n="home.archivedby">Data archived by</span> <a href="https://web.archive.org" target="_blank" rel="noopener"><img class="wb-logo" src="/icons/wayback.svg" alt="Wayback Machine"></a></p>
-    <p class="home-caption" data-i18n-html="home.caption">Public data only &middot; <a href="#/legal">Legal &amp; licence</a></p>
-    <p class="home-version" data-i18n-html="home.version">WayTrace v1.8.2 &middot; <a href="https://github.com/thomashousset/WayTrace" target="_blank" rel="noopener">source</a> &middot; <a href="#/themes">themes</a></p>
-    <p class="home-provenance" data-i18n="home.provenance">Open-source OSINT tool.</p>
   </div>
+
+  <!-- One line where there used to be seven. The status box, the Wayback
+       credit, the caption, the version line and two provenance sentences all
+       said adjacent things in six separate blocks; none of them earned a line
+       of its own. The state fragment is written by renderHomeStatus and stays
+       silent while everything is normal. -->
+  <p class="home-foot">
+    <span id="home-status-line"></span>
+    <span class="sep" aria-hidden="true">·</span><span data-i18n="home.foot.public">Public data only</span>
+    <span class="sep" aria-hidden="true">·</span><a href="https://web.archive.org" target="_blank" rel="noopener">Wayback Machine</a>
+    <span class="sep" aria-hidden="true">·</span><a href="#/legal" data-i18n="home.foot.legal">Legal</a>
+    <span class="sep" aria-hidden="true">·</span><a href="https://github.com/thomashousset/WayTrace" target="_blank" rel="noopener" data-i18n="home.foot.source">Source</a>
+    <span class="sep" aria-hidden="true">·</span><a href="#/themes" data-i18n="home.foot.themes">Themes</a>
+    <span class="sep" aria-hidden="true">·</span><span id="home-version"></span>
+  </p>
 
 </div>
 
@@ -137,7 +148,7 @@
   <div class="scope-page">
     <div id="error-scope" class="error-msg"></div>
     <div class="scope-domain" id="scope-domain"></div>
-    <div class="scope-sub" id="scope-sub">Tune the scan before launching it.</div>
+    <div class="scope-sub" id="scope-sub" data-i18n="Tune the scan before launching it.">Tune the scan before launching it.</div>
     <!-- Shown only when the preflight could not read the index: offers a retry
          before the launch, since a scan started now repeats the same failed
          request. Populated by showFallbackScopeUI. -->
@@ -153,16 +164,16 @@
 
     <div class="scope-adv" id="scope-adv" style="display:none">
       <div class="scope-intro">
-        <span data-i18n-html="scope.intro">WayTrace reads only what the <b>Wayback Machine</b> already archived for this
-        domain. archive.org is rate-limited, so a scan samples a representative set
-        of snapshots rather than every capture. Tune the scan below, then launch:
-        <b>1</b> pick subdomains, <b>2</b> drop noisy pages, <b>3</b> set the date
-        range and density. A bigger selection means a longer scan.</span>
+        <!-- The ceiling is no longer announced up front. It does not bite on most
+             domains, and when it does the bar at the bottom refuses the launch and
+             names the two ways out, which is the moment it is worth saying. -->
+        <span data-i18n-html="scope.intro">WayTrace reads only what the <b>Wayback Machine</b> already archived for
+        this domain. A bigger selection means a longer scan.</span>
       </div>
       <!-- Subdomains -->
       <section class="scope-card" id="scope-card-subs">
         <div class="scope-card-head">
-          <div class="scope-card-title"><span class="scope-step-badge">1</span><span data-i18n="Subdomains">Subdomains</span> <span class="scope-card-meta" id="scope-sub-meta"></span></div>
+          <div class="scope-card-title"><span data-i18n="Subdomains">Subdomains</span> <span class="scope-card-meta" id="scope-sub-meta"></span></div>
           <div class="scope-card-tools">
             <input class="scope-filter" id="scope-sub-filter" placeholder="filter subdomains…" data-i18n-ph="filter subdomains…" spellcheck="false" oninput="renderScopeSubList()">
             <button class="scope-mini-btn" type="button" onclick="toggleAllScopes()" data-i18n="All / none">All / none</button>
@@ -174,7 +185,7 @@
       <!-- Pages / paths -->
       <section class="scope-card" id="scope-card-paths">
         <div class="scope-card-head">
-          <div class="scope-card-title"><span class="scope-step-badge">2</span><span data-i18n="Pages">Pages</span> <span class="scope-card-meta" id="scope-paths-meta" data-i18n="most-archived paths. untick to skip a noisy section">most-archived paths. untick to skip a noisy section</span></div>
+          <div class="scope-card-title"><span data-i18n="Pages">Pages</span> <span class="scope-card-meta" id="scope-paths-meta" data-i18n="most-archived paths. untick to skip a noisy section">most-archived paths. untick to skip a noisy section</span></div>
           <div class="scope-card-tools">
             <input class="scope-filter" id="scope-path-filter" placeholder="filter pages…" data-i18n-ph="filter pages…" spellcheck="false" oninput="renderScopePaths()">
           </div>
@@ -185,7 +196,7 @@
       <!-- Timeline & density -->
       <section class="scope-card" id="scope-card-timeline">
         <div class="scope-card-head">
-          <div class="scope-card-title"><span class="scope-step-badge">3</span><span data-i18n="Timeline &amp; density">Timeline &amp; density</span></div>
+          <div class="scope-card-title"><span data-i18n="Timeline &amp; density">Timeline &amp; density</span></div>
           <span class="scope-tl-hint" id="scope-tl-hint" data-i18n="click a year, then another, to set a range">click a year, then another, to set a range</span>
           <span class="scal-wrap" style="margin-left:auto">
             <button type="button" class="scal-trigger" id="scal-field" aria-haspopup="dialog" aria-expanded="false" onclick="scalToggle()" data-i18n="Pick exact dates">Pick exact dates</button>
@@ -228,10 +239,19 @@
 
       <!-- Output -->
       <section class="scope-card scope-output">
-
       <div class="scope-estimate" id="scope-estimate" aria-live="polite"></div>
       <div class="scope-cap-note" id="scope-cap-note" hidden></div>
-      <button class="btn-primary scope-launch" id="scope-launch-btn" onclick="launchScopedScan()" data-i18n="Launch scan">Launch scan</button>
+      <!-- The one option that belongs to the launch itself sits on the launch
+           bar, not in a card of its own above the count. -->
+      <div class="scope-launchbar">
+        <button class="btn-primary scope-launch" id="scope-launch-btn" onclick="launchScopedScan()" data-i18n="Launch scan">Launch scan</button>
+      </div>
+      <!-- Notice, not a checkbox: the legal page already states that using
+           WayTrace is acceptance, so a tick box here would add friction to
+           every scan without adding consent that is not already given. It
+           sits under the button so it is read at the moment it applies. -->
+      <p class="scope-terms" data-i18n-html="scope.terms">By launching a scan you accept the
+      <a href="#/legal">terms of use</a>, including what is kept about the scan.</p>
     </div>
   </div>
 </div>
@@ -242,7 +262,15 @@
     <div class="notfound-code">404</div>
     <h1 class="notfound-title" data-i18n="notfound.title">Page not found</h1>
     <p class="notfound-sub" data-i18n="notfound.sub">This page does not exist or has moved.</p>
-    <a href="#/" class="btn btn-accent" data-i18n="legal.back">Back to WayTrace</a>
+    <div class="notfound-acts">
+      <a href="#/" class="btn btn-accent" data-i18n="legal.back">Back to WayTrace</a>
+      <a href="#/history" class="btn" data-i18n="menu.myscans">My scans</a>
+    </div>
+    <!-- By far the most common way anyone reaches this page is an old report
+         link, and "page not found" does not tell them that their scan expired
+         on purpose rather than broke. -->
+    <p class="notfound-note" data-i18n="notfound.note">Looking for a report? Reports are kept for a limited time and then
+    deleted with everything they contained, so an old link stops working.</p>
   </div>
 </div>
 
@@ -316,14 +344,14 @@
 
       <section class="setup-section">
         <h2 class="setup-h2" data-i18n="setup.identity.title">Archive.org identity</h2>
-        <p class="setup-desc" data-i18n="setup.identity.desc">Every request WayTrace sends to archive.org carries a stable identifier for this instance. This is honest attribution, not a disguise.</p>
+        <p class="setup-desc" data-i18n="setup.identity.desc">Every request WayTrace sends to archive.org carries a stable identifier for this instance, so your traffic is never confused with another installation's. This is honest attribution, not a disguise, and it never changes.</p>
         <div class="setup-id-row">
           <span class="setup-id-label" data-i18n="setup.identity.id">Instance ID</span>
           <code class="setup-id-val" id="setup-instance-id">…</code>
         </div>
         <label class="setup-field-label" for="setup-contact" data-i18n="setup.identity.contact">Operator contact (optional)</label>
         <input type="text" id="setup-contact" class="config-text setup-input" placeholder="you@example.com" data-i18n-ph="setup.identity.contact.ph" spellcheck="false" oninput="setupOnContact()">
-        <small class="setup-hint" data-i18n="setup.identity.contact.hint">Sent to archive.org so they can reach you. Leave blank to use the project URL.</small>
+        <small class="setup-hint" data-i18n="setup.identity.contact.hint">Strongly recommended. Without a contact, the only thing archive.org can do about your traffic is block it; with one, they can ask you to slow down first. Leave blank to use the project URL.</small>
         <div class="setup-ua-row">
           <span class="setup-id-label" data-i18n="setup.identity.ua">User-Agent</span>
           <code class="setup-ua-val" id="setup-ua-preview"></code>
@@ -346,8 +374,36 @@
 
 <div id="view-legal" class="view">
   <div class="legal-page">
-    <h1 data-i18n="legal.title">Legal, licence & acceptable use</h1>
-    <p class="legal-updated" data-i18n="legal.updated">Last updated 2026-07 · WayTrace</p>
+    <div class="legal-head">
+      <div>
+        <h1 data-i18n="legal.title">Legal, licence & acceptable use</h1>
+        <p class="legal-updated" data-i18n="legal.updated">Last updated 2026-07 · WayTrace</p>
+      </div>
+      <div class="legal-head-acts">
+        <button class="btn" type="button" onclick="window.print()" data-i18n="legal.print">Print</button>
+        <a href="#/" class="btn btn-accent legal-back" data-i18n="legal.back">Back to WayTrace</a>
+      </div>
+    </div>
+
+    <div class="legal-cols">
+      <!-- Built by buildLegalToc() from the headings themselves, so it follows
+           the language switch and never drifts from the sections. -->
+      <aside class="legal-toc" id="legal-toc" aria-label="Contents"></aside>
+      <div class="legal-text">
+
+    <!-- Ten sections is a lot to read before deciding to trust a tool. The
+         summary is what someone actually needs; the sections are what they
+         come back to. -->
+    <div class="legal-tldr">
+      <div class="legal-tldr-title" data-i18n="legal.tldr.title">The short version</div>
+      <ul>
+        <li data-i18n-html="legal.tldr.1">It reads <strong>only what archive.org already archived</strong>, and never contacts the domain you scan.</li>
+        <li data-i18n-html="legal.tldr.2">Your report is <strong>private</strong> unless you switch its link to readable by anyone.</li>
+        <li data-i18n-html="legal.tldr.3">Findings are <strong>deleted after the retention window</strong>. A record that the scan happened is kept.</li>
+        <li data-i18n-html="legal.tldr.4">Use it for research, journalism and authorised security work. <strong>Not against people.</strong></li>
+        <li data-i18n-html="legal.tldr.5">Want none of that? <strong>Run your own copy</strong>, nothing leaves your machine.</li>
+      </ul>
+    </div>
 
     <div class="legal-note" data-i18n-html="legal.note">
       WayTrace is an OSINT recon tool. It reads only what the
@@ -412,8 +468,20 @@
     transparency) balanced against the rights of data subjects. Data subjects may
     request removal of a scan (see Contact).</p>
 
-    <h2 data-i18n="legal.h6">6. Source data & the Internet Archive</h2>
-    <p data-i18n-html="legal.p6">Every snapshot comes from the Internet Archive. WayTrace neither hosts nor
+
+    <h2 data-i18n="legal.h6">6. What this instance keeps, and why</h2>
+    <!-- Two things are stored with two different lifetimes, and that is the
+         whole section. Four dense paragraphs buried it; a list does not. -->
+    <p data-i18n-html="legal.p6">Two different things are stored here, and they do not have the same
+    lifetime.</p>
+    <ul class="legal-keeps">
+      <li data-i18n-html="legal.p6b"><strong>The results.</strong> Deleted from this instance at the end of
+      the retention window shown on the scan page. The findings, and the archived
+      page content behind them, go for good and the scan link stops working.</li>
+    </ul>
+
+    <h2 data-i18n="legal.h7">7. Source data & the Internet Archive</h2>
+    <p data-i18n-html="legal.p7">Every snapshot comes from the Internet Archive. WayTrace neither hosts nor
     controls that data, and its availability, accuracy and completeness are outside
     WayTrace's control; results may be partial or out of date (archive gaps).
     Your use of the archived data is also governed by the
@@ -422,26 +490,32 @@
     requests or attempt to bypass rate limits. To have a page removed from the
     archive itself, contact the Internet Archive directly.</p>
 
-    <h2 data-i18n="legal.h7">7. Licence</h2>
-    <p data-i18n-html="legal.p7">WayTrace is open source under the <strong>MIT Licence</strong>. You may
+    <h2 data-i18n="legal.h8">8. Licence</h2>
+    <p data-i18n-html="legal.p8">WayTrace is open source under the <strong>MIT Licence</strong>. You may
     self-host it; the self-hosted build has no hosted-service snapshot ceiling and
     can scan a domain in full. The software is provided <strong>"AS IS", without
     warranty of any kind</strong>, express or implied; see the LICENSE file in the
     repository.</p>
 
-    <h2 data-i18n="legal.h8">8. Disclaimer & limitation of liability</h2>
-    <p data-i18n-html="legal.p8">WayTrace is provided as a research aid, <strong>"as is" and "as available",
+    <h2 data-i18n="legal.h9">9. Disclaimer & limitation of liability</h2>
+    <p data-i18n-html="legal.p9">WayTrace is provided as a research aid, <strong>"as is" and "as available",
     without warranty of any kind.</strong> To the maximum extent permitted by law,
     the author and operator disclaim all liability for any direct, indirect,
     incidental or consequential damage arising from the use of, misuse of, or
     reliance on the tool or its output, and for the content of archived pages.
     <strong>You use WayTrace at your own risk.</strong></p>
 
-    <h2 data-i18n="legal.h9">9. Contact / abuse / removal</h2>
-    <p data-i18n-html="legal.p9">Abuse reports and removal requests: <a href="mailto:housset.thomas@pm.me">housset.thomas@pm.me</a>.
+    <h2 data-i18n="legal.h10">10. Contact / abuse / removal</h2>
+    <p data-i18n-html="legal.p10">Abuse reports and removal requests: <a href="mailto:housset.thomas@pm.me">housset.thomas@pm.me</a>.
     Legitimate requests are reviewed, and a hosted scan can be deleted on request.</p>
 
-    <a href="#/" class="btn btn-accent legal-back" data-i18n="legal.back">Back to WayTrace</a>
+    <div class="legal-outro">
+      <span data-i18n="legal.outro">Would rather none of this applied to you?</span>
+      <a class="btn" href="https://github.com/thomashousset/WayTrace" target="_blank" rel="noopener" data-i18n="legal.outro.btn">Run your own copy instead</a>
+    </div>
+
+      </div>
+    </div>
   </div>
 </div>
 
@@ -451,7 +525,7 @@
     <div class="results-header">
       <div>
         <div class="results-domain-row">
-          <div class="results-domain" id="res-domain"></div>
+          <h1 class="results-domain" id="res-domain"></h1>
           <span class="results-domain-tag mono">ARCHIVE</span>
         </div>
         <div class="results-meta" id="res-meta"></div>
@@ -474,7 +548,7 @@
                    placeholder="email, subdomain, tech…" data-i18n-ph="email, subdomain, tech…"
                    aria-label="Filter extracted results" oninput="report2Filter(this.value)">
           </label>
-          <label class="r2-search">
+          <label class="r2-search r2-search-server">
             <span class="cap" data-i18n="Search the archived pages">Search the archived pages</span>
             <input type="search" id="pagesearch-input" autocomplete="off"
                    placeholder="any word in the archived HTML…"
@@ -485,6 +559,9 @@
           </label>
         </div>
       </div>
+      <button class="r2-kbhint" type="button" onclick="showKbHelp()">
+        <kbd>?</kbd><span data-i18n="kb.hint">keyboard shortcuts</span>
+      </button>
       <div id="pagesearch-results" class="page-search-results" aria-live="polite"></div>
       <div id="r2-summary"></div>
       <div class="r2-body">
@@ -504,6 +581,7 @@
     <div id="my-scans"></div>
   </div>
 </div>
+</main>
 
 <aside id="export-drawer" class="exp-drawer" aria-hidden="true" aria-label="Export findings">
   <header class="exp-header">
@@ -529,8 +607,8 @@
     </div>
   </div>
   <div class="exp-footer">
-    <button class="btn" onclick="copyExport()">Copy</button>
-    <button class="btn btn-accent" onclick="downloadExport()">Download</button>
+    <button class="btn" onclick="copyExport()" data-i18n="Copy">Copy</button>
+    <button class="btn btn-accent" onclick="downloadExport()" data-i18n="Download">Download</button>
   </div>
 </aside>
 
@@ -546,22 +624,17 @@
 
 <div class="kb-overlay" id="kb-overlay" onclick="if(event.target===this)closeKbHelp()">
   <div class="kb-panel" role="dialog" aria-label="Keyboard shortcuts">
-    <h2 class="kb-title">Keyboard Shortcuts</h2>
+    <h2 class="kb-title" data-i18n="kb.title">Keyboard Shortcuts</h2>
     <div class="kb-list">
-      <span class="kb-key">t</span><span class="kb-desc">Switch to the Activity view</span>
-      <span class="kb-key">e</span><span class="kb-desc">Open / close Export drawer</span>
-      <span class="kb-key">/</span><span class="kb-desc">Focus the search field</span>
-      <span class="kb-key">1</span><span class="kb-desc">Filter to <span style="color:var(--red)">Leak</span></span>
-      <span class="kb-key">2</span><span class="kb-desc">Filter to <span style="color:var(--orange)">Pivot</span></span>
-      <span class="kb-key">3</span><span class="kb-desc">Filter to <span style="color:var(--pivot)">Context</span></span>
-      <span class="kb-key">4</span><span class="kb-desc">Filter to <span style="color:var(--text-dim)">Background</span></span>
-      <span class="kb-key">0</span><span class="kb-desc">Clear value filter</span>
-      <span class="kb-key">h</span><span class="kb-desc">Go to scan History</span>
-      <span class="kb-key">n</span><span class="kb-desc">New scan (home)</span>
-      <span class="kb-key">Esc</span><span class="kb-desc">Close any open drawer or overlay</span>
-      <span class="kb-key">?</span><span class="kb-desc">Show this help overlay</span>
+      <span class="kb-key">t</span><span class="kb-desc" data-i18n="kb.t">Switch to the Activity view</span>
+      <span class="kb-key">e</span><span class="kb-desc" data-i18n="kb.e">Open / close Export drawer</span>
+      <span class="kb-key">/</span><span class="kb-desc" data-i18n="kb.slash">Focus the search field</span>
+      <span class="kb-key">h</span><span class="kb-desc" data-i18n="kb.h">Go to scan History</span>
+      <span class="kb-key">n</span><span class="kb-desc" data-i18n="kb.n">New scan (home)</span>
+      <span class="kb-key">Esc</span><span class="kb-desc" data-i18n="kb.esc">Close any open drawer or overlay</span>
+      <span class="kb-key">?</span><span class="kb-desc" data-i18n="kb.help">Show this help overlay</span>
     </div>
-    <div class="kb-footer">Shortcuts are ignored while typing in an input field.</div>
+    <div class="kb-footer" data-i18n="kb.foot">Shortcuts are ignored while typing in an input field.</div>
   </div>
 </div>
 

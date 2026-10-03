@@ -4,6 +4,7 @@ let currentDomainId = null;
 
 /* ===== v2 PUBLIC STATE ===== */
 let publicScanUrlId = null;
+let _lastScanPayload = null;   // the scan the results view is showing
 let publicScanPollTimer = null;
 let publicScanLastStatus = null;
 let v2PublicMode = false;  // set true when a public scan is rendered into view-results
@@ -180,10 +181,47 @@ function showError(elId, msg) {
 
 
 /* ===== THEME TOGGLE ===== */
-function applyThemeLabel() {
-  const isLight = document.documentElement.getAttribute('data-theme') === 'light';
-  const label = document.getElementById('theme-btn-label');
-  if (label) label.textContent = isLight ? 'Dark' : 'Light';
+/* The old button label had to mean both the state and the action: "Light"
+   could be read as "you are in light" or "click for light". The menu states
+   both modes and ticks the one in use, so there is nothing to interpret. */
+function applyThemeLabel() { if (!$('pref-menu')?.hidden) renderPrefMenu(); }
+
+function setMode(mode) {
+  const cur = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+  if (mode !== cur) toggleTheme();
+  renderPrefMenu();
+}
+
+function renderPrefMenu() {
+  const el = $('pref-menu');
+  if (!el) return;
+  const mode = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+  const tick = (on) => `<span class="nav-tick">${on ? '✓' : ''}</span>`;
+  el.innerHTML =
+    `<div class="nav-drop-head">${esc(t('Mode'))}</div>`
+    + `<button class="nav-drop-item" role="menuitemradio" aria-checked="${mode === 'dark'}" onclick="setMode('dark')">${tick(mode === 'dark')}${esc(t('mode.dark'))}</button>`
+    + `<button class="nav-drop-item" role="menuitemradio" aria-checked="${mode === 'light'}" onclick="setMode('light')">${tick(mode === 'light')}${esc(t('mode.light'))}</button>`
+    + `<div class="nav-drop-sep"></div>`
+    + `<div class="nav-drop-head">${esc(t('Language'))}</div>`
+    + `<button class="nav-drop-item" role="menuitemradio" aria-checked="${LANG === 'fr'}" onclick="setLang('fr');renderPrefMenu()">${tick(LANG === 'fr')}Français</button>`
+    + `<button class="nav-drop-item" role="menuitemradio" aria-checked="${LANG === 'en'}" onclick="setLang('en');renderPrefMenu()">${tick(LANG === 'en')}English</button>`
+    + `<div class="nav-drop-sep"></div>`
+    + `<button class="nav-drop-item" role="menuitem" onclick="hidePrefMenu();location.hash='#/themes'">`
+    + `<span class="nav-tick"></span>${esc(t('All palettes'))}</button>`;
+}
+
+function togglePrefMenu() {
+  const el = $('pref-menu');
+  if (!el) return;
+  const open = el.hidden;
+  if (open) renderPrefMenu();
+  el.hidden = !open;
+  $('pref-btn')?.setAttribute('aria-expanded', String(open));
+}
+function hidePrefMenu() {
+  const el = $('pref-menu');
+  if (el) el.hidden = true;
+  $('pref-btn')?.setAttribute('aria-expanded', 'false');
 }
 function toggleTheme() {
   const next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
@@ -334,10 +372,31 @@ function applyThemeVars() {
     if (d && d.theme) pref = {preset: d.theme};
   }
   const vars = computeThemeVars(pref);
-  if (!vars) return;
-  const mode = root.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
-  const set = vars[mode];
-  for (const k in set) root.style.setProperty(k, set[k]);
+  if (vars) {
+    const mode = root.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+    const set = vars[mode];
+    for (const k in set) root.style.setProperty(k, set[k]);
+  }
+  syncThemeColor();
+}
+
+/* The browser paints its own chrome (the Android address bar, the iOS status
+   bar, a PWA splash) with whatever <meta name="theme-color"> says. That tag
+   held #1C1B18, a colour the palette stopped using, so the bar sat a shade
+   off the page it framed. It cannot be a static value either: the mode
+   toggles and the themes page swaps whole palettes. Read the ground the page
+   is actually painted on and follow it. */
+function syncThemeColor() {
+  const bg = getComputedStyle(document.documentElement)
+    .getPropertyValue('--bg').trim();
+  if (!bg) return;
+  let m = document.querySelector('meta[name="theme-color"]');
+  if (!m) {
+    m = document.createElement('meta');
+    m.setAttribute('name', 'theme-color');
+    document.head.appendChild(m);
+  }
+  m.setAttribute('content', bg);
 }
 
 // Persist locally (pref + precomputed vars for the boot script), apply, and
@@ -387,14 +446,9 @@ function _applyPresetTransient(pref) {
 
 // Read the running version from the footer string so the UA preview stays in
 // sync with the shipped version without a second hardcoded constant.
-function _instanceVersion() {
-  try {
-    const el = document.querySelector('.home-version');
-    const m = (el ? el.textContent : '').match(/v(\d+\.\d+\.\d+)/);
-    if (m) return m[1];
-  } catch (_) {}
-  return '';
-}
+let WT_VERSION = '';   // filled from /api/health at boot, single source
+
+function _instanceVersion() { return WT_VERSION; }
 
 // Apply the injected instance defaults on load. Theme vars are already handled
 // by applyThemeVars()'s __WT_DEFAULTS__ fallback; here we only set the name.
@@ -498,7 +552,67 @@ applyThemeVars();
    On first apply each annotated node's English original is cached so the
    toggle can restore it. Static surfaces (nav, home, legal) are covered;
    JS-built strings use t(). */
+// A downloaded export is a file on someone's disk with no server under it.
+// The preload script the exporter injects into <head> runs before this file,
+// so the flag is already true by the time anything reads it.
+const IS_EXPORT = typeof window !== 'undefined' && !!window.__WAYTRACE_PRELOAD__;
+
 let LANG = 'en';
+/* Most keys in this file ARE their English text, so t() can return the key
+   itself. Keys written as identifiers cannot: they have no English anywhere,
+   and t() shipped "adm.scans_per_day" to screen for anyone reading in English.
+   This map is the English side of those. */
+const I18N_EN = {
+  'cfg.default': '(default)',
+  // Auth sentences that carry a number, rebuilt from a key.
+  'auth.rate_signup':
+    "Account creation from your network is temporarily limited to keep the service stable for everyone. Nothing is wrong with your request, please try again in {n}.",
+  'auth.rate_login':
+    "Too many sign-in attempts from your network. To protect accounts, please wait {n} and try again.",
+  'auth.rate_magic':
+    "Several sign-in links were requested recently. Check your inbox (and spam folder), or request a new link in {n}.",
+  'auth.rate_generic':
+    "Too many attempts. Try again in {n}.",
+  'auth.locked':
+    "Too many failed attempts. Locked for {n}s.",
+  'auth.short_password':
+    "Password must be at least {n} characters.",
+  // Refusals the API returns, keyed by its machine code.
+    'api.per_user_limit':
+      "You already have a scan in flight. Track it in My scans; a new one can start once it finishes.",
+    'api.per_ip_limit':
+      "You already have the maximum number of scans in flight from this connection.",
+    'api.service_full':
+      "Service is full. Try again in a few minutes.",
+    'api.archive_paused':
+      "Scanning is paused for a moment so archive.org is not overloaded. Try again shortly.",
+    'api.unexpected':
+      "That request did not go through. Try again in a moment.",
+  // Failure causes, keyed by the code the backend records.
+    'err.archive_paused':
+      "Scanning is paused so this server does not get blocked by archive.org. Try again in a few minutes.",
+    'err.cdx_malformed':
+      "Archive.org returned a snapshot index for this domain that we could not read.",
+    'err.cdx_timeout':
+      "Archive.org's snapshot index for this domain did not answer within the time we allow. This is not about the size of the site, that index varies in speed from one hour to the next. Try again a little later.",
+    'err.cdx_error':
+      "Archive.org refused the snapshot index request. That is temporary on their side, try again in a few minutes.",
+    'err.scan_timeout':
+      "The scan ran past the time limit and was stopped.",
+    'err.unexpected':
+      "The scan failed for a reason we have not identified yet. The details are recorded on our side.",
+    'legal.contents': 'Contents',
+    'mode.dark': 'Dark',
+    'mode.light': 'Light',
+    'ms.all': 'All',
+    'ms.completed': 'Completed',
+    'ms.failed': 'Failed',
+    'ms.failed.word': 'failed',
+    'ms.findings': 'findings',
+    'ms.pages': 'pages',
+    'ms.shared': 'Shared',
+};
+
 const I18N = {
   fr: {
     'nav.history': 'Historique',
@@ -511,7 +625,7 @@ const I18N = {
     'exp.nofilters': 'Aucun filtre actif',
     'Markdown': 'Markdown', 'JSON': 'JSON', 'CSV': 'CSV', 'pages': 'pages',
     'Timeline &amp; density': 'Chronologie et densité',
-    'scope.intro': "WayTrace ne lit que ce que la <b>Wayback Machine</b> a déjà archivé pour ce domaine. archive.org est limité en débit, donc un scan échantillonne un ensemble représentatif de snapshots plutôt que chaque capture. Réglez le scan ci-dessous, puis lancez : <b>1</b> choisir les sous-domaines, <b>2</b> écarter les pages bruyantes, <b>3</b> régler la plage de dates et la densité. Une sélection plus large veut dire un scan plus long.",
+    'scope.intro': "WayTrace ne lit que ce que la <b>Wayback Machine</b> a déjà archivé pour ce domaine. Une sélection plus large veut dire un scan plus long.",
     // --- messages d'échec de scan, rédigés côté serveur (routers/scan.py) ---
     // La clé est la phrase anglaise exacte que renvoie classify_failure. Si
     // elle change là-bas sans être changée ici, t() renvoie l'anglais, ce qui
@@ -588,11 +702,11 @@ const I18N = {
     'setup.theme.dark': 'Sombre',
     'setup.theme.light': 'Clair',
     'setup.identity.title': 'Identité archive.org',
-    'setup.identity.desc': "Chaque requête envoyée à archive.org porte un identifiant stable propre à cette instance. C’est une attribution honnête, pas un déguisement.",
+    'setup.identity.desc': "Chaque requête envoyée à archive.org porte un identifiant stable propre à cette instance, pour que votre trafic ne soit jamais confondu avec celui d'une autre installation. C’est une attribution honnête, pas un déguisement, et il ne change jamais.",
     'setup.identity.id': 'ID d’instance',
     'setup.identity.contact': 'Contact de l’opérateur (facultatif)',
     'setup.identity.contact.ph': 'vous@example.com',
-    'setup.identity.contact.hint': "Envoyé à archive.org pour qu'ils puissent vous contacter. Laissez vide pour utiliser l'URL du projet.",
+    'setup.identity.contact.hint': "Fortement recommandé. Sans contact, la seule chose qu'archive.org puisse faire de votre trafic est le bloquer ; avec, ils peuvent d'abord vous demander de ralentir. Laissez vide pour utiliser l'URL du projet.",
     'setup.identity.ua': 'User-Agent',
     'setup.cats.title': 'Catégories par défaut',
     'setup.cats.desc': "Les catégories de renseignement que WayTrace extrait par défaut. Toutes sont activées au départ ; vous pouvez aussi les restreindre pour un scan précis.",
@@ -666,7 +780,6 @@ const I18N = {
     'Comma-separated origins allowed to call the API.': "Origines autorisées à appeler l'API, séparées par des virgules.",
     'Largest accepted request body.': "Taille maximale d'un corps de requête accepté.",
     'nav.scan': 'Analyser',
-    'home.status.label': 'Statut du service',
     'Operational': 'Opérationnel',
     'Maintenance': 'Maintenance',
     'Scanning paused': 'Scans en pause',
@@ -674,8 +787,18 @@ const I18N = {
     'scan running': 'scan en cours',
     'scans running': 'scans en cours',
     'queued': 'en file',
-    'scans this week': 'scans cette semaine',
-    'home.tagline': "Internet n'oublie jamais.",
+    'last scan': 'dernier scan',
+    'just now': "à l'instant",
+    '{n} min ago': 'il y a {n} min',
+    '{n}h ago': 'il y a {n} h',
+    '{n}d ago': 'il y a {n} j',
+    'nav.themes': 'Th\u00e8mes',
+    'nav.source': 'Code source',
+    'home.foot.public': 'Donn\u00e9es publiques uniquement',
+    'home.foot.legal': 'Mentions l\u00e9gales',
+    'home.foot.source': 'Code source',
+    'home.foot.themes': 'Th\u00e8mes',
+    'home.tagline': "Internet <span class=\"dotmark\">n'oublie jamais.</span>",
     'home.sub': "Outil d'OSINT pour chercheurs et professionnels. Révélez ce qu'un domaine a exposé au fil du temps (e-mails, sous-domaines, technos, fuites) depuis les archives de la <a href=\"https://web.archive.org\" target=\"_blank\" rel=\"noopener\">Wayback Machine</a>.",
     'home.scan': 'Analyser',
     'home.adv.summary': 'Pré-filtres (optionnel)',
@@ -683,9 +806,6 @@ const I18N = {
     'home.adv.daterange': 'Plage de dates',
     'home.adv.hint': "Les sous-domaines et la densité des snapshots se choisissent à l'étape suivante, une fois archive.org interrogé pour ce domaine.",
     'home.hint': 'Appuyez sur <kbd>Entrée</kbd> pour choisir les sous-domaines, les dates et la densité avant de lancer.',
-    'home.caption': 'Données publiques uniquement &middot; <a href="#/legal">Mentions légales</a>',
-    'home.version': 'WayTrace v1.8.2 &middot; <a href="https://github.com/thomashousset/WayTrace" target="_blank" rel="noopener">source</a> &middot; <a href="#/themes">thèmes</a>',
-    'home.archivedby': 'Archives par',
     'Pages read from': 'Pages lues depuis',
     'Querying archive.org': 'Interrogation archive.org',
     'Selecting snapshots': 'Sélection des snapshots',
@@ -720,7 +840,7 @@ const I18N = {
     'Other findings on the same archived page': 'Autres résultats sur la même page archivée',
     'Seen together on the same archived page': 'Vus ensemble sur la même page archivée',
     'view page': 'voir la page',
-    'WayTrace searched all 43 categories across {n} archived pages and found nothing to extract.': 'WayTrace a cherché dans les 43 catégories sur {n} pages archivées et n\'a rien trouvé à extraire.',
+    'WayTrace searched all {c} categories across {n} archived pages and found nothing to extract.': 'WayTrace a cherché dans les {c} catégories sur {n} pages archivées et n\'a rien trouvé à extraire.',
     'value': 'valeur',
     'occ.': 'occ.',
     'seen': 'vu de → à',
@@ -750,7 +870,6 @@ const I18N = {
     'Filter extracted results': 'Filtrer les résultats extraits',
     'Search the archived pages': 'Chercher dans les pages archivées',
     'Copied': 'Copié',
-    'home.provenance': "Outil OSINT open source.",
     'home.ethic': "Conçu pour les chercheurs en sécurité, les équipes, les journalistes et les professionnels curieux. Utilisez ce que vous trouvez de façon responsable : signalez les risques aux personnes qui possèdent les données, jamais contre elles.",
     'home.historybtn': 'Historique des scans',
     'home.mrp.all': 'Toutes les dates',
@@ -759,6 +878,7 @@ const I18N = {
     'mrp.24m': '24 derniers mois',
     'mrp.ytd': 'Cette année',
     // Legal page
+    'scope.terms': "En lan\u00e7ant un scan, vous acceptez les <a href=\"#/legal\">conditions d'utilisation</a>, y compris ce qui est conserv\u00e9 au sujet du scan.",
     'legal.title': 'Mentions légales, licence et usage acceptable',
     'legal.updated': 'Dernière mise à jour 2026-07 · WayTrace',
     'legal.note': "WayTrace est un outil de reconnaissance OSINT. Il lit uniquement ce que l'Internet Archive (Wayback Machine) a <strong>déjà</strong> archivé publiquement. Il n'effectue <strong>aucun scan actif, sondage ou connexion</strong> sur un site cible, n'envoie aucun trafic vers la cible, et n'ajoute rien qui n'était pas déjà public. Cette page est rédigée en langage clair par souci de transparence ; elle ne constitue pas un avis juridique.",
@@ -783,14 +903,201 @@ const I18N = {
     'legal.p4': "Vous seul décidez quoi analyser et quoi faire des résultats, et <strong>vous en portez l'entière responsabilité.</strong> Vous devez respecter toutes les lois qui vous sont applicables et applicables au sujet de votre recherche, y compris dans la juridiction du sujet. Lorsque les résultats contiennent des données personnelles, <strong>vous</strong> agissez en tant que responsable du traitement pour tout traitement ultérieur. WayTrace ne fait que révéler des données qu'un tiers avait déjà rendues publiques ; cela ne rend pas leur usage licite entre vos mains.",
     'legal.h5': '5. Données personnelles (RGPD)',
     'legal.p5': "Les pages archivées peuvent contenir des données personnelles (par exemple des adresses e-mail ou des noms). Il n'existe pas d'exemption générale pour les données personnelles publiquement disponibles au titre du RGPD. WayTrace minimise l'exposition par conception : il ne traite que des données déjà archivées publiquement, n'effectue aucun enrichissement au-delà de ces pages, conserve les scans terminés pour une durée limitée sur le service hébergé, et s'appuie sur l'<strong>intérêt légitime</strong> (recherche en sécurité et transparence du web), mis en balance avec les droits des personnes concernées. Les personnes concernées peuvent demander le retrait d'un scan (voir Contact).",
-    'legal.h6': "6. Données source et Internet Archive",
-    'legal.p6': "Chaque snapshot provient de l'Internet Archive. WayTrace n'héberge ni ne contrôle ces données, et leur disponibilité, leur exactitude et leur exhaustivité échappent à son contrôle ; les résultats peuvent être partiels ou périmés (lacunes d'archive). Votre usage des données archivées est également régi par les <a href=\"https://archive.org/about/terms.php\" target=\"_blank\" rel=\"noopener\">conditions d'utilisation de l'Internet Archive</a>, que vous acceptez en utilisant WayTrace : n'inondez pas de requêtes et ne cherchez pas à contourner les limites. Pour faire retirer une page de l'archive elle-même, contactez directement l'Internet Archive.",
-    'legal.h7': '7. Licence',
-    'legal.p7': "WayTrace est open source sous <strong>licence MIT</strong>. Vous pouvez l'auto-héberger ; la version auto-hébergée n'a pas de plafond de snapshots et peut analyser un domaine en intégralité. Le logiciel est fourni <strong>« EN L'ÉTAT », sans aucune garantie</strong>, expresse ou implicite ; voir le fichier LICENSE du dépôt.",
-    'legal.h8': '8. Non-responsabilité et limitation de responsabilité',
-    'legal.p8': "WayTrace est fourni comme une aide à la recherche, <strong>« en l'état » et « selon disponibilité », sans aucune garantie.</strong> Dans toute la mesure permise par la loi, l'auteur et l'opérateur déclinent toute responsabilité pour tout dommage direct, indirect, accessoire ou consécutif résultant de l'usage, du mésusage ou de la confiance accordée à l'outil ou à ses résultats, ainsi que pour le contenu des pages archivées. <strong>Vous utilisez WayTrace à vos propres risques.</strong>",
-    'legal.h9': '9. Contact / abus / retrait',
-    'legal.p9': "Signalements d'abus et demandes de retrait : <a href=\"mailto:housset.thomas@pm.me\">housset.thomas@pm.me</a>. Les demandes légitimes sont examinées, et un scan hébergé peut être supprimé sur demande.",
+    'legal.h6': '6. Ce que cette instance conserve, et pourquoi',
+    'legal.p6': "Deux choses distinctes sont conserv\u00e9es ici, et elles n'ont pas la m\u00eame dur\u00e9e de vie.",
+    'legal.p6b': "<strong>Les r\u00e9sultats.</strong> Supprim\u00e9s de cette instance au terme de la dur\u00e9e de conservation indiqu\u00e9e sur la page du scan. Les r\u00e9sultats, et le contenu des pages archiv\u00e9es qui les sous-tend, disparaissent d\u00e9finitivement et le lien du scan cesse de fonctionner.",
+    // Ces libelles servent aussi a la version auto-hebergee: ils doivent rester
+    // hors des blocs serveur, sinon build_public.py les emporte et l interface
+    // locale repasse en anglais.
+    'menu.myscans': 'Mes scans',
+    'Cancelled': 'Annul\u00e9',
+    'No reason was recorded for this one.': "Aucune cause n'a \u00e9t\u00e9 enregistr\u00e9e pour celui-ci.",
+    // Why a scan failed. The backend records a short code; the sentence
+    // belongs here, with the rest of the user-facing copy.
+    'err.archive_paused':
+      "Les scans sont en pause pour que ce serveur ne se fasse pas bloquer par archive.org. Réessayez dans quelques minutes.",
+    'err.cdx_malformed':
+      "Archive.org a renvoyé pour ce domaine un index de snapshots que nous n'avons pas su lire.",
+    'err.cdx_timeout':
+      "L'index des snapshots d'archive.org n'a pas répondu pour ce domaine dans le délai que nous nous accordons. Cela ne tient pas à la taille du site, la vitesse de cet index varie d'une heure à l'autre. Réessayez un peu plus tard.",
+    'err.cdx_error':
+      "Archive.org a refusé la requête vers l'index des snapshots. C'est temporaire de leur côté, réessayez dans quelques minutes.",
+    'err.scan_timeout':
+      "Le scan a dépassé la durée maximale autorisée et a été arrêté.",
+    'err.unexpected':
+      "Le scan a échoué pour une raison que nous n'avons pas encore identifiée. Les détails sont enregistrés de notre côté.",
+    'Try again': 'R\u00e9essayer',
+    'archive.org did not answer the index in time': "archive.org n'a pas r\u00e9pondu \u00e0 l'index \u00e0 temps",
+    'Postal addresses': 'Adresses postales',
+    'Cloud buckets': 'Buckets cloud',
+    'kb.hint': 'raccourcis clavier',
+    'kb.title': 'Raccourcis clavier',
+    'kb.t': "Basculer vers la vue Activit\u00e9",
+    'kb.e': "Ouvrir ou fermer le tiroir d'export",
+    'kb.slash': 'Placer le curseur dans la recherche',
+    'kb.h': "Aller \u00e0 l'historique des scans",
+    'kb.n': 'Nouveau scan (accueil)',
+    'kb.esc': 'Fermer tout tiroir ou calque ouvert',
+    'kb.help': 'Afficher cette aide',
+    'kb.foot': "Les raccourcis sont ignor\u00e9s pendant la saisie dans un champ.",
+    'Mode': 'Mode',
+    'mode.dark': 'Sombre',
+    'mode.light': 'Clair',
+    'Language': 'Langue',
+    'All palettes': 'Toutes les palettes',
+    'snapshot': 'snapshot',
+    'selected': 's\u00e9lectionn\u00e9s',
+    'No filters active (will export all selected categories)':
+      "Aucun filtre actif (toutes les cat\u00e9gories coch\u00e9es seront export\u00e9es)",
+    'Download': 'T\u00e9l\u00e9charger',
+    'Report a bug': 'Signaler un bug',
+    // Balisage statique : sans data-i18n, rien ne les voyait.
+    'Cancel': 'Annuler',
+    'Tell us what went wrong. We capture the current page automatically.':
+      "Dites-nous ce qui n'a pas marché. La page en cours est capturée automatiquement.",
+    'Attach screenshot':
+      "Joindre une capture",
+    'Send report':
+      "Envoyer",
+    'Screenshot file':
+      "Fichier de capture",
+    'WayTrace · OSINT recon through the Wayback Machine':
+      "WayTrace · reconnaissance OSINT via la Wayback Machine",
+    'skip.main': 'Aller au contenu principal',
+    'cfg.default': '(par défaut)',
+    'Offline copy.': 'Copie hors ligne.',
+    // Sign-in and account errors: the auth router answers with a sentence,
+    // not a code, so these are keyed by the sentence itself.
+    'auth.rate_signup':
+      "La création de compte depuis votre réseau est temporairement limitée pour garder le service stable pour tout le monde. Votre demande n'a rien d'anormal, réessayez dans {n}.",
+    'auth.rate_login':
+      "Trop de tentatives de connexion depuis votre réseau. Pour protéger les comptes, patientez {n} avant de réessayer.",
+    'auth.rate_magic':
+      "Plusieurs liens de connexion ont été demandés récemment. Vérifiez votre boîte de réception, et les indésirables, ou demandez un nouveau lien dans {n}.",
+    'auth.rate_generic':
+      "Trop de tentatives. Réessayez dans {n}.",
+    'auth.locked':
+      "Trop d'échecs de connexion. Compte bloqué pendant {n} s.",
+    'auth.short_password':
+      "Le mot de passe doit faire au moins {n} caractères.",
+    'about {n} minutes':
+      "environ {n} minutes",
+    '{n}s':
+      "{n} s",
+    'Captcha check failed. Please try again.':
+      "La vérification anti-robot a échoué. Réessayez.",
+    'Sign in to save a theme.':
+      "Connectez-vous pour enregistrer un thème.",
+    'Invalid email address.':
+      "Adresse e-mail invalide.",
+    'This email provider is not allowed. Use a real address.':
+      "Ce fournisseur d'e-mail n'est pas accepté. Utilisez une adresse réelle.",
+    'Access denied.':
+      "Accès refusé.",
+    'That email is already registered. Try signing in.':
+      "Cette adresse est déjà enregistrée. Essayez de vous connecter.",
+    'Wrong email or password.':
+      "E-mail ou mot de passe incorrect.",
+    'This sign-in link is invalid or expired.':
+      "Ce lien de connexion est invalide ou expiré.",
+    'This verification link is invalid or expired.':
+      "Ce lien de vérification est invalide ou expiré.",
+    'Account not found.':
+      "Compte introuvable.",
+    'Sign in to see your scans.':
+      "Connectez-vous pour voir vos scans.",
+    '2FA already enabled. Disable it first.':
+      "L'authentification à deux facteurs est déjà active. Désactivez-la d'abord.",
+    'Start setup first.':
+      "Lancez d'abord la configuration.",
+    'Invalid code. Check your authenticator.':
+      "Code invalide. Vérifiez votre application d'authentification.",
+    '2FA is not set up.':
+      "L'authentification à deux facteurs n'est pas configurée.",
+    'Invalid code.':
+      "Code invalide.",
+    'Too many sign-in links requested. Please try again in a few minutes.':
+      "Trop de liens de connexion demandés. Réessayez dans quelques minutes.",
+    'Wrong password for this account.':
+      "Mot de passe incorrect pour ce compte.",
+    'Could not create your account.':
+      "La création du compte a échoué.",
+    // Refusals the API returns, keyed by its machine code.
+    'api.per_user_limit':
+      "Vous avez déjà un scan en cours. Suivez-le dans Mes scans, un nouveau pourra démarrer dès qu'il sera terminé.",
+    'api.per_ip_limit':
+      "Vous avez déjà le nombre maximum de scans en cours depuis cette connexion.",
+    'api.service_full':
+      "Le service est saturé. Réessayez dans quelques minutes.",
+    'api.archive_paused':
+      "Les scans sont en pause un moment pour ne pas surcharger archive.org. Réessayez dans un instant.",
+    'api.unexpected':
+      "La requête n'a pas abouti. Réessayez dans un instant.",
+    'finding': 'résultat',
+    'category': 'catégorie',
+    'scan of': 'scan du',
+    'Downloaded {n} findings': '{n} résultats téléchargés',
+    'This scan was taken on {d} and nothing in this file updates.':
+      'Ce scan date du {d}, rien dans ce fichier ne se met à jour.',
+    'Nothing in this file updates.': 'Rien dans ce fichier ne se met à jour.',
+    'you@email.com': 'vous@email.com',
+    'What happened? What did you expect?': "Que s'est-il pass\u00e9 ? \u00c0 quoi vous attendiez-vous ?",
+    'Scan not found': 'Scan introuvable',
+    'The URL is incorrect or the scan has already expired.':
+      "L'adresse est incorrecte, ou le scan a déjà expiré.",
+    'This scan has expired': 'Ce scan a expiré',
+    'A finished scan is kept for a limited time, then deleted with everything it contained. If you downloaded the HTML report, you can still open it.':
+      "Un scan terminé est conservé un temps limité, puis supprimé avec tout ce qu'il contenait. Si vous avez téléchargé le rapport HTML, vous pouvez toujours l'ouvrir.",
+    'Run a new scan': 'Lancer un nouveau scan',
+    'Your share link': 'Votre lien de partage',
+    'secret key': 'cl\u00e9 secr\u00e8te',
+    'public key': 'cl\u00e9 publique',
+    'Sort': 'Trier',
+    'kept': 'conserv\u00e9s',
+    'ms.failed.word': 'en \u00e9chec',
+    'next to expire': 'prochain \u00e0 expirer',
+    'notfound.note': "Vous cherchiez un rapport ? Les rapports sont conserv\u00e9s un temps limit\u00e9 puis supprim\u00e9s avec tout ce qu'ils contenaient, un ancien lien cesse donc de fonctionner.",
+    'too many for one scan': 'trop pour un seul scan',
+    'Fit it for me': 'Ajuster pour moi',
+    'expired': 'expir\u00e9',
+    'in {n} min': 'dans {n} min',
+    'in {n}h': 'dans {n} h',
+    'in {n}d': 'dans {n} j',
+    'ms.completed': 'Termin\u00e9s',
+    'ms.failed': '\u00c9checs',
+    'ms.all': 'Tous',
+    'Most recent': 'Les plus r\u00e9cents',
+    'Most findings': 'Le plus de r\u00e9sultats',
+    'No scan matches that filter.': 'Aucun scan ne correspond \u00e0 ce filtre.',
+    'Today': "Aujourd'hui",
+    'Yesterday': 'Hier',
+    'Earlier': 'Avant',
+    'today': "aujourd'hui",
+    'in 1 day': 'dans 1 jour',
+    'in {n} days': 'dans {n} jours',
+    'ms.findings': 'r\u00e9sultats',
+    'ms.pages': 'pages',
+    'no reason recorded': 'aucune cause enregistr\u00e9e',
+    'Re-run': 'Relancer',
+    'Link copied': 'Lien copi\u00e9',
+    'legal.contents': 'Sommaire',
+    'legal.print': 'Imprimer',
+    'legal.tldr.title': 'En bref',
+    'legal.tldr.1': "Il lit <strong>uniquement ce qu'archive.org a d\u00e9j\u00e0 archiv\u00e9</strong>, et ne contacte jamais le domaine analys\u00e9.",
+    'legal.tldr.2': "Votre rapport est <strong>priv\u00e9</strong>, sauf si vous rendez son lien lisible par tous.",
+    'legal.tldr.3': "Les r\u00e9sultats sont <strong>supprim\u00e9s au terme de la dur\u00e9e de conservation</strong>. La trace du scan, elle, est conserv\u00e9e.",
+    'legal.tldr.4': "\u00c0 usage de recherche, de journalisme et de s\u00e9curit\u00e9 autoris\u00e9e. <strong>Pas contre des personnes.</strong>",
+    'legal.tldr.5': "Rien de tout cela ne vous convient ? <strong>Faites tourner votre propre copie</strong>, rien ne quitte votre machine.",
+    'legal.outro': "Vous pr\u00e9f\u00e9reriez que rien de tout cela ne vous concerne ?",
+    'legal.outro.btn': 'Faites tourner votre propre copie',
+    'legal.h7': "7. Données source et Internet Archive",
+    'legal.p7': "Chaque snapshot provient de l'Internet Archive. WayTrace n'héberge ni ne contrôle ces données, et leur disponibilité, leur exactitude et leur exhaustivité échappent à son contrôle ; les résultats peuvent être partiels ou périmés (lacunes d'archive). Votre usage des données archivées est également régi par les <a href=\"https://archive.org/about/terms.php\" target=\"_blank\" rel=\"noopener\">conditions d'utilisation de l'Internet Archive</a>, que vous acceptez en utilisant WayTrace : n'inondez pas de requêtes et ne cherchez pas à contourner les limites. Pour faire retirer une page de l'archive elle-même, contactez directement l'Internet Archive.",
+    'legal.h8': '8. Licence',
+    'legal.p8': "WayTrace est open source sous <strong>licence MIT</strong>. Vous pouvez l'auto-héberger ; la version auto-hébergée n'a pas de plafond de snapshots et peut analyser un domaine en intégralité. Le logiciel est fourni <strong>« EN L'ÉTAT », sans aucune garantie</strong>, expresse ou implicite ; voir le fichier LICENSE du dépôt.",
+    'legal.h9': '9. Non-responsabilité et limitation de responsabilité',
+    'legal.p9': "WayTrace est fourni comme une aide à la recherche, <strong>« en l'état » et « selon disponibilité », sans aucune garantie.</strong> Dans toute la mesure permise par la loi, l'auteur et l'opérateur déclinent toute responsabilité pour tout dommage direct, indirect, accessoire ou consécutif résultant de l'usage, du mésusage ou de la confiance accordée à l'outil ou à ses résultats, ainsi que pour le contenu des pages archivées. <strong>Vous utilisez WayTrace à vos propres risques.</strong>",
+    'legal.h10': '10. Contact / abus / retrait',
+    'legal.p10': "Signalements d'abus et demandes de retrait : <a href=\"mailto:housset.thomas@pm.me\">housset.thomas@pm.me</a>. Les demandes légitimes sont examinées, et un scan hébergé peut être supprimé sur demande.",
     'legal.back': 'Retour à WayTrace',
     // --- Scope / scan journey (static labels) ---
     'Subdomains': 'Sous-domaines',
@@ -820,7 +1127,7 @@ const I18N = {
     'Run a scan': 'Lancer un scan',
     'Public': 'Public', 'Private': 'Privé',
     'completed': 'terminé', 'running': 'en cours', 'failed': 'échec',
-    'queued': 'en file', 'cancelled': 'annulé', 'pending': 'en attente',
+    'cancelled': 'annulé', 'pending': 'en attente',
     'findings': 'résultats', 'snapshots analysed': 'snapshots analysés', 'pages scraped': 'pages récupérées',
     'distinct': 'distincts', 'archived': 'archivés', 'of': 'sur',
     'Download HTML': 'Télécharger HTML', 'Copy link': 'Copier le lien',
@@ -832,6 +1139,14 @@ const I18N = {
     'Cancel my spot': 'Annuler ma place',
     'Scanning': 'Analyse en cours',
     'Preparing scan…': 'Préparation du scan…',
+    // Progress steps, written by the backend and shown verbatim on the one
+    // screen people sit and watch.
+    'Starting scan...': 'Démarrage du scan…',
+    'Fetching snapshots from CDX API...': 'Interrogation de l’index des snapshots d’archive.org…',
+    'Selecting diverse snapshots...': 'Sélection de snapshots variés…',
+    'Using selected snapshots...': 'Utilisation des snapshots choisis…',
+    'Scraping {n} archived pages…': 'Récupération de {n} pages archivées…',
+    'No HTML snapshots found': 'Aucun snapshot HTML trouvé',
     'estimating…': 'estimation…',
     'Scraped {done} / {total} archived pages': '{done} / {total} pages archivées récupérées',
     '~{s}s left': '~{s}s restantes',
@@ -854,7 +1169,7 @@ const I18N = {
     'Already scanned recently. Scans are kept {n} days, so the results open instantly. Use Scan more for a fresh scan.': "Déjà scanné récemment. Les scans sont conservés {n} jours, les résultats s'ouvrent donc instantanément. Utilisez Scan more pour un scan frais.",
     'You already have a scan in flight. Find it in My scans.': 'Vous avez déjà un scan en cours. Retrouvez-le dans Mes scans.',
     'Running': 'En cours',
-    'In queue': "En file d'attente",
+
     'position {n}': 'position {n}',
     'starts in about {eta}': 'démarre dans environ {eta}',
     'Cancel scan': 'Annuler le scan',
@@ -874,7 +1189,7 @@ const I18N = {
     'Loading…': 'Chargement…',
     'Run a denser scan of this domain, reusing what was already found': 'Relancer un scan plus dense de ce domaine, en réutilisant ce qui a déjà été trouvé',
     'Something went wrong. Please try again.': 'Une erreur est survenue. Réessayez.',
-    'Filter the table to': 'Filtrer la table sur', 'more': 'autres',
+    'Filter the table to': 'Filtrer la table sur',
     'expires': 'expire',
     'Copied ✓': 'Copié ✓',
     'Density': 'Densité',
@@ -896,6 +1211,7 @@ const I18N = {
     '~12/year, recommended': '~12/an, recommandé',
     '~24/year, thorough': '~24/an, approfondi',
     '~50/year, heavy': '~50/an, lourd',
+    'every archived capture in scope': 'toutes les captures archiv\u00e9es du p\u00e9rim\u00e8tre',
     // --- Results + history chrome ---
     'Timeline': 'Chronologie',
     'Export': 'Exporter',
@@ -1019,7 +1335,8 @@ const I18N = {
 
 function t(key) {
   if (LANG === 'fr' && I18N.fr[key] !== undefined) return I18N.fr[key];
-  return key;  // callers pass an English fallback only where noted
+  if (I18N_EN[key] !== undefined) return I18N_EN[key];
+  return key;  // most keys are their own English text
 }
 
 function _i18nApplyAttr(attr, prop) {
@@ -1043,18 +1360,24 @@ function applyI18n() {
   _i18nApplyAttr('data-i18n-html', 'innerHTML');
   _i18nApplyAttr('data-i18n-ph', 'placeholder');
   _i18nApplyAttr('data-i18n-title', 'title');
+  // The contents rail copies the heading text, so it has to be rebuilt after a
+  // language switch or it keeps the previous language.
+  if (document.getElementById('view-legal')?.classList.contains('active')) buildLegalToc();
 }
 
 function setLang(l) {
   LANG = (l === 'fr') ? 'fr' : 'en';
   try { localStorage.setItem('wt_lang', LANG); } catch (_) {}
   document.documentElement.lang = LANG;
-  document.querySelectorAll('#lang-switch .lang-opt').forEach(o => {
-    const on = o.getAttribute('data-lang') === LANG;
-    o.classList.toggle('active', on);
-    o.setAttribute('aria-pressed', String(on));
-  });
   applyI18n();
+  // The browser tab kept its English title in a French interface. An instance
+  // that set its own name owns the title, so only touch the default one.
+  try {
+    const d = (typeof window.__WT_DEFAULTS__ === 'object' && window.__WT_DEFAULTS__) || null;
+    if (!(d && (d.name || '').trim())) {
+      document.title = t('WayTrace · OSINT recon through the Wayback Machine');
+    }
+  } catch (_) {}
   // Re-render the few dynamic strings that JS sets directly.
   try {
     const adv = document.getElementById('scope-adv');
@@ -1075,7 +1398,51 @@ function setLang(l) {
       _updateScopeCatSummary();
     }
   } catch (_) {}
+  try { relocalizeActiveView(); } catch (_) {}
 }
+/* applyI18n only repaints elements carrying data-i18n, so a view that builds
+   its strings in JS keeps whatever language it was first rendered in. The
+   list above grew one entry per view somebody happened to notice, and the two
+   largest, the report and the history, were never on it: switching to English
+   on a report left every category label, every description and every tab in
+   French. Re-render whatever is on screen instead of naming widgets one by
+   one. The scope form is deliberately not in here, rebuilding it would throw
+   away a configuration the person is in the middle of. */
+function relocalizeActiveView() {
+  const active = document.querySelector('.view.active');
+  if (!active) return;
+  // A scan lands in view-results when it completed and in view-scan-public
+  // while it is queued, running, cancelled or failed. Both are renderPublicScan.
+  if (active.id === 'view-scan-public' && !_lastScanPayload) {
+    // Nothing behind this view but the "no such scan" copy, which is built in
+    // JS like the rest and so kept the language it first rendered in.
+    renderPublicScanNotFound();
+    return;
+  }
+  if ((active.id === 'view-results' || active.id === 'view-scan-public')
+      && _lastScanPayload) {
+    // The running scaffold is deliberately built once and kept alive so the
+    // spinner and the bar do not restart on every poll. That also means its
+    // phase chips and its Wayback credit keep the language they were built
+    // in, so a switch has to drop it and let renderPublicScan rebuild. A
+    // one-off stutter on an explicit language change is a fair price.
+    const runLive = document.querySelector('#public-scan-body .pub-run-live');
+    if (runLive) runLive.remove();
+    // Put the reader back exactly where they were: same open category, same
+    // filter, same presence tab. A relabel must not also lose their place.
+    const keep = Object.assign({}, report2State);
+    renderPublicScan(_lastScanPayload);
+    if (_r2 && _r2.job) {
+      Object.assign(report2State, keep);
+      renderReport2(_r2.info, _r2.findings, _r2.job);
+    }
+    return;
+  }
+  if (active.id === 'view-history' && typeof renderMyScans === 'function') {
+    renderMyScans();
+  }
+}
+
 function toggleLang() { setLang(LANG === 'fr' ? 'en' : 'fr'); }
 function initLang() {
   let l = null;
@@ -1112,8 +1479,14 @@ function _cfgInput(s) {
     return `<input type="checkbox" id="${id}" ${s.value ? 'checked' : ''}>`;
   }
   if (s.type === 'choice') {
+    // An empty choice means "leave it to the built-in default", and it used to
+    // render as an option with no text: the control looked unpopulated, which
+    // on a settings page reads as broken rather than as a deliberate blank.
+    // The values themselves stay exactly as they are typed in .env, because
+    // that is the whole point of naming the env key above them.
     return `<select id="${id}" class="config-select">` +
-      s.choices.map(c => `<option value="${esc(c)}" ${c === s.value ? 'selected' : ''}>${esc(c)}</option>`).join('') +
+      s.choices.map(c => `<option value="${esc(c)}" ${c === s.value ? 'selected' : ''}>`
+        + (c === '' ? esc(t('cfg.default')) : esc(c)) + `</option>`).join('') +
       `</select>`;
   }
   if (s.type === 'str') {
@@ -1132,14 +1505,15 @@ function _cfgRow(s) {
   const risk = _cfgRiskLevel(s, s.value);
   const infBtn = (s.infinite_at != null)
     ? `<button class="btn btn-sm config-inf" type="button" data-key="${s.key}" title="${escAttr(t('Set to unlimited'))}">∞</button>` : '';
-  const rec = s.recommended != null && s.type !== 'bool'
-    ? `<small class="config-rec">${esc(t('recommended'))} ${esc(_cfgFmtValue(s, s.recommended))}${s.unit ? ' ' + esc(t(s.unit)) : ''}</small>` : '';
+  const recVal = s.recommended != null ? _cfgFmtValue(s, s.recommended) : '';
+  const rec = recVal && s.type !== 'bool'
+    ? `<small class="config-rec">${esc(t('recommended'))} ${esc(recVal)}${s.unit ? ' ' + esc(t(s.unit)) : ''}</small>` : '';
   const warn = `<small class="config-warn" ${risk === 'down' ? '' : 'hidden'}>${esc(t('Real risk that archive.org blocks your IP.'))}</small>`;
   const restartBadge = s.restart ? `<span class="badge config-badge">${esc(t('restart required'))}</span>` : '';
   const resetBtn = `<button class="btn btn-sm config-reset" type="button" data-key="${s.key}" ${s.overridden ? '' : 'hidden'}>${esc(t('reset'))}</button>`;
   const saveBtn = `<button class="btn btn-sm btn-accent config-save" type="button" data-key="${s.key}" hidden>${esc(t('Save'))}</button>`;
   return `
-    <div class="config-row" data-key="${s.key}">
+    <div class="config-row${s.type === 'multichoice' ? ' config-row-block' : ''}" data-key="${s.key}">
       <div class="config-info">
         <span class="config-key">${esc(s.key.toUpperCase())}</span>
         <small class="config-desc">${esc(t(s.desc))}</small>
@@ -1147,12 +1521,12 @@ function _cfgRow(s) {
       </div>
       <div class="config-ctl">
         <span class="config-ctl-line">
-          ${s.risk ? `<span class="hs-dot ${risk}"></span>` : ''}
+          ${s.risk ? `<span class="hs-dot ${risk}"></span>`
+                   : `<span class="hs-dot hs-dot-none"></span>`}
           ${_cfgInput(s)}
-          ${s.unit ? `<span class="config-unit">${esc(t(s.unit))}</span>` : ''}
-          ${infBtn}
+          <span class="config-unit">${s.unit ? esc(t(s.unit)) : ''}</span>
         </span>
-        ${rec}${restartBadge}${saveBtn}${resetBtn}
+        ${rec}${restartBadge}${infBtn}${saveBtn}${resetBtn}
       </div>
     </div>`;
 }
@@ -1483,6 +1857,37 @@ async function setupSkip() {
   await _setupCompleteAndGoHome();
 }
 
+/* The contents rail is generated from the headings, never hand-written, so a
+   new section or a language switch cannot leave it stale. */
+function buildLegalToc() {
+  const toc = document.getElementById('legal-toc');
+  const text = document.querySelector('#view-legal .legal-text');
+  if (!toc || !text) return;
+  const heads = [...text.querySelectorAll('h2')];
+  heads.forEach((h, i) => { h.id = h.id || 'legal-s' + i; });
+  toc.innerHTML = '<div class="legal-toc-head">' + t('legal.contents') + '</div>'
+    + heads.map(h => `<a href="#${h.id}" onclick="event.preventDefault();`
+      + `document.getElementById('${h.id}').scrollIntoView({behavior:'smooth',block:'start'})">`
+      + `${h.textContent.trim()}</a>`).join('');
+  _legalTocSpy(heads);
+}
+
+let _legalSpy = null;
+function _legalTocSpy(heads) {
+  if (_legalSpy) _legalSpy.disconnect();
+  const links = [...document.querySelectorAll('#legal-toc a')];
+  if (!links.length) return;
+  _legalSpy = new IntersectionObserver(entries => {
+    for (const e of entries) {
+      if (!e.isIntersecting) continue;
+      const i = heads.indexOf(e.target);
+      if (i < 0) continue;
+      links.forEach((l, j) => l.classList.toggle('on', j === i));
+    }
+  }, { rootMargin: '0px 0px -72% 0px', threshold: 0 });
+  heads.forEach(h => _legalSpy.observe(h));
+}
+
 /* ===== ROUTER ===== */
 function navigate(hash) {
   const parts = (hash || '#/').replace('#/', '').split('/').filter(Boolean);
@@ -1518,6 +1923,8 @@ function navigate(hash) {
     loadScope(decodeURIComponent(parts[1]));
   } else if (view === 'history') {
     loadHistory();
+  } else if (view === 'legal') {
+    buildLegalToc();
   } else if (view === 'themes') {
     renderThemesPage();
   } else if (view === 'config') {
@@ -1782,6 +2189,139 @@ function _fmtEtaSecs(secs) {
 
 // The four honest phases of a scan, mapped from the backend's `step` string.
 const SCAN_PHASES = ['Querying archive.org', 'Selecting snapshots', 'Fetching pages', 'Extracting & cross-referencing'];
+/* The backend writes its progress steps as English prose, and this line used
+   to print them verbatim. The frontend rewrites the two phases it recognises
+   by shape, the extraction and the N/M scrape, so what leaked through was the
+   whole opening stretch of a scan: starting, querying the CDX index, choosing
+   snapshots. On a large domain that is minutes of watching an English
+   sentence in a French interface. Translating by the string itself means a
+   step this build has never seen still reads as the English the server sent,
+   never as a key. */
+function _stepText(step) {
+  if (!step) return '';
+  const m = step.match(/^Scraping (\d+) archived pages/);
+  if (m) return t('Scraping {n} archived pages…').replace('{n}', m[1]);
+  return t(step);
+}
+
+/* Every refusal the API returns carries both a machine code and an English
+   sentence. The code is the stable thing, so the sentence belongs here where
+   it can be translated; the server's own wording stays as the fallback, which
+   means a refusal this build has never heard of still reads as prose rather
+   than as a key. */
+/* The auth router answers with a bare English sentence rather than a code,
+   two dozen of them, and that is the first screen anyone new meets. Matching
+   on the sentence keeps the server untouched and cannot regress: an unknown
+   one falls through t() back to itself, which is exactly today's behaviour.
+   The three rate-limit sentences carry a duration the server already
+   formatted, so it is lifted out, translated, and put back. */
+const _WAIT_PATTERNS = [
+  [/^about (\d+) minutes?$/, 'about {n} minutes'],
+  [/^(\d+)s$/, '{n}s'],
+];
+
+function _waitText(raw) {
+  for (const [re, key] of _WAIT_PATTERNS) {
+    const m = String(raw || '').match(re);
+    if (m) return t(key).replace('{n}', m[1]);
+  }
+  return raw;
+}
+
+const _SENTENCE_PATTERNS = [
+  [/^Account creation from your network .* in (.+)\.$/, 'auth.rate_signup'],
+  [/^Too many sign-in attempts .* wait (.+) and try again\.$/, 'auth.rate_login'],
+  [/^Several sign-in links were requested .* a new link in (.+)\.$/, 'auth.rate_magic'],
+  [/^Too many attempts\. Try again in (.+)\.$/, 'auth.rate_generic'],
+  [/^Too many failed attempts\. Locked for (\d+)s\.$/, 'auth.locked'],
+  [/^Password must be at least (\d+) characters\.$/, 'auth.short_password'],
+];
+
+function _sentenceText(raw) {
+  for (const [re, key] of _SENTENCE_PATTERNS) {
+    const m = raw.match(re);
+    if (m) {
+      const txt = t(key);
+      if (txt === key) return raw;
+      const n = /^\d+$/.test(m[1]) ? m[1] : _waitText(m[1]);
+      return txt.replace('{n}', n);
+    }
+  }
+  return t(raw);
+}
+
+function _apiErrorText(detail, fallback) {
+  const code = detail && detail.error;
+  if (code) {
+    const key = 'api.' + code;
+    const txt = t(key);
+    if (txt !== key) return txt;
+  }
+  if (typeof detail === 'string') return _sentenceText(detail);
+  return (detail && detail.message) || fallback || t('api.unexpected');
+}
+
+
+/* ===== DIALOGS =====
+   Three overlays declare role="dialog" aria-modal="true", which tells
+   assistive technology the rest of the page is inert. None of them kept that
+   promise: Tab walked straight out into the content the overlay was covering,
+   Escape closed only the shortcuts panel although the shortcuts panel itself
+   documents "Esc closes any open drawer or overlay", and none handed focus
+   back to whatever opened it.
+
+   One implementation, registered by whoever opens a dialog, so a fourth
+   overlay added later cannot get it wrong on its own. Visibility stays with
+   the existing open/close functions; this owns focus only. */
+const _dialogStack = [];
+
+function _focusables(root) {
+  return [...root.querySelectorAll(
+    'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]),' +
+    ' select:not([disabled]), [tabindex]:not([tabindex="-1"])')]
+    .filter(e => e.offsetWidth || e.offsetHeight || e.getClientRects().length);
+}
+
+function wtDialogOpened(el, close, firstFocusSel) {
+  if (!el || _dialogStack.some(d => d.el === el)) return;
+  _dialogStack.push({ el, close, opener: document.activeElement });
+  const first = (firstFocusSel && el.querySelector(firstFocusSel)) || _focusables(el)[0];
+  if (first) { first.focus(); return; }
+  // A dialog with nothing focusable in it, the shortcuts panel is one, still
+  // has to hold focus: otherwise Tab walks straight into the page behind it.
+  el.tabIndex = -1;
+  el.focus();
+}
+
+function wtDialogClosed(el) {
+  const i = _dialogStack.findIndex(d => d.el === el);
+  if (i === -1) return;
+  const [d] = _dialogStack.splice(i, 1);
+  // Hand focus back, but only if it is still somewhere sensible to put it.
+  try {
+    if (d.opener && document.contains(d.opener)) d.opener.focus();
+  } catch (_) {}
+}
+
+document.addEventListener('keydown', (e) => {
+  const top = _dialogStack[_dialogStack.length - 1];
+  if (!top) return;
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    e.stopPropagation();
+    try { top.close && top.close(); } catch (_) {}
+    return;
+  }
+  if (e.key !== 'Tab') return;
+  const items = _focusables(top.el);
+  if (!items.length) { e.preventDefault(); top.el.focus(); return; }
+  const first = items[0], last = items[items.length - 1];
+  const here = document.activeElement;
+  if (!top.el.contains(here)) { e.preventDefault(); first.focus(); return; }
+  if (e.shiftKey && here === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && here === last) { e.preventDefault(); first.focus(); }
+}, true);
+
 function _scanPhaseIndex(step) {
   const s = (step || '').toLowerCase();
   if (s.includes('extract')) return 3;
@@ -1815,7 +2355,24 @@ function _liveFindingsHTML(counts) {
     + `<div class="pub-live-chips">${chips}</div>`;
 }
 
+/* classify_failure writes three or four careful sentences per failure and
+   _failure_meta stores only the code beside them, so the page used to render
+   the code itself: a scan that timed out told you "cdx_timeout" and nothing
+   more. The sentences live in the i18n maps now, keyed by that code, which is
+   also what makes them translatable. A code this build has never heard of
+   falls back to whatever the server said, then to the generic line, never to
+   the token. */
+function _failureText(code, step) {
+  if (code) {
+    const key = 'err.' + code;
+    const txt = t(key);
+    if (txt !== key) return txt;
+  }
+  return step || t('err.unexpected');
+}
+
 function renderPublicScan(job) {
+  _lastScanPayload = job;      // so a language switch can rebuild this view
   $('public-scan-domain').textContent = job.domain || '';
   const meta = $('public-scan-meta');
   const status = job.status;
@@ -1882,7 +2439,7 @@ function renderPublicScan(job) {
         fillPct = p;
       } else {
         // Setup phase (querying archive.org, selecting): honest indeterminate bar.
-        stepTxt = job.step || t('Preparing scan…');
+        stepTxt = _stepText(job.step) || t('Preparing scan…');
       }
     }
     // Findings stream in as pages download (extraction overlaps the scrape), so
@@ -1950,13 +2507,17 @@ function renderPublicScan(job) {
     return;
   } else if (status === 'failed' || status === 'cancelled') {
     actions.style.display = 'none';
-    meta.textContent = status === 'cancelled' ? 'Cancelled' : 'Failed';
+    meta.textContent = status === 'cancelled' ? t('Cancelled') : t('Failed');
+    const why = (job.meta && job.meta.error) || '';
     body.innerHTML = `
       <div class="pub-error">
         ${_PUB_ERROR_ICON}
         <h2>${status === 'cancelled' ? t('Scan cancelled') : t('Scan failed')}</h2>
-        <p>${esc(t(job.step || ''))}</p>
-        <a href="#/" class="btn btn-accent">${t('Back to homepage')}</a>
+        <p>${esc(_failureText(why, job.step))}</p>
+        <div class="pub-error-acts">
+          <a href="#/scope/${encodeURIComponent(job.domain || '')}" class="btn btn-accent">${t('Try again')}</a>
+          <a href="#/" class="btn">${t('Back to homepage')}</a>
+        </div>
       </div>
     `;
   }
@@ -1964,6 +2525,8 @@ function renderPublicScan(job) {
 
 const CAT_LABELS = {
   emails: 'Emails',
+  addresses: 'Postal addresses',
+  cloud_buckets: 'Cloud buckets',
   subdomains: 'Subdomains',
   api_keys: 'API keys',
   jwt: 'JWT tokens',
@@ -2181,15 +2744,16 @@ const _PUB_EXPIRED_ICON = `
   </svg>`;
 
 function renderPublicScanNotFound() {
+  _lastScanPayload = null;     // this view has no scan behind it
   $('public-scan-domain').textContent = '';
   $('public-scan-meta').textContent = '';
   $('public-scan-actions').style.display = 'none';
   $('public-scan-body').innerHTML = `
     <div class="pub-error">
       ${_PUB_ERROR_ICON}
-      <h2>Scan not found</h2>
-      <p>The URL is incorrect or the scan has already expired.</p>
-      <a href="#/" class="btn btn-accent">Back to homepage</a>
+      <h2>${esc(t('Scan not found'))}</h2>
+      <p>${esc(t('The URL is incorrect or the scan has already expired.'))}</p>
+      <a href="#/" class="btn btn-accent">${esc(t('Back to homepage'))}</a>
     </div>
   `;
 }
@@ -2201,9 +2765,9 @@ function renderPublicScanExpired() {
   $('public-scan-body').innerHTML = `
     <div class="pub-error">
       ${_PUB_EXPIRED_ICON}
-      <h2>This scan has expired</h2>
-      <p>Scans are kept for 7 days. If you downloaded the HTML snapshot, you can still open it.</p>
-      <a href="#/" class="btn btn-accent">Run a new scan</a>
+      <h2>${esc(t('This scan has expired'))}</h2>
+      <p>${esc(t('A finished scan is kept for a limited time, then deleted with everything it contained. If you downloaded the HTML report, you can still open it.'))}</p>
+      <a href="#/" class="btn btn-accent">${esc(t('Run a new scan'))}</a>
     </div>
   `;
 }
@@ -2218,38 +2782,62 @@ async function cancelPublicScan() {
 // Homepage status strip. It replaced the "latest scans" feed: most scans stay
 // private, so the feed read as dead even on busy days, while live numbers
 // cannot look stale. Data rides the existing /api/service-status poll.
-// The weekly figure is the real scans_7d count from the API.
-let WEEK_COUNT_BASELINE = 0;
+//
+// The last metric used to be "N scans this week", with a floor of 52 added here
+// so the strip never opened at zero. A number we inflate is not a measurement,
+// and a weekly total does not say whether the service just served somebody.
+// "Last scan 5 min ago" cannot be flattered and answers the one question a
+// visitor actually has in front of an unfamiliar tool: is this still alive.
+
+// Age of the last scan, translated. The API sends a timestamp, not an age, so
+// this stays correct however long the server-side response sat in its cache.
+function lastScanAge(iso) {
+  if (!iso) return '';
+  const ts = new Date(iso.endsWith('Z') ? iso : iso + 'Z').getTime();
+  if (!isFinite(ts)) return '';
+  const diff = (Date.now() - ts) / 1000;
+  // A clock skew between browser and server must not print "in -3 min".
+  // The key IS the English string (see t()): it is returned as-is when the
+  // language is English, so a key like 'ago.min' would print literally.
+  if (diff < 60) return t('just now');
+  if (diff < 3600) return t('{n} min ago').replace('{n}', Math.floor(diff / 60));
+  if (diff < 86400) return t('{n}h ago').replace('{n}', Math.floor(diff / 3600));
+  return t('{n}d ago').replace('{n}', Math.floor(diff / 86400));
+}
 
 function renderHomeStatus(svc, arc) {
   const navSettings = $('nav-settings-btn');
   if (navSettings) navSettings.hidden = !svc.config_panel;
-  const el = $('home-status');
   const line = $('home-status-line');
-  if (!el || !line) return;
-  // 'Scanning paused' stays: it states OUR availability, the breaker is open and
-  // a scan submitted now is refused, which the person can act on. The former
-  // `arc.state === 'slow'` arm is gone with the banner: it claimed archive.org
-  // was slow from a latency that included our own queueing, and lit on two
-  // failed attempts inside two minutes, which is what one failing scan produces.
-  let dot = 'ok', label = t('Operational');
+  if (!line) return;
+
+  // Silent while normal. The dot plus the last-scan age is the whole message;
+  // a label saying "Operational" next to a green dot repeats the dot, and the
+  // old "0 scans running" advertised emptiness on every quiet hour.
+  let dot = 'ok', label = '';
   if (svc.state === 'maintenance') { dot = 'down'; label = t('Maintenance'); }
   else if (arc.state === 'paused') { dot = 'down'; label = t('Scanning paused'); }
   else if (svc.state === 'busy') { dot = 'warn'; label = t('Slower than usual'); }
+
   // Counts are server ints, but coerce defensively: this string goes to innerHTML.
   const running = Math.max(0, parseInt(svc.active, 10) || 0);
   const queued = Math.max(0, parseInt(svc.waiting, 10) || 0);
-  const week = Math.max(0, parseInt(svc.scans_7d, 10) || 0) + WEEK_COUNT_BASELINE;
-  const sep = '<span class="hs-sep" aria-hidden="true">·</span>';
-  let html =
-    `<span class="hs-state ${dot}"><span class="hs-dot ${dot}"></span>${esc(label)}</span>` + sep +
-    `<span class="hs-metric"><b>${running}</b> ${esc(running === 1 ? t('scan running') : t('scans running'))}</span>`;
-  if (queued > 0) {
-    html += sep + `<span class="hs-metric"><b>${queued}</b> ${esc(t('queued'))}</span>`;
+  const age = lastScanAge(svc.last_scan_at);
+  const sep = '<span class="sep" aria-hidden="true">·</span>';
+
+  const parts = [];
+  if (label) parts.push(esc(label));
+  if (running > 0) {
+    parts.push(`${running} ${esc(running === 1 ? t('scan running') : t('scans running'))}`);
   }
-  html += sep + `<span class="hs-metric"><b>${week}</b> ${esc(t('scans this week'))}</span>`;
-  line.innerHTML = html;
-  el.hidden = false;
+  if (queued > 0) parts.push(`${queued} ${esc(t('queued'))}`);
+  // Freshness last, and only when nothing louder is being said and no scan is
+  // running: "1 scan running" already proves the service is alive.
+  if (!parts.length && age) parts.push(`${esc(t('last scan'))} ${esc(age)}`);
+
+  line.innerHTML =
+    `<span class="hs-state ${dot}"><span class="hs-dot ${dot}"></span></span>` +
+    (parts.length ? ' ' + parts.join(' ' + sep + ' ') : '');
 }
 
 function formatEta(seconds) {
@@ -2295,14 +2883,15 @@ function relativeFutureTime(iso) {
   if (!iso) return '';
   const ts = new Date(iso.endsWith('Z') ? iso : iso + 'Z').getTime();
   const diff = (ts - Date.now()) / 1000;
-  if (diff < 0) return 'expired';
-  if (diff < 3600) return 'in ' + Math.floor(diff / 60) + ' min';
-  if (diff < 86400) return 'in ' + Math.floor(diff / 3600) + 'h';
-  return 'in ' + Math.floor(diff / 86400) + 'd';
+  if (diff < 0) return t('expired');
+  if (diff < 3600) return t('in {n} min').replace('{n}', Math.floor(diff / 60));
+  if (diff < 86400) return t('in {n}h').replace('{n}', Math.floor(diff / 3600));
+  return t('in {n}d').replace('{n}', Math.floor(diff / 86400));
 }
 
 
 window.addEventListener('hashchange', () => navigate(location.hash));
+
 window.addEventListener('DOMContentLoaded', () => {
   // Standalone HTML hydration: when this page is opened from a downloaded
   // export file, window.__WAYTRACE_PRELOAD__ is set by the injected script
@@ -2311,6 +2900,9 @@ window.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
     const scanView = document.getElementById('view-scan-public');
     if (scanView) scanView.classList.add('active');
+    document.body.classList.add('wt-export');
+    initLang();          // the branch used to return before this, so every
+                         // downloaded report opened in English
     publicScanUrlId = window.__WAYTRACE_PRELOAD__.url_id;
     renderPublicScan(window.__WAYTRACE_PRELOAD__);
     return;
@@ -2324,7 +2916,6 @@ window.addEventListener('DOMContentLoaded', () => {
   }
   initLang();
   applyInstanceDefaults();
-  _captureVisitSource();
   navigate(location.hash || '#/');
   checkServiceStatus();
   setInterval(checkServiceStatus, 60000);
@@ -2396,7 +2987,7 @@ const SCOPE_DENSITY = [
   { label: 'Balanced', perYear: 12, hint: '~12/year, recommended' },
   { label: 'Dense', perYear: 24, hint: '~24/year, thorough' },
   { label: 'Deep', perYear: 50, hint: '~50/year, heavy' },
-  { label: 'Max', perYear: Infinity, hint: 'up to ' + SCOPE_CAP.toLocaleString() + ', spread across all years (the local build is unlimited)' },
+  { label: 'Max', perYear: Infinity, hint: 'every archived capture in scope' },
 ];
 let scopeRangeFrom = null;   // inclusive year; both null = all years (timeline highlight)
 let scopeRangeTo = null;
@@ -2500,8 +3091,8 @@ async function loadScope(domain) {
   // static element, so a disabled state left over from a previous successful
   // launch would otherwise persist and make the button inert on the next scan.
   $('scope-launch-btn').disabled = false;
+  $('scope-launch-btn').classList.remove('is-blocked');
   $('scope-sub').textContent = t('Tune the scan before launching it.');
-  { const c = $('scope-intro-cap'); if (c) c.textContent = SCOPE_CAP.toLocaleString(); }
   { const intro = document.querySelector('.scope-intro'); if (intro) intro.style.display = ''; }
   { const fb = $('scope-fallback-actions'); if (fb) { fb.hidden = true; fb.innerHTML = ''; } }
   $('scope-loading').style.display = '';
@@ -2518,8 +3109,8 @@ async function loadScope(domain) {
       body: JSON.stringify({domain})
     });
     if (!resp.ok) {
-      const detail = await resp.json().catch(() => ({})).then(d =>
-        (d.detail && d.detail.message) || (typeof d.detail === 'string' ? d.detail : null) || resp.statusText);
+      const detail = await resp.json().catch(() => ({}))
+        .then(d => _apiErrorText(d.detail, resp.statusText));
       showFallbackScopeUI(domain, detail);
       return;
     }
@@ -2541,22 +3132,17 @@ async function loadScope(domain) {
       .replace('{n}', data.html_snapshots).replace('{k}', subs.length);
     $('scope-loading').style.display = 'none';
     $('scope-adv').style.display = '';
-    // Default every scan to Max density (index 5). The user can dial it down;
-    // if the selection exceeds the 5000 cap the cap-note guides them to narrow
-    // the date range or lower the density.
-    scopeDensityIdx = 5;
-    if ($('scope-density')) { $('scope-density').value = 5; $('scope-density').style.setProperty('--fill', (5 / (SCOPE_DENSITY.length - 1) * 100) + '%'); }
-    if ($('scope-density-val')) $('scope-density-val').textContent = t(SCOPE_DENSITY[5].label);
-    if ($('scope-density-hint')) $('scope-density-hint').textContent = t(SCOPE_DENSITY[5].hint);
 
-    const capEl = $('scope-intro-cap');
-    if (capEl) capEl.textContent = SCOPE_CAP.toLocaleString();
     _applyScopePrefill();
     renderScopeSubList();
     renderScopePaths();
     if ($('scope-card-timeline')) $('scope-card-timeline').style.display = '';
     renderScopeChips();
     renderScopeTimeline();
+    // Now that the selection is known, open on the strongest density that fits
+    // under the cap. Opening on Max meant every large domain started already
+    // sampled, which is the one state this page exists to let you avoid.
+    _applyBestDensity();
     _initScopeCats();
   } catch (e) {
     showFallbackScopeUI(domain, e.message);
@@ -2670,12 +3256,13 @@ function renderScopeSubList() {
     return `<label class="scope-item${on ? ' checked' : ''}">
         <input type="checkbox" ${on ? 'checked' : ''} onchange="onScopeSubToggle('${esc(s.subdomain)}', this.checked)">
         <div class="scope-item-name"><span class="scope-item-indent" style="width:${pad}px"></span>${esc(s.subdomain)}</div>
-        <div class="scope-item-count">${s.snapshot_count} snapshots</div>
+        <div class="scope-item-count">${nfmt(s.snapshot_count)} ${
+          s.snapshot_count === 1 ? t('snapshot') : t('snapshots')}</div>
         <div class="scope-item-range">${s.first || '?'} - ${s.last || '?'}</div>
       </label>`;
   }).join('');
   const meta = $('scope-sub-meta');
-  if (meta) meta.textContent = `${scopeCheckedSubs.size}/${scopeSubdomains.length} selected`;
+  if (meta) meta.textContent = `${scopeCheckedSubs.size}/${scopeSubdomains.length} ${t('selected')}`;
 }
 
 function onScopeSubToggle(name, checked) {
@@ -2863,6 +3450,43 @@ function _scopeProportionalByYear(items, cap, floor) {
     }
   }
   return picked;
+}
+
+/* What the current density asks for, before the cap re-balances it. The
+   selection algorithm itself is unchanged and stays under its own tests; this
+   only lets the page tell the difference between "this fits" and "this was
+   quietly cut down to fit". */
+function _scopeRawCount(idx) {
+  const dens = SCOPE_DENSITY[idx == null ? scopeDensityIdx : idx];
+  if (!dens) return 0;
+  // Max asks for every snapshot in scope. It used to mean "as many as the cap
+  // allows, sampled", which is the one outcome this page should never produce
+  // without saying so, so it is counted honestly and refused like any other.
+  if (!isFinite(dens.perYear)) return _scopeInScope().length;
+  const byYear = {};
+  for (const s of _scopeInScope()) (byYear[s.year] = byYear[s.year] || []).push(s);
+  let n = 0;
+  for (const y of Object.keys(byYear)) {
+    n += Math.min(byYear[y].length, dens.perYear);
+  }
+  return n;
+}
+
+/* The strongest density whose own promise fits under the cap. Starting on Max
+   meant every large domain opened already sampled, which is the one state the
+   page exists to let you avoid. */
+function _bestFittingDensity() {
+  for (let i = SCOPE_DENSITY.length - 1; i >= 0; i--) {
+    if (_scopeRawCount(i) <= SCOPE_CAP) return i;
+  }
+  return 0;
+}
+
+function _applyBestDensity() {
+  scopeDensityIdx = _bestFittingDensity();
+  const el = $('scope-density');
+  if (el) { el.value = String(scopeDensityIdx); onScopeDensity(); }
+  else updateScopeEstimate();
 }
 
 function _scopeAssembleSelected() {
@@ -3118,34 +3742,66 @@ function updateScopeEstimate() {
     ? `${_fmtDay(scopeDayFrom)} → ${_fmtDay(scopeDayTo || scopeDayFrom)}`
     : (t('all dates') || 'all dates');
   const dens = t(SCOPE_DENSITY[scopeDensityIdx].label);
-  // Colour code: too thin (< 25, amber), healthy (green), or capped/sampled (accent).
-  const capped = available > SCOPE_CAP || n >= SCOPE_CAP;
-  const lvl = capped ? 'lvl-capped' : (n < 25 ? 'lvl-thin' : 'lvl-good');
-  const lvlLabel = capped ? t('sampled to fit the cap') : (n < 25 ? t('thin coverage, raise density or range') : t('good coverage'));
+  // Three states, not two. A finite density is a promise ("~24 a year"); if it
+  // cannot be kept the page says so and refuses, instead of quietly cutting the
+  // selection down and calling it a scan. Max is the one level that asks to be
+  // sampled to the cap, so it is never refused.
+  const raw = _scopeRawCount();
+  const over = raw > SCOPE_CAP;
+  const lvl = over ? 'lvl-capped' : (n < 25 ? 'lvl-thin' : 'lvl-good');
+  const lvlLabel = over
+    ? t('too many for one scan')
+    : (n < 25 ? t('thin coverage, raise density or range') : t('good coverage'));
   const word = t('snapshots'), estW = t('est.'), densW = t('density');
   el.style.display = '';
-  el.innerHTML = `<span class="scope-est-line"><span class="scope-est-dot ${lvl}"></span><strong class="scope-est-n ${lvl}">${n.toLocaleString()}</strong> ${word}`
-    + ` <span class="scope-est-sep">·</span> ${estW} <strong class="scope-est-t">${etaTxt}</strong></span>`
-    + `<span class="scope-est-sub">${dens} ${densW}, ${rangeTxt}. ${lvlLabel}. ${t('More density = more snapshots = longer scan.')}</span>`;
-  // Cap note: explain the 5000 ceiling, more strongly when it actually bites.
+  const shown = over ? raw : n;
+  const densPhrase = LANG === 'fr' ? `${densW} ${dens}` : `${dens} ${densW}`;
+  const cap1 = (x) => x.charAt(0).toUpperCase() + x.slice(1);
+  el.innerHTML = `<span class="scope-est-line"><span class="scope-est-dot ${lvl}"></span><strong class="scope-est-n ${lvl}">${shown.toLocaleString()}</strong> ${word}`
+    + (over ? '' : ` <span class="scope-est-sep">·</span> ${estW} <strong class="scope-est-t">${etaTxt}</strong>`)
+    + `</span>`
+    + `<span class="scope-est-sub">${cap1(densPhrase)}, ${rangeTxt}. ${cap1(lvlLabel)}.`
+    + (over ? '' : ' ' + t('More density = more snapshots = longer scan.')) + `</span>`;
+
+  // The launch button is the honest place to refuse: greyed out, with the two
+  // levers named and one of them a single click away.
+  const btn = $('scope-launch-btn');
+  if (btn) {
+    btn.disabled = over;
+    btn.classList.toggle('is-blocked', over);
+  }
   const note = $('scope-cap-note');
   if (note) {
     note.hidden = false;
-    note.classList.toggle('is-capped', capped);
+    note.classList.toggle('is-capped', over);
     const repo = '<a href="https://github.com/thomashousset/WayTrace" target="_blank" rel="noopener">github.com/thomashousset/WayTrace</a>';
-    if (capped) {
+    const best = _bestFittingDensity();
+    const fitBtn = `<button type="button" class="scope-fit-btn" onclick="_applyBestDensity()">`
+      + `${esc(t('Fit it for me'))}</button>`;
+    if (over) {
+      note.innerHTML = (LANG === 'fr'
+        ? `Cette sélection demande <strong>${raw.toLocaleString()}</strong> snapshots, au-dessus des <strong>${SCOPE_CAP.toLocaleString()}</strong> qu'un scan hébergé traite. Baissez la densité, resserrez la plage de dates, ou décochez des sous-domaines. La densité <strong>${esc(t(SCOPE_DENSITY[best].label))}</strong> passe. Pour analyser le domaine entier sans limite, lancez WayTrace en local : ${repo}.`
+        : `This selection asks for <strong>${raw.toLocaleString()}</strong> snapshots, above the <strong>${SCOPE_CAP.toLocaleString()}</strong> a hosted scan handles. Lower the density, narrow the date range, or untick subdomains. <strong>${esc(t(SCOPE_DENSITY[best].label))}</strong> density fits. To scan the whole domain with no ceiling, run WayTrace locally: ${repo}.`)
+        + ' ' + fitBtn;
+    } else if (raw > SCOPE_CAP * 0.7) {
       note.innerHTML = LANG === 'fr'
-        ? `Ce domaine compte <strong>${available.toLocaleString()}</strong> snapshots, plus que les <strong>${SCOPE_CAP.toLocaleString()}</strong> que le service hébergé analyse par scan. WayTrace va donc échantillonner proportionnellement sur toutes les années. Pour un scan complet sans échantillonnage, <strong>resserrez la plage de dates</strong> ci-dessus (calendrier) ou <strong>baissez la densité</strong> pour tomber sous ${SCOPE_CAP.toLocaleString()} ; pour analyser tout le domaine en pleine profondeur, lancez WayTrace en local : ${repo}.`
-        : `This domain has <strong>${available.toLocaleString()}</strong> snapshots, more than the <strong>${SCOPE_CAP.toLocaleString()}</strong> the hosted service scans per run, so WayTrace will sample proportionally across all years. For a complete, un-sampled scan, <strong>narrow the date range</strong> above (calendar) or <strong>lower the density</strong> to get under ${SCOPE_CAP.toLocaleString()}; to scan the whole domain at full depth, run WayTrace locally: ${repo}.`;
+        ? `Un scan hébergé traite jusqu'à ${SCOPE_CAP.toLocaleString()} snapshots. Pour de plus gros travaux, lancez WayTrace en local : ${repo}.`
+        : `A hosted scan handles up to ${SCOPE_CAP.toLocaleString()} snapshots. For bigger jobs you can run WayTrace locally: ${repo}.`;
     } else {
-      note.innerHTML = LANG === 'fr'
-        ? `Le service hébergé analyse jusqu'à ${SCOPE_CAP.toLocaleString()} snapshots par scan, répartis sur toutes les années archivées. Pour de plus gros travaux, lancez WayTrace en local : ${repo}.`
-        : `The hosted service scans up to ${SCOPE_CAP.toLocaleString()} snapshots per scan, spread across all archived years. For bigger jobs you can run WayTrace locally: ${repo}.`;
+      note.hidden = true;
+      note.innerHTML = '';
     }
   }
 }
 
 async function launchScopedScan() {
+  // Belt and braces: the button is disabled while the selection overflows, but
+  // a stale click or a keyboard activation must not slip a sampled scan through.
+  if (!scopeFallback && _scopeRawCount() > SCOPE_CAP) {
+    showToast(t('too many for one scan'));
+    updateScopeEstimate();
+    return;
+  }
   $('scope-launch-btn').disabled = true;
   resetSessionState();
   try {
@@ -3185,15 +3841,15 @@ async function launchScopedScan() {
         location.hash = '#/history';
         return;
       }
-      throw new Error(d.detail?.message || 'You already have scans in flight from this connection.');
+      throw new Error(_apiErrorText(d.detail));
     }
     if (resp.status === 503) {
       const d = await resp.json().catch(() => ({}));
-      throw new Error(d.detail?.message || 'Service is full, try again in a few minutes.');
+      throw new Error(_apiErrorText(d.detail));
     }
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
-      throw new Error(err.detail || 'Scan failed');
+      throw new Error(_apiErrorText(err.detail, t('Scan failed')));
     }
     const data = await resp.json();
     // Guardrail: the server returned an existing scan for this domain instead
@@ -3238,11 +3894,18 @@ function renderResultsHeader(info) {
   $('res-domain').textContent = info.name;
   const el = $('res-meta');
   const m = info.scanMeta;
-  const n = (v) => Number(v || 0).toLocaleString('en-US');
+  const n = (v) => Number(v || 0).toLocaleString(LANG === 'fr' ? 'fr-FR' : 'en-US');
   if (m && (m.snapshots_analyzed || m.pages_scraped || info.total_findings)) {
     const found = m.total_snapshots_found, ana = m.snapshots_analyzed,
-          scr = m.pages_scraped, failed = m.pages_failed || 0, dedup = m.pages_deduped || 0,
+          failed = m.pages_failed || 0, dedup = m.pages_deduped || 0,
           fnd = info.total_findings || 0;
+    // A written 0 is a fact, the no-HTML-snapshots path records exactly that.
+    // A missing key is not zero, and Number(v || 0) turned one into the other:
+    // a scan whose meta carried no page count announced "0 pages were
+    // retrieved and analysed" under a headline saying thousands of snapshots
+    // were analysed, with the findings from those pages listed below it.
+    const scr = (m.pages_scraped != null) ? m.pages_scraped
+              : (ana != null ? ana : null);
     // Pages archive.org refused (IP block) are NOT archive gaps - separate them
     // so the sentence stays honest and a block gets its own clear warning.
     const blocked = m.pages_blocked || 0;
@@ -3255,13 +3918,15 @@ function renderResultsHeader(info) {
     // error, so it should not read like one.
     const explain = (LANG === 'fr')
       ? `Sur ${found ? `<b>${n(found)}</b> snapshots archivés` : 'les snapshots archivés'}, `
-        + `<b>${n(scr)}</b> pages ont été récupérées et analysées`
+        + (scr == null ? 'les pages ont été récupérées et analysées'
+                       : `<b>${n(scr)}</b> pages ont été récupérées et analysées`)
         + (gaps ? `, <b>${n(gaps)}</b> n'étaient plus disponibles côté archive (lacunes d'archive)` : '')
         + (dedup ? `, <b>${n(dedup)}</b> doublons ignorés` : '')
         + (blocked ? `, <b>${n(blocked)}</b> pages non récupérées (archive.org limitait le débit)` : '')
         + `${range ? `, couvrant ${esc(range)}` : ''}.`
       : `Of ${found ? `<b>${n(found)}</b> archived snapshots` : 'the archived snapshots'}, `
-        + `<b>${n(scr)}</b> pages were retrieved and analysed`
+        + (scr == null ? 'the pages were retrieved and analysed'
+                       : `<b>${n(scr)}</b> pages were retrieved and analysed`)
         + (gaps ? `, <b>${n(gaps)}</b> were no longer available from the archive (archive gaps)` : '')
         + (dedup ? `, <b>${n(dedup)}</b> duplicates skipped` : '')
         + (blocked ? `, <b>${n(blocked)}</b> pages archive.org rate-limited this run` : '')
@@ -3308,11 +3973,11 @@ function renderResultsHeader(info) {
     }
     el.innerHTML =
       `<div class="rm-line">`
-      + `<span class="rm-stat"><span class="rm-num">${n(fnd)}</span> ${t('findings')}</span>`
       + `<span class="rm-stat"><span class="rm-num">${n(attempted)}${partial ? ` / ${n(ana)}` : ''}</span> ${t('snapshots analysed')}</span>`
       + (paths !== null
           ? `<span class="rm-stat"><span class="rm-num">${n(paths)}</span> ${t('distinct addresses')}</span>` : '')
-      + `<span class="rm-stat"><span class="rm-num">${n(scr)}</span> ${t('pages scraped')}</span>`
+      + (scr && scr !== attempted
+          ? `<span class="rm-stat"><span class="rm-num">${n(scr)}</span> ${t('pages scraped')}</span>` : '')
       + (range ? `<span class="rm-range">${esc(range)}</span>` : '')
       + `</div>`
       + `<div class="rm-explain">${explain}</div>`
@@ -3472,18 +4137,28 @@ function v2BuildLegacyFindings(job) {
   // Synthesize per-finding severity by looking up the (category, value) pair
   // in the highlights list. Items absent from highlights stay severity=null
   // (they default to "BACKGROUND" via osintValue() returning '').
+  _r2RawHighlights = results.highlights || [];
+  /* A highlight that lists `values` covers exactly those; one that lists none
+     covers its whole category. The old code applied the FIRST highlight's
+     severity to every finding in the category, so a public-by-design Google
+     key inherited LEAK from the Stripe secret key beside it. Where two
+     highlights disagree about a category and neither narrows itself, nothing
+     is asserted: a wrong severity is worse than none. */
   const sevByCatValue = new Map();
-  const sevByCategory = new Map();  // fallback: blanket severity for the category
+  const blanket = new Map();        // category -> severity, or null if disputed
   for (const h of (results.highlights || [])) {
-    if (!h) continue;
+    if (!h || !h.category) continue;
     const sev = h.severity || null;
-    if (h.category) {
-      if (h.value) sevByCatValue.set(h.category + '::' + h.value, sev);
-      // Blanket fallback so e.g. all subdomain findings inherit "PIVOT" if the
-      // highlight only references the count, not each individual value.
-      if (!sevByCategory.has(h.category)) sevByCategory.set(h.category, sev);
+    const cat = h.category.replace(/_public$/, '');
+    if (Array.isArray(h.values) && h.values.length) {
+      for (const v of h.values) sevByCatValue.set(cat + '::' + v, sev);
+      continue;                     // narrowed, so it claims nothing wider
     }
+    if (h.value) { sevByCatValue.set(cat + '::' + h.value, sev); continue; }
+    if (blanket.has(cat) && blanket.get(cat) !== sev) blanket.set(cat, null);
+    else if (!blanket.has(cat)) blanket.set(cat, sev);
   }
+  const sevByCategory = blanket;
   const out = [];
   let synthId = 1;
   for (const [cat, items] of Object.entries(results)) {
@@ -3549,14 +4224,15 @@ function scanMore(domain) {
 
 /* ============================================================================
    REPORT 2.0  —  two-view master-detail results page
-   Default "Categories" view: a rail of all 43 categories (found first, empty
+   Default "Categories" view: a rail of every category (found first, empty
    collapsed), one open at a time, its findings + its own activity together.
    "Activity" view: checkable categories + pivots compose a shared-axis timeline,
    plus the favicon evolution gallery and a dated change feed. Neutral: provenance
    (first/last-seen, occurrences, archived source) is the evidence, no severity.
    ========================================================================== */
 
-const REPORT2_SCOPE = Object.keys(CAT_DESCRIPTIONS); // the canonical 43 categories
+const REPORT2_SCOPE = Object.keys(CAT_DESCRIPTIONS); // the canonical category list
+let _r2RawHighlights = [];   // kept so the rail can order by consequence
 
 let report2State = {
   view: 'cats',        // 'cats' | 'activity'
@@ -3574,6 +4250,14 @@ let _r2 = { findings: [], info: null, byCat: new Map(), found: [], empty: [], jo
 function _r2Chip(f) {
   const m = f.metadata;
   if (!m || typeof m !== 'object') return '';
+  // Nature, never verdict: "secret key" is what the extractor determined and
+  // anyone can check it against the prefix. "Leak" would be an inference about
+  // what the owner intended, which is the reader's call, not the tool's.
+  if (m.tier === 'secret' || m.tier === 'public') {
+    const lab = m.tier === 'secret' ? t('secret key') : t('public key');
+    return `<span class="r2-chip r2-chip-${m.tier}">${esc(lab)}</span>`
+      + (m.type ? `<span class="r2-chip">${esc(String(m.type).slice(0, 22))}</span>` : '');
+  }
   const c = m.version || m.type || m.platform || m.provider || m.service || m.kind
     || (f.category === 'subdomains' && /(^|\.)(dev|staging|test|preprod|uat|api|admin|internal)\b/.test(f.value) ? f.value.split('.')[0] : '');
   return c ? `<span class="r2-chip">${esc(String(c).slice(0, 22))}</span>` : '';
@@ -3683,7 +4367,21 @@ function renderReport2(info, findings, job) {
     byCat.get(f.category).push(f);
   }
   for (const arr of byCat.values()) arr.sort((a, b) => (b.occurrences || 0) - (a.occurrences || 0));
-  const found = [...byCat.keys()].filter(c => byCat.get(c).length).sort((a, b) => byCat.get(b).length - byCat.get(a).length);
+  // Which categories a highlight put in each tier. Read from the highlights
+  // list, not from the per-finding severity, because that one is inherited in
+  // bulk per category and gets individual values wrong.
+  const tierOf = new Map();
+  const RANK = { LEAK: 0, PIVOT: 1, CONTEXT: 2 };
+  for (const h of ((info.scanResults && info.scanResults.highlights) || _r2RawHighlights || [])) {
+    if (!h || !h.category) continue;
+    const r = RANK[h.severity];
+    if (r == null) continue;
+    const cat = h.category.replace(/_public$/, '');
+    if (!tierOf.has(cat) || r < tierOf.get(cat)) tierOf.set(cat, r);
+  }
+  const rank = (c) => (tierOf.has(c) ? tierOf.get(c) : 3);
+  const found = [...byCat.keys()].filter(c => byCat.get(c).length)
+    .sort((a, b) => rank(a) - rank(b) || byCat.get(b).length - byCat.get(a).length);
   const empty = REPORT2_SCOPE.filter(c => !byCat.has(c) || !byCat.get(c).length);
   // Co-occurrence: group findings by the archived page that introduced them, so a
   // row can reveal what else was seen on the same page (source_page_id).
@@ -3803,23 +4501,22 @@ function report2RenderSummary() {
   const nc = _r2.found.length;
   const live = _r2.findings.filter(_r2IsLive).length;
   const gone = nf - live;
-  const pages = m.pages_scraped || m.snapshots_analyzed || 0;
-  const range = (m.date_first_seen && m.date_last_seen) ? `${m.date_first_seen} → ${m.date_last_seen}` : '';
   const stat = (n, label) => `<span class="r2-sum-stat"><b>${n}</b> ${esc(label)}</span>`;
   const p = report2State.presence;
-  const seg = (key, label) =>
-    `<button class="r2-preseg${p === key ? ' on' : ''}" aria-pressed="${p === key}" onclick="report2SetPresence('${key}')">${esc(label)}</button>`;
+  const seg = (key, label, count) =>
+    `<button class="wt-tab${p === key ? ' on' : ''}" aria-pressed="${p === key}"`
+    + ` ${count ? '' : 'disabled'} onclick="report2SetPresence('${key}')">${esc(label)}`
+    + `<span class="wt-tabn">${count}</span></button>`;
+  const nfmt2 = (v) => Number(v || 0).toLocaleString(LANG === 'fr' ? 'fr-FR' : 'en-US');
   el.innerHTML =
     `<div class="r2-sum-stats">`
-    + stat(nf, t('findings'))
-    + stat(nc + '/43', t('categories'))
-    + (pages ? stat(pages, t('pages')) : '')
-    + (range ? `<span class="r2-sum-range">${esc(range)}</span>` : '')
+    + stat(nfmt2(nf), t('findings'))
+    + stat(nc + '/' + REPORT2_SCOPE.length, t('categories'))
     + `</div>`
-    + `<div class="r2-presence" role="group" aria-label="${esc(t('Filter by presence'))}">`
-    + seg('all', t('All'))
-    + `<button class="r2-preseg${p === 'live' ? ' on' : ''}" aria-pressed="${p === 'live'}" onclick="report2SetPresence('live')"><span class="r2-live-dot"></span>${esc(t('Still present'))} ${live}</button>`
-    + `<button class="r2-preseg${p === 'gone' ? ' on' : ''}" aria-pressed="${p === 'gone'}" onclick="report2SetPresence('gone')">${esc(t('Disappeared'))} ${gone}</button>`
+    + `<div class="wt-tabs" role="group" aria-label="${esc(t('Filter by presence'))}">`
+    + seg('all', t('All'), nf)
+    + seg('live', t('Still present'), live)
+    + seg('gone', t('Disappeared'), gone)
     + `</div>`;
 }
 function report2SetPresence(v) { report2State.presence = v; report2Render(); }
@@ -3878,8 +4575,9 @@ function report2RenderRail() {
   // Categories view rail
   const link = (c) => {
     const on = report2State.openCat === c;
+    const all = _r2.byCat.get(c);
     return `<div class="r2-rlink${on ? ' on' : ''}" role="button" tabindex="0" onclick="report2OpenCat('${c}')" onkeydown="report2RailKey(event,'${c}')">
-      <span>${esc(catLabel(c))}</span><span class="r2-c">${_r2.byCat.get(c).length}</span></div>`;
+      <span>${esc(catLabel(c))}</span><span class="r2-c">${all.length}</span></div>`;
   };
   const emptyLink = (c) => `<div class="r2-rlink zero${report2State.openCat === c ? ' on' : ''}" role="button" tabindex="0" onclick="report2OpenCat('${c}')" onkeydown="report2RailKey(event,'${c}')">
       <span>${esc(catLabel(c))}</span><span class="r2-c">0</span></div>`;
@@ -3906,7 +4604,7 @@ function report2RenderMain() {
     main.innerHTML =
       `<div class="r2-noresults">
         <div class="r2-noresults-title">${t('No findings')}</div>
-        <div class="r2-noresults-sub">${t('WayTrace searched all 43 categories across {n} archived pages and found nothing to extract.').replace('{n}', ana)}</div>
+        <div class="r2-noresults-sub">${t('WayTrace searched all {c} categories across {n} archived pages and found nothing to extract.').replace('{c}', REPORT2_SCOPE.length).replace('{n}', ana)}</div>
       </div>`;
     _r2Fade(main);
     return;
@@ -4110,7 +4808,8 @@ function report2Copy(ev) {
   // inline onclick attribute (a value with a quote used to break the button).
   const cell = btn.parentElement && btn.parentElement.querySelector('.r2-val-text');
   const val = cell ? cell.textContent : '';
-  navigator.clipboard.writeText(val).then(() => {
+  copyText(val, null).then((ok) => {
+    if (!ok) { showToast(t('Copy failed')); return; }
     showToast(t('Copied') + ' ✓');
     // In-place confirmation so it's obvious the click copied: the icon flips to a
     // green check and pulses, then reverts.
@@ -4128,8 +4827,9 @@ function report2CopyCol(cat, ev) {
   const q = report2State.filter.toLowerCase();
   const list = q ? all.filter(f => f.value.toLowerCase().includes(q)) : all;
   const btn = ev && ev.currentTarget;
-  navigator.clipboard.writeText(list.map(f => f.value).join('\n'))
-    .then(() => {
+  copyText(list.map(f => f.value).join('\n'), null)
+    .then((ok) => {
+      if (!ok) { showToast(t('Copy failed')); return; }
       showToast(t('Copied') + ' ' + list.length + ' ' + t('values'));
       if (btn) {
         const prev = btn.textContent;
@@ -4172,7 +4872,14 @@ function renderV2InLegacyView(job) {
 
   // Swap actions: drop Timeline/Export/Re-analyze, inject our v2 buttons.
   const actions = document.querySelector('#view-results .results-actions');
-  if (actions) {
+  if (actions && IS_EXPORT) {
+    // Downloading, re-scanning, sharing a link and the expiry countdown are
+    // all about the copy on the server. This file says what it is instead.
+    const taken = (job.created_at || '').slice(0, 10);
+    actions.innerHTML = `<div class="export-banner">${t('Offline copy.')} `
+      + `${taken ? esc(t('This scan was taken on {d} and nothing in this file updates.')
+                        .replace('{d}', taken)) : esc(t('Nothing in this file updates.'))}</div>`;
+  } else if (actions) {
     const expires = job.expires_at ? ` <span class="v2-expires-badge">${t('expires')} ${relativeFutureTime(job.expires_at)}</span>` : '';
     const uid = encodeURIComponent(job.url_id);
     let shareBtn = '';
@@ -4181,7 +4888,8 @@ function renderV2InLegacyView(job) {
          href="/api/s/${uid}/export.html" download>${t('Download HTML')}</a>
       <a class="btn" href="/api/s/${uid}/export.json" download>${t('JSON')}</a>
       <a class="btn" href="/api/s/${uid}/export.csv" download>${t('CSV')}</a>
-      <button class="btn" type="button" onclick="scanMore('${esc(job.domain)}')" title="${esc(t('Run a denser scan of this domain, reusing what was already found'))}">${t('Scan more')}</button>
+      ${job.can_publish === false ? '' :
+        `<button class="btn" type="button" onclick="scanMore('${esc(job.domain)}')" title="${escAttr(t('Run a denser scan of this domain, reusing what was already found'))}">${t('Scan more')}</button>`}
       ${shareBtn}
       ${expires}
     `;
@@ -4282,7 +4990,7 @@ function renderExportCategories() {
     <label class="exp-cat-item">
       <input type="checkbox" ${exportSelectedCats.has(c) ? 'checked' : ''}
              onchange="toggleExportCat('${esc(c)}', this.checked)">
-      <span>${esc(c.replace(/_/g, ' '))}</span>
+      <span>${esc(catLabel(c))}</span>
       <span class="exp-cat-item-count">${counts[c]}</span>
     </label>
   `).join('');
@@ -4308,7 +5016,7 @@ function renderExportFiltersHint() {
   const el = document.getElementById('exp-filters-hint');
   el.textContent = hints.length
     ? `Applying: ${hints.join(', ')} (will limit export to filtered findings)`
-    : 'No filters active (will export all selected categories)';
+    : t('No filters active (will export all selected categories)');
 }
 
 function buildExportData() {
@@ -4367,8 +5075,13 @@ function formatExport(findings, format) {
     const rows = findings.map(f => {
       const flat = flatten(f);
       return cols.map(c => {
-        const v = flat[c] == null ? '' : String(flat[c]);
-        return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+        let v = flat[c] == null ? '' : String(flat[c]);
+        // A cell opening with one of these is a formula in Excel, LibreOffice
+        // and Sheets, and every value here came out of someone else's archived
+        // page. The apostrophe is what a spreadsheet reads as "text follows";
+        // one character strips it back to what was on the page.
+        if (/^[=+\-@\t\r]/.test(v)) v = "'" + v;
+        return /["',\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
       }).join(',');
     });
     return [header, ...rows].join('\n');
@@ -4376,9 +5089,23 @@ function formatExport(findings, format) {
   if (format === 'markdown') {
     const byCat = {};
     for (const f of findings) (byCat[f.category] = byCat[f.category] || []).push(f);
+    // Markdown is the format that gets pasted into somebody's written report,
+    // and it used to start at the first category heading: nothing in the file
+    // said which domain it was about or when the scan was taken. The machine
+    // formats stay bare, a header would only get in jq's way.
+    const job = _lastScanPayload || {};
+    const taken = (job.created_at || '').slice(0, 10);
+    const nCats = Object.keys(byCat).length;
     const lines = [];
+    if (job.domain) lines.push(`# ${job.domain}`, '');
+    lines.push([
+      'WayTrace',
+      `${findings.length} ${t(findings.length === 1 ? 'finding' : 'findings')}`
+        + ` · ${nCats} ${t(nCats === 1 ? 'category' : 'categories')}`,
+      taken ? `${t('scan of')} ${taken}` : '',
+    ].filter(Boolean).join(' · '), '');
     for (const cat of Object.keys(byCat).sort()) {
-      lines.push(`## ${cat.replace(/_/g, ' ')}`);
+      lines.push(`## ${catLabel(cat)}`);
       lines.push('');
       for (const f of byCat[cat]) {
         const sevKey = osintValue(f);
@@ -4421,7 +5148,7 @@ function downloadExport() {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  showToast(`Downloaded ${data.length} findings`);
+  showToast(t('Downloaded {n} findings').replace('{n}', data.length));
 }
 
 // Close on Escape
@@ -4430,6 +5157,34 @@ document.addEventListener('keydown', (e) => {
     closeExportDrawer();
   }
 });
+
+/* One copy path for the whole app, because there were five and three of them
+   announced success without checking. writeText returns a promise: it rejects,
+   it does not throw, so a try/catch wrapped around the bare call catches
+   nothing and the "Copied" toast fires even when the clipboard refused.
+   Returns true only if the text really landed. */
+async function copyText(value, okMsg) {
+  let ok = false;
+  try {
+    await navigator.clipboard.writeText(value);
+    ok = true;
+  } catch (_) {
+    // Denied permission, insecure context, or no Clipboard API: fall back to
+    // the old selection trick before admitting defeat.
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = value;
+      ta.setAttribute('readonly', '');
+      ta.style.cssText = 'position:fixed;top:-1000px;opacity:0';
+      document.body.appendChild(ta);
+      ta.select();
+      ok = document.execCommand('copy');
+      ta.remove();
+    } catch (_) { ok = false; }
+  }
+  if (okMsg !== null) showToast(ok ? (okMsg || t('Copied')) : t('Copy failed'));
+  return ok;
+}
 
 /* ===== PER-ROW COPY HELPER ===== */
 async function copyFindingValue(value, btn) {
@@ -4649,6 +5404,159 @@ async function loadHistory() {
   await renderMyScans();
 }
 
+/* A row that says only "completed" gives no reason to open it, and a row that
+   says only "failed" makes you open it to learn why. Both numbers were already
+   in the API payload and simply were not shown. */
+const MYSCANS = { q: '', state: 'all', sort: 'recent' };
+
+/* Was five equal boxes with a big number and two lines of caption each: the
+   canonical dashboard, and five cards to say what is one sentence. A date is
+   not a metric either, and a caption under a number is a confession that the
+   number does not speak for itself. One line, and the room goes to the list. */
+function _myScansSummary(done) {
+  const kept = (window._myScansAll || done).length;
+  const ok = done.filter(s => s.status === 'completed').length;
+  const ko = done.filter(s => s.status === 'failed').length;
+  const finds = done.reduce((a, s) => a + (s.findings || 0), 0);
+  const withExp = done.filter(s => s.expires_at).sort((a, b) => a.expires_at < b.expires_at ? -1 : 1);
+  const oldest = withExp[0];
+  const bit = (n, word) => `<b>${nfmt(n)}</b> ${esc(word)}`;
+  const parts = [bit(kept, t('kept'))];
+  if (ko) parts.push(`<span class="ms-ko">${bit(ko, t('ms.failed.word'))}</span>`);
+  if (finds) parts.push(bit(finds, t('findings')));
+  let line = parts.join('<span class="ms-dot">·</span>');
+  if (oldest) {
+    const when = fmtExpiresIn(oldest.expires_at);
+    line += `<span class="ms-dot">·</span><span class="ms-exp">`
+      + esc(t('next to expire')) + ' ' + `<b>${esc(oldest.domain)}</b>`
+      + (when ? ' ' + esc(when) : '') + `</span>`;
+  }
+  return `<p class="ms-summary">${line}</p>`;
+}
+
+/* A filter removes rows, a sort reorders them. They were two identical pill
+   groups side by side, which is decoration applied uniformly rather than form
+   following the act. Filters are tabs carrying their own counts, so the reader
+   sees what each one is worth before clicking and a state with nothing in it
+   cannot be clicked at all. Sort is a select, because it is a choice among
+   orders, not a set of things to switch on. */
+function _myScansControls() {
+  const rows = window._myScansDone || [];
+  const n = {
+    all: rows.length,
+    completed: rows.filter(s => s.status === 'completed').length,
+    failed: rows.filter(s => s.status === 'failed').length,
+    shared: rows.filter(s => s.is_published).length,
+  };
+  const states = [['all', t('ms.all')], ['completed', t('ms.completed')], ['failed', t('ms.failed')]];
+  const tabs = states.map(([k, lab]) => {
+    const c = n[k] || 0;
+    const on = MYSCANS.state === k;
+    return `<button type="button" class="ms-tab${on ? ' on' : ''}" ${c ? '' : 'disabled'}
+      onclick="_myScansSet('state','${k}')">${esc(lab)}<span class="ms-tabn">${c}</span></button>`;
+  }).join('');
+  const sorts = [['recent', t('Most recent')], ['findings', t('Most findings')]];
+  return '<div class="ms-controls">'
+    + `<div class="ms-tabs" role="tablist">${tabs}</div>`
+    + `<input class="ms-filter" type="search" placeholder="${escAttr(t('filter by domain…'))}"`
+    + ` value="${escAttr(MYSCANS.q)}" oninput="_myScansSet('q',this.value)">`
+    + `<label class="ms-sort">${esc(t('Sort'))}`
+    + `<select onchange="_myScansSet('sort',this.value)">`
+    + sorts.map(([k, lab]) =>
+        `<option value="${k}"${MYSCANS.sort === k ? ' selected' : ''}>${esc(lab)}</option>`).join('')
+    + '</select></label>'
+    + '</div>';
+}
+
+function _myScansSet(k, v) {
+  MYSCANS[k] = v;
+  if (k === 'q') { _myScansApply(); return; }   // typing must not lose focus
+  const host = document.getElementById('my-scans');
+  const ctl = host && host.querySelector('.ms-controls');
+  if (ctl) ctl.outerHTML = _myScansControls();
+  _myScansApply();
+}
+
+function _myScansApply() {
+  const list = document.getElementById('myscans-list');
+  if (!list) return;
+  let rows = (window._myScansDone || []).slice();
+  const q = MYSCANS.q.trim().toLowerCase();
+  if (q) rows = rows.filter(s => (s.domain || '').toLowerCase().includes(q));
+  if (MYSCANS.state === 'shared') rows = rows.filter(s => s.is_published);
+  else if (MYSCANS.state !== 'all') rows = rows.filter(s => s.status === MYSCANS.state);
+  if (MYSCANS.sort === 'findings') rows.sort((a, b) => (b.findings || 0) - (a.findings || 0));
+  list.innerHTML = rows.length ? _myScansRows(rows)
+    : `<div class="myscans-note">${esc(t('No scan matches that filter.'))}</div>`;
+}
+
+/* Grouped by day, because "when" is how people look for a scan they ran. */
+function _myScansRows(rows) {
+  const groups = new Map();
+  for (const s of rows) {
+    const g = MYSCANS.sort === 'findings' ? '' : _dayBucket(s.created_at);
+    if (!groups.has(g)) groups.set(g, []);
+    groups.get(g).push(s);
+  }
+  return [...groups].map(([label, items]) =>
+    (label ? `<div class="ms-group">${esc(label)}</div>` : '')
+    + items.map(_myScansRow).join('')).join('');
+}
+
+function _dayBucket(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return t('Earlier');
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const day = new Date(d); day.setHours(0, 0, 0, 0);
+  const diff = Math.round((today - day) / 86400000);
+  if (diff <= 0) return t('Today');
+  if (diff === 1) return t('Yesterday');
+  return t('Earlier');
+}
+
+function fmtExpiresIn(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  const days = Math.ceil((d - Date.now()) / 86400000);
+  if (days < 0) return '';
+  if (days === 0) return t('today');
+  if (days === 1) return t('in 1 day');
+  return t('in {n} days').replace('{n}', days);
+}
+
+function nfmt(n) { return Number(n).toLocaleString(LANG === 'fr' ? 'fr-FR' : 'en-US'); }
+
+function _myScansRow(s) {
+  const uid = encodeURIComponent(s.url_id);
+  let sharedBadge = '';
+  const facts = s.status === 'failed'
+    ? `<span class="ms-why" title="${escAttr(t(s.error || ''))}">${esc(s.error ? t(s.error) : t('no reason recorded'))}</span>`
+    : [s.findings != null ? nfmt(s.findings) + ' ' + t('ms.findings') : '',
+       s.pages ? nfmt(s.pages) + ' ' + t('ms.pages') : '']
+        .filter(Boolean).map(x => `<span>${esc(x)}</span>`).join('');
+  const dur = fmtScanDuration(s.created_at, s.completed_at);
+  return `
+    <div class="myscans-row" onclick="location.hash='#/s/${uid}'">
+      <span class="myscans-domain">${esc(s.domain)}</span>
+      <span class="myscans-status st-${esc(s.status)}">${esc(t(s.status))}</span>
+      ${sharedBadge}
+      <span class="ms-facts">${facts}</span>
+      <span class="myscans-meta">
+        <span class="myscans-when">${esc(fmtScanStamp(s.created_at))}</span>
+        ${dur ? `<span class="myscans-dur">${esc(t('took'))} ${esc(dur)}</span>` : ''}
+      </span>
+      <span class="ms-rowacts" onclick="event.stopPropagation()">
+        <button class="btn-mini" type="button" onclick="copyScanLink('${uid}')">${esc(t('Copy link'))}</button>
+        <button class="btn-mini" type="button" onclick="location.hash='#/scope/'+encodeURIComponent('${escAttr(s.domain)}')">${esc(t('Re-run'))}</button>
+      </span>
+      ${_scanActionsCell(s.url_id, t('Delete scan'))}
+    </div>`;
+}
+
+function copyScanLink(uid) {
+  copyText(location.origin + '/#/s/' + uid, t('Link copied'));
+}
+
 async function renderMyScans() {
   const host = $('my-scans');
   if (!host) return;
@@ -4776,11 +5684,15 @@ const debouncedPageSearch = _debounce(() => runPageSearch(), 300);
 /* ===== KEYBOARD SHORTCUTS ===== */
 
 function showKbHelp() {
-  document.getElementById('kb-overlay').classList.add('visible');
+  const el = document.getElementById('kb-overlay');
+  el.classList.add('visible');
+  wtDialogOpened(el, closeKbHelp);
 }
 
 function closeKbHelp() {
-  document.getElementById('kb-overlay').classList.remove('visible');
+  const el = document.getElementById('kb-overlay');
+  el.classList.remove('visible');
+  wtDialogClosed(el);
 }
 
 document.addEventListener('keydown', (e) => {
@@ -4806,7 +5718,12 @@ document.addEventListener('keydown', (e) => {
 
   const key = e.key;
   const currentView = (location.hash || '#/').replace('#/', '').split('/')[0] || 'home';
-  const onResults = currentView === 'results';
+  // Ask the page, not the URL. A downloaded export renders the report with no
+  // hash at all, so deriving this from location left every report shortcut
+  // dead in the one context where the panel documenting them was still shown.
+  const resultsEl = document.getElementById('view-results');
+  const onResults = (resultsEl && resultsEl.classList.contains('active'))
+                    || currentView === 'results';
 
   if (key === '?') {
     e.preventDefault();
@@ -4838,13 +5755,13 @@ document.addEventListener('keydown', (e) => {
     return;
   }
 
-  if (key === 'h') {
+  if (key === 'h' && !IS_EXPORT) {
     e.preventDefault();
     location.hash = '#/history';
     return;
   }
 
-  if (key === 'n') {
+  if (key === 'n' && !IS_EXPORT) {
     e.preventDefault();
     location.hash = '#/';
     setTimeout(() => {
@@ -4859,7 +5776,16 @@ document.addEventListener('keydown', (e) => {
 (async () => {
   try {
     const r = await fetch(API + '/api/health');
-    if (r.ok) console.log('WayTrace backend connected');
+    if (r.ok) {
+      // The footer used to carry a hand-written version string, which had
+      // drifted to v1.8.2 while production ran 1.9.1. It comes from the API now.
+      const d = await r.json();
+      if (d.version) WT_VERSION = d.version;
+      const el = document.getElementById('home-version');
+      if (el && d.version) el.textContent = 'v' + d.version;
+      // The wizard may already be on screen when this resolves.
+      if (document.getElementById('setup-ua-preview')) setupOnContact();
+    }
   } catch (e) {
     console.warn('Backend unreachable:', e.message);
   }

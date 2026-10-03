@@ -31,7 +31,7 @@ from services.extractor import (
     ALL_CATEGORIES, compute_highlights,
     new_accum, mine_subdomains, process_page, finalize_accum,
 )
-from services.extractor.finalize import merge_analytics_ids
+from services.extractor.finalize import ALL_CATEGORIES, merge_analytics_ids
 from services.favicon_hash import hash_favicons
 from services.filters import (
     filter_snapshots, _compute_cap, _normalize_path, _score_path,
@@ -525,6 +525,15 @@ async def _scan_pipeline(
             "date_first_seen": date_first,
             "date_last_seen": date_last,
             "scan_duration_seconds": duration,
+            # How many entities the scan actually produced. db.admin_recent_jobs
+            # already read meta["total_findings"], but nothing ever wrote it, so
+            # the admin panel and My scans both showed a blank where the number
+            # belongs. Counted here, once, instead of re-parsing the whole
+            # results blob on every listing.
+            "total_findings": sum(
+                len(v) for k, v in results.items()
+                if k in ALL_CATEGORIES and isinstance(v, list)
+            ),
         }
 
         await store.update_job(

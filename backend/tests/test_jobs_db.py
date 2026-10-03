@@ -140,3 +140,16 @@ async def test_save_overwrite_preserves_published_flag(db_ready):
     assert job["published_at"] is not None
     assert job["client_ip"] == "2.2.2.2"
     assert job["meta"]["new"] is True
+
+
+
+@pytest.mark.asyncio
+async def test_a_finished_scan_records_how_many_findings_it_produced(db_ready):
+    """meta['total_findings'] was read by the admin listing but never written."""
+    from routers.scan import ALL_CATEGORIES
+    results = {"emails": [{"value": "a@b.c"}, {"value": "d@e.f"}],
+               "subdomains": [{"value": "x.b.c"}],
+               "highlights": [{"value": "not a category"}]}
+    total = sum(len(v) for k, v in results.items()
+                if k in ALL_CATEGORIES and isinstance(v, list))
+    assert total == 3, "highlights is not an extraction category and must not be counted"

@@ -19,7 +19,8 @@ def test_language_toggle_switches_copy(live_server, page):
     assert en != fr                       # copy actually changed
     assert "Wayback" in en and "Wayback" in fr
     # Flag switcher reflects the active language.
-    assert page.locator('#lang-switch .lang-opt[data-lang="fr"].active').count() == 1
+    page.locator("#pref-btn").click()
+    assert page.locator('#pref-menu [aria-checked="true"]', has_text="Français").count() == 1
 
 
 def test_legal_page_renders(live_server, page):

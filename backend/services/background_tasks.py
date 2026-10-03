@@ -50,6 +50,13 @@ async def cleanup_loop() -> None:
             n = await delete_expired_jobs()
             if n:
                 logger.info("Cleanup removed {} expired jobs", n)
+            # The archive.org incident log has its own, longer retention than
+            # the scans: it exists to compare one month with another, which a
+            # 14-day window would make impossible.
+            from services import archive_events
+            gone = await archive_events.purge()
+            if gone:
+                logger.info("Cleanup removed {} archive events past retention", gone)
             from db import maintain
             await maintain()  # PRAGMA optimize + WAL checkpoint
         except asyncio.CancelledError:

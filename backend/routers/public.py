@@ -30,13 +30,39 @@ router = APIRouter(prefix="/api", tags=["public"])
 
 
 
+# What a scan hands to whoever holds its link. An allowlist, not a list of
+# things to strip: the jobs row also carries the scanner's IP, their account
+# id, a notify address and the raw scan config, and the previous code removed
+# user_id by name while client_ip sat in the same dict. A column added later
+# must not leak by default.
+_PUBLIC_FIELDS = (
+    "url_id", "domain", "status",
+    "created_at", "expires_at", "completed_at",
+    "is_published", "published_at",
+    "meta", "results",
+)
+
+
+def _public_view(job: dict) -> dict:
+    return {k: job.get(k) for k in _PUBLIC_FIELDS if k in job}
+
+
 def _is_expired(iso_str: str | None) -> bool:
+    """True when this scan is past its retention date.
+
+    A date that cannot be read counts as expired. Retention is a promise, and
+    the old parser understood exactly one format and answered "still valid" to
+    everything else, so a timestamp written any other way would have kept a
+    scan readable forever.
+    """
     if not iso_str:
-        return False
+        return False                      # never given an expiry
     try:
-        dt = datetime.strptime(iso_str, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
     except ValueError:
-        return False
+        return True
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
     return dt <= datetime.now(timezone.utc)
 
 
@@ -86,11 +112,9 @@ async def get_scan_public(url_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Scan not found")
     if _is_expired(persisted.get("expires_at")):
         raise HTTPException(status_code=410, detail="Scan expired")
-    owned = persisted.get("user_id") is not None
-    can_publish = _owner_ok(persisted, user)
-    payload = {k: v for k, v in persisted.items() if k != "user_id"}
-    payload["owned"] = owned
-    payload["can_publish"] = can_publish
+    payload = _public_view(persisted)
+    payload["owned"] = persisted.get("user_id") is not None
+    payload["can_publish"] = _owner_ok(persisted, user)
     return payload
 
 
@@ -169,7 +193,9 @@ async def export_scan_html(url_id: str):
         raise HTTPException(status_code=404, detail="Scan not found")
     if _is_expired(persisted.get("expires_at")):
         raise HTTPException(status_code=410, detail="Scan expired")
-    html = build_standalone_html(persisted)
+    # The export is a file people hand over, so it gets the same view as the
+    # share link and not the whole row.
+    html = build_standalone_html(_public_view(persisted))
     safe_domain = "".join(
         c if c.isalnum() or c in "-_." else "_"
         for c in (persisted.get("domain") or "scan")
@@ -181,6 +207,20 @@ async def export_scan_html(url_id: str):
         media_type="text/html; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+# Excel, LibreOffice and Sheets all treat a cell opening with one of these as
+# a formula. Everything WayTrace exports was written by someone else and
+# archived years ago, so a page crafted with =HYPERLINK("…"&A1) in it would
+# exfiltrate the rest of the sheet the moment an analyst opened the download.
+# Prefixing with an apostrophe is what spreadsheets read as "this is text":
+# the value stays legible and strips back to the original in one character.
+_FORMULA_LEAD = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _csv_safe(value) -> str:
+    text = "" if value is None else str(value)
+    return "'" + text if text[:1] in _FORMULA_LEAD else text
 
 
 def _export_name(persisted: dict, ext: str) -> str:
@@ -241,12 +281,12 @@ async def export_scan_csv(url_id: str):
             value = _item_value(cat, item)
             if value is None:
                 continue
-            writer.writerow([
+            writer.writerow([_csv_safe(c) for c in (
                 cat, value,
                 item.get("first_seen", ""), item.get("last_seen", ""),
                 item.get("occurrences", 1),
                 item.get("source_url", ""),
-            ])
+            )])
     return Response(
         content=output.getvalue(), media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{_export_name(persisted, "csv")}"'},

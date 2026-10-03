@@ -202,6 +202,12 @@ async def security_headers(request, call_next):
     response.headers.setdefault("Content-Security-Policy", _CSP)
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    # Anything addressed by a url_id is reached by holding the link, and the
+    # link is the credential. Set here rather than per route so an endpoint
+    # added later under /s/ cannot be forgotten.
+    path = request.url.path
+    if path.startswith("/s/") or path.startswith("/api/s/"):
+        response.headers.setdefault("X-Robots-Tag", "noindex, nofollow, noarchive")
     return response
 
 

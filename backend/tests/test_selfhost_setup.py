@@ -34,7 +34,7 @@ async def client():
 async def test_get_config_exposes_setup_and_instance_id(client):
     d = (await client.get("/api/config")).json()
     assert d["setup_completed"] is False
-    assert re.fullmatch(r"[0-9a-f]{6}", d["instance_id"])
+    assert re.fullmatch(r"[0-9a-f]{6,}", d["instance_id"])
     assert any(g["key"] == "instance" for g in d["groups"])
     inst = next(g for g in d["groups"] if g["key"] == "instance")
     keys = {s["key"] for s in inst["settings"]}
@@ -89,3 +89,36 @@ def test_resolve_categories():
     assert resolve_categories(None) == ["emails", "endpoints"]
     assert resolve_categories(ScanConfig()) == ["emails", "endpoints"]
     settings.default_categories = []
+
+
+def test_the_wizard_ua_preview_is_built_from_the_same_pieces_as_the_real_one():
+    """The wizard exists to show the operator exactly what archive.org will see.
+
+    It used to scrape the version out of the footer DOM, and a footer rewrite
+    dropped the class it looked for, so the preview read "WayTrace/" with no
+    version at all: a string the server never sends. The version now comes from
+    /api/health, which is also where the footer gets it.
+    """
+    from pathlib import Path
+    app_js = Path(__file__).resolve().parents[2] / "frontend" / "app.js"
+    if not app_js.exists():
+        import pytest
+        pytest.skip("frontend not present")
+    src = app_js.read_text(encoding="utf-8")
+    assert "querySelector('.home-version')" not in src, (
+        "the UA preview is scraping the DOM for the version again; a markup "
+        "change silently empties it"
+    )
+    assert "WT_VERSION = d.version" in src, "the version must be captured from /api/health"
+    assert "function _instanceVersion() { return WT_VERSION; }" in src
+
+
+def test_the_ua_preview_matches_the_server_format():
+    """Both sides assemble 'WayTrace/<v> (+<contact|project url>; id:<id>)'."""
+    from services.identity import build_user_agent
+    assert build_user_agent("2.0.0", "", "abcd1234") == (
+        "WayTrace/2.0.0 (+https://github.com/thomashousset/WayTrace; id:abcd1234)"
+    )
+    assert build_user_agent("2.0.0", "ops@x.io", "abcd1234") == (
+        "WayTrace/2.0.0 (+ops@x.io; id:abcd1234)"
+    )

@@ -49,7 +49,7 @@ archive.org (CDX API + Wayback Machine)
    between requests. Extraction overlaps with the download, so findings start
    appearing while pages are still coming in.
 4. **OSINT extraction** (`services/extractor/`): a package with one module per
-   category, 43 categories total, orchestrated by `extract.py` and
+   category, 48 categories total, orchestrated by `extract.py` and
    `finalize.py`. Parsing uses regex + selectolax DOM. Every extracted entity
    carries `first_seen`, `last_seen` and `occurrences`; `highlights.py` ranks
    the notable findings.

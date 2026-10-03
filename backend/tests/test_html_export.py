@@ -136,3 +136,61 @@ async def test_export_sanitizes_unsafe_domain_in_filename(client):
     # No slashes / colons / quotes in the suggested filename
     assert "/" not in cd.split('"')[1]
     assert "\\" not in cd.split('"')[1]
+
+
+# --- The export must actually work offline -----------------------------------
+# Every test above asserts on a substring of the HTML. None ever opened the
+# file. The frontend was split into index.html + styles.css + app.js at some
+# point, and from then on the "standalone" export shipped two dead <link>/
+# <script> references: opened from disk it rendered an unstyled home page with
+# no scan on it at all, and nothing here noticed.
+
+def _built():
+    return build_standalone_html({
+        "url_id": "abc", "domain": "x.com",
+        "status": "completed", "results": {"emails": []},
+    })
+
+
+def test_export_references_no_external_asset():
+    html = _built()
+    assert 'href="/styles.css"' not in html
+    assert 'src="/app.js"' not in html
+
+
+def test_export_inlines_the_stylesheet_and_the_script():
+    from services.html_export import _FRONTEND_PATH
+    html = _built()
+    css = (_FRONTEND_PATH.parent / "styles.css").read_text(encoding="utf-8")
+    js = (_FRONTEND_PATH.parent / "app.js").read_text(encoding="utf-8")
+    # A distinctive line from each file, not the whole body: enough to prove
+    # the content travelled, cheap enough not to diff 500 KB.
+    assert css.splitlines()[52].strip() in html      # the --font token
+    assert "__WAYTRACE_PRELOAD__" in js and js.count("function") > 50
+    assert "window.__WAYTRACE_PRELOAD__" in html
+    assert "</style>" in html and "<script>" in html
+
+
+def test_export_weighs_what_the_three_files_weigh():
+    from services.html_export import _FRONTEND_PATH
+    total = sum((_FRONTEND_PATH.parent / n).stat().st_size
+                for n in ("index.html", "styles.css", "app.js"))
+    assert len(_built().encode("utf-8")) > total * 0.9
+
+
+def test_export_neutralises_closing_tags_hidden_in_the_assets(tmp_path):
+    # A stylesheet or a script carrying its own closing tag in a string would
+    # break out of the block it is inlined into. Neither file does today; both
+    # keep changing.
+    (tmp_path / "index.html").write_text(
+        '<html><head><link rel="stylesheet" href="/styles.css"></head>'
+        '<body><script src="/app.js"></script></body></html>', encoding="utf-8")
+    (tmp_path / "styles.css").write_text(
+        'body{content:"</style><script>alert(1)</script>"}', encoding="utf-8")
+    (tmp_path / "app.js").write_text(
+        'var s = "</script><img src=x onerror=alert(1)>";', encoding="utf-8")
+    html = build_standalone_html(
+        {"url_id": "a", "domain": "b.com", "status": "completed", "results": {}},
+        frontend_path=tmp_path / "index.html")
+    assert "</style><script>alert(1)" not in html
+    assert "</script><img src=x" not in html

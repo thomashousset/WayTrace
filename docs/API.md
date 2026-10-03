@@ -99,7 +99,7 @@ capability needed.
 | `GET /api/s/{url_id}/search?q=...` | Full-text search inside the scan's archived pages. |
 | `GET /api/s/{url_id}/export.html` | Standalone HTML report (offline viewing). |
 | `GET /api/s/{url_id}/export.json` | Raw findings as JSON. |
-| `GET /api/s/{url_id}/export.csv` | Findings as CSV. |
+| `GET /api/s/{url_id}/export.csv` | Findings as CSV. A value starting with `=`, `+`, `-` or `@` is prefixed with an apostrophe so a spreadsheet reads it as text rather than as a formula. That includes international phone numbers and `@handles`. Strip one leading character to get the archived value back, or use `export.json`, which is untouched. |
 | `DELETE /api/s/{url_id}` | Cancel (if running) and permanently delete the scan. |
 | `GET /api/local-scans` | Every scan this instance has run (self-hosted history). |
 | `GET /api/example-scan` | `url_id` of the configured demo scan, if any. |

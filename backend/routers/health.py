@@ -42,19 +42,25 @@ async def archive_status():
 # The banner threshold: this many WAITING scans reads as "high traffic".
 BUSY_WAITING_THRESHOLD = 3
 
-# 7-day scan count for the homepage status strip. /service-status is polled by
-# every open tab, so the DB is only re-asked once a minute.
-_SCANS_7D_TTL = 60.0
-_scans_7d_cache: dict = {"value": 0, "ts": 0.0}
+# When the last scan was submitted, for the homepage status strip.
+# /service-status is polled by every open tab, so the DB is only re-asked once a
+# minute.
+#
+# A TIMESTAMP is cached, never an age. An age computed here would be up to a
+# minute stale by the time it is displayed; a timestamp stays correct however
+# long it sits in the cache, and the browser turns it into "5 min ago" at the
+# moment it paints.
+_LAST_SCAN_TTL = 60.0
+_last_scan_cache: dict = {"value": None, "ts": 0.0}
 
 
-async def _scans_last_7_days() -> int:
+async def _last_scan_at() -> str | None:
     now = time.monotonic()
-    if now - _scans_7d_cache["ts"] > _SCANS_7D_TTL:
-        from db import count_jobs_last_days
-        _scans_7d_cache["value"] = await count_jobs_last_days(7)
-        _scans_7d_cache["ts"] = now
-    return _scans_7d_cache["value"]
+    if now - _last_scan_cache["ts"] > _LAST_SCAN_TTL:
+        import db as _db
+        _last_scan_cache["value"] = await _db.last_scan_created_at()
+        _last_scan_cache["ts"] = now
+    return _last_scan_cache["value"]
 
 
 @router.get("/service-status")
@@ -72,9 +78,9 @@ async def service_status():
     except Exception:
         active, waiting = 0, 0
     try:
-        scans_7d = await _scans_last_7_days()
+        last_scan_at = await _last_scan_at()
     except Exception:
-        scans_7d = 0
+        last_scan_at = None
     if maintenance.is_enabled():
         state = "maintenance"
     elif waiting >= BUSY_WAITING_THRESHOLD:
@@ -102,7 +108,7 @@ async def service_status():
             "maintenance": maintenance.is_enabled(),
             "maintenance_message": maintenance.message() or None,
             "notice": maintenance.notice() or None,
-            "scans_7d": scans_7d,
+            "last_scan_at": last_scan_at,
             "retention_days": settings.scan_retention_days,
             "config_panel": settings.config_panel_enabled,
             "setup_completed": setup_ok,

@@ -38,9 +38,11 @@ async def test_ok_state(client):
     assert d["service"]["retention_days"] == settings.scan_retention_days
     assert d["service"]["maintenance"] is False
     assert "state" in d["archive"]
-    # 7-day rolling scan count for the homepage status strip.
-    assert isinstance(d["service"]["scans_7d"], int)
-    assert d["service"]["scans_7d"] >= 0
+    # Freshness of the last scan for the homepage strip: a timestamp or None,
+    # never a count. See tests/test_last_scan_freshness.py for the behaviour.
+    assert "scans_7d" not in d["service"]
+    assert d["service"]["last_scan_at"] is None or isinstance(
+        d["service"]["last_scan_at"], str)
 
 
 @pytest.mark.asyncio

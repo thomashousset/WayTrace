@@ -335,3 +335,22 @@ async def test_index_defaults_blob_escapes_script_breakout(client, monkeypatch):
     assert "</script><img" not in html
     assert "onerror=alert(1)" not in html.split("__WT_DEFAULTS__=")[1].split("</script>")[0] or True
     assert "\\u003c/script\\u003e" in html
+
+
+@pytest.mark.anyio
+async def test_a_shared_report_does_not_claim_the_reader_owns_it(client):
+    """`owned` says the scan has an owner, not that you are one. Scan more
+    re-runs the scan with a bigger budget, so it belongs to whoever ran it;
+    it was offered to anyone holding the link, who would then hit the sign-in
+    wall. can_publish is the field that means "yours".
+    """
+    now = datetime.now(timezone.utc)
+    await save_job(
+        url_id="sharedone", domain="shared.com", client_ip="1.1.1.1",
+        created_at=now, expires_at=now + timedelta(days=14),
+        status="completed", meta={}, results={}, user_id=99,
+    )
+    body = (await client.get("/api/s/sharedone")).json()
+    assert body["owned"] is True, "the scan does have an owner"
+    assert body["can_publish"] is False, "but the anonymous reader is not it"
+    assert "user_id" not in body, "the owner's id never leaves the server"

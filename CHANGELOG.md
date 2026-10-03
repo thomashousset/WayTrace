@@ -1,5 +1,75 @@
 # Changelog
 
+## v2.0.0
+
+A full redesign of every screen, followed by an audit that used the product
+instead of reading it. Most of what follows was found by opening a downloaded
+export, printing a report, pressing the documented keys, or reading the
+payload a share link returns.
+
+**The report is the thing this product makes, so it was rebuilt around that.**
+Categories are ordered by consequence, taken from the findings themselves,
+while each value carries a factual label (`secret key`, `public key`) and
+never a verdict. The presence filter became tabs carrying their own counts.
+The header stopped repeating the numbers already in the summary, and stopped
+announcing 43 categories when there are 48. A scan that fails now says why,
+on the page you open to ask.
+
+**Downloading a report gave you a file that was not a report.** The frontend
+had been split into three files, so a downloaded copy fetched a stylesheet and
+a script that were not there: it opened on the home page, unstyled, with no
+scan on it. Everything is inlined now. The file works offline, opens in your
+language, and no longer offers eleven actions that need a server it does not
+have.
+
+**Printing a report produced a blank page.** The print rules named classes from
+a scan view that no longer existed, so the domain, the counts and every
+extracted value came out white on white. Paper has its own palette now, one
+column, no controls, and the timeline keeps its bars.
+
+**A CSV cell could run as a formula in your spreadsheet.** Everything WayTrace
+exports was written by someone else and archived years ago, and a cell opening
+with `=`, `+`, `-` or `@` executes on open. Both writers now neutralise it.
+That includes international phone numbers and `@handles`, which is why the
+behaviour is documented next to the endpoint.
+
+**A share link revealed where the scan was run from.** The API serialised the
+whole database row: it stripped the account id by name and left the IP address
+beside it, and the HTML export carried the row untouched into whatever file you
+sent on. Both go through an allowlist now, so a column added later cannot leak
+by default.
+
+**And the link was invited into search engines.** robots.txt still said
+`Allow: /s/` from the days of the public feed, the reverse proxy served its own
+contradicting copy, and the access log redacted only half of the URL shapes. A
+scan URL is the credential; none of that is true any more.
+
+**The whole interface now answers in your language.** A scan in progress, a
+scan refused, a scan that failed, and every sign-in error were written in
+English by the server and printed as they arrived. The report itself ignored
+the language switch entirely: not one category label changed. It relabels in
+place now, keeping your open category, your filter and your tab.
+
+**Accessibility.** The report had no heading at all, so a screen reader had no
+structure to navigate. It has one, the views sit in a main landmark, and a
+skip link reaches it on the first Tab. Two dialogs claimed the rest of the page
+was inert while letting Tab walk straight out; they hold focus now, Escape
+closes them, and focus goes back where it came from.
+
+**Self-hosting.** The settings page had an unlabelled theme option and a
+control column sitting at three different alignments. The production config
+example listed nine keys that did nothing, seven of them under a heading
+claiming to tune archive.org politeness, while the governor that actually does
+had no entry. The public repository also shipped a test suite with three
+failures; it does not any more.
+
+**Guards.** Every defect above had passing tests, because they asserted on a
+substring instead of the artefact. Nineteen new test files check the artefact:
+they open the exported file, print the report under every palette, press the
+documented keys, read what a French visitor actually sees, and walk the backend
+for messages nobody translated. They were mutation-tested, which found one that
+passed while the thing it guarded was broken.
+
 ## v1.9.1
 
 - **A rejected address no longer disappears into silence.** When a mailbox refuses our mail, the provider stops delivering to it and says nothing. Five addresses had been in that state for months, one of them a real account created with a mistyped address that was told, every time, that a confirmation email was on its way. Bounces and complaints now come back into WayTrace: the sign-in page says the address rejected our messages instead of promising a link, the signup flow stops claiming a confirmation was sent, and the account still works so nobody is locked out by a typo they can fix.
