@@ -267,7 +267,7 @@ def compute_highlights(results: dict, domain: str) -> list[dict]:
             f"{len(hidden)} hidden form field(s)",
             ", ".join(f"{h.get('name', '')}={h.get('value', '')[:30]}" for h in hidden[:3]),
             "Check for CSRF tokens, workflow states, internal IDs",
-            values=[x.get("value") for x in pubs],
+            values=[x.get("value") for x in hidden],
         )
 
     sensitive_js = [

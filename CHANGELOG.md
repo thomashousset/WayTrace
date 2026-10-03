@@ -1,5 +1,19 @@
 # Changelog
 
+## v2.0.2
+
+**A scan could crash on a domain with a hidden form field.** The highlight for
+those fields listed the values of the Adsense block above it, a variable pasted
+by mistake when values= was added to sixteen call sites in one pass. When
+Adsense had matched, the highlight named the wrong findings; when it had not,
+the name was never bound and the whole scan failed with an UnboundLocalError.
+Any domain carrying a hidden input and no Adsense publisher ID was affected.
+
+Found by scanning a real domain on production rather than by reading the code.
+The guard now compares, for every highlight, the variable its values= reads
+against the variable its own block is built from, and refuses a name that
+belongs to a different block.
+
 ## v2.0.1
 
 **You can suggest a feature, next to the bug button.** Same shape as reporting
