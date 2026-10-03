@@ -4,9 +4,10 @@ import asyncio
 import json
 import sys
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse
 from loguru import logger
@@ -245,6 +246,53 @@ async def serve_robots():
         return FileResponse(robots, media_type="text/plain")
     # Sensible default rather than serving a binary icon as robots.txt.
     return PlainTextResponse("User-agent: *\nAllow: /\n")
+
+
+# RFC 9116. Built here rather than shipped as a file for two reasons. The
+# address belongs to whoever runs the instance, and a file in the tree would
+# hand this one's mailbox to every self-hosted copy, which is the mistake the
+# legal page already made once. And Expires is mandatory and must stay under a
+# year out, so a literal date is a quiet time bomb: computing it per request
+# means the file cannot go stale on a service nobody is watching.
+#
+# No contact configured, no file. An instance with nowhere to route a report
+# should say so with a 404 rather than publish an empty promise.
+_SECURITY_TXT_TTL_DAYS = 180
+
+
+@app.get("/.well-known/security.txt", include_in_schema=False)
+@app.get("/security.txt", include_in_schema=False)
+async def serve_security_txt():
+    contact = (settings.operator_contact or "").strip()
+    if not contact:
+        raise HTTPException(status_code=404)
+    # A bare address is the common case; anything with a scheme is already a URI.
+    uri = contact if "://" in contact or contact.startswith("mailto:") \
+        else f"mailto:{contact}"
+    expires = (datetime.now(timezone.utc)
+               + timedelta(days=_SECURITY_TXT_TTL_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    # public_base_url is a server-only setting and does not exist in the
+    # generated tree, so reading it as an attribute would 500 on exactly the
+    # self-hosted install that bothered to configure a contact.
+    base = (getattr(settings, "public_base_url", "") or "").rstrip("/")
+    lines = [
+        "# WayTrace is one small server run by one person.",
+        "#",
+        "# Reports are welcome and a person answers them. If you want to test",
+        "# actively, say so first so we can agree a scope: the scans on this",
+        "# server are investigations in progress that belong to the people who",
+        "# ran them, and that data is not mine to gamble with.",
+        "#",
+        "# There is no bounty. There is credit, and a straight answer.",
+        f"Contact: {uri}",
+        f"Expires: {expires}",
+        "Preferred-Languages: en, fr",
+        "Policy: https://github.com/thomashousset/WayTrace/blob/main/SECURITY.md",
+    ]
+    if base:
+        lines.append(f"Canonical: {base}/.well-known/security.txt")
+    return PlainTextResponse("\n".join(lines) + "\n",
+                             media_type="text/plain; charset=utf-8")
 
 
 # Entry assets must revalidate on every load (no-cache still allows the
