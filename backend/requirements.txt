@@ -3,7 +3,12 @@ uvicorn[standard]>=0.32.0
 pydantic>=2.10.0
 pydantic-settings>=2.7.0
 aiohttp>=3.11.0
-selectolax>=0.3.0
+# Held below 1.0: that release removes the Modest backend and makes
+# `from selectolax.parser import HTMLParser` raise on import, which is what all
+# 23 extractor modules do. Lifting this bound means moving them to
+# `selectolax.lexbor`, a different HTML engine whose parse results have to be
+# re-checked against the extractor tests, not a one-line swap.
+selectolax>=0.3.0,<1.0
 loguru>=0.7.0
 httpx>=0.28.0
 aiosqlite>=0.20.0,<0.23.0
