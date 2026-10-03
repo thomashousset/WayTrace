@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.9.1
+
+- **A rejected address no longer disappears into silence.** When a mailbox refuses our mail, the provider stops delivering to it and says nothing. Five addresses had been in that state for months, one of them a real account created with a mistyped address that was told, every time, that a confirmation email was on its way. Bounces and complaints now come back into WayTrace: the sign-in page says the address rejected our messages instead of promising a link, the signup flow stops claiming a confirmation was sent, and the account still works so nobody is locked out by a typo they can fix.
+- **You can reply to a WayTrace email.** Messages carry a reply address, which they never did. Answering one now reaches a person.
+- **Admin: accounts stop looking inactive when they are not.** The scan count was read from the table that gets purged after the retention window, so any account that had scanned more than two weeks earlier showed zero. It now reads the usage record, which is kept, and shows the date of the last scan next to the count.
+- **Admin: a new Delivery view** lists every address that can no longer be reached, why, and since when, including addresses with no account. A permanent bounce and a spam complaint are shown as what they are, because one means the address does not exist and the other means somebody asked to be left alone.
+- **Admin: the ban button is no longer offered on the proxy gateway address.** Roughly a third of scans are recorded under it, so banning it would have blocked a large share of real traffic in one click.
+
 ## v1.9.0
 
 - **Your scans stay yours.** A finished scan was reused across accounts: submitting a domain someone else had scanned in the last 14 days returned their report, and the interface presented it as a fast result. For people investigating live targets that disclosed both the findings and the fact that the domain was being looked at. Deduplication now only ever matches your own scans, and the same applies to attaching to a scan already running. A self-hosted instance, which has no accounts, is unaffected.

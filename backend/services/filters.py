@@ -318,8 +318,60 @@ def _allocate_budget_by_year(
     return picked
 
 
+# Distinct paths per 1000 usable captures, below which what we fetched is a
+# narrow slice of a few addresses rather than a view of the domain.
+#
+# Measured 2026-09-06 on three real preflights, all of which fetched the same
+# 37 500-row window:
+#     security.nl   26 175 paths / 36 894 captures = 709 per 1000
+#     ehesp.fr       3 546 / 27 737                = 128 per 1000
+#     mail.ru            8 / 20 298                = 0.4 per 1000
+# mail.ru has an index of 55 655 pages; the window covers a thin alphabetical
+# slice of it. 10 sits 25x above the pathological case and an order of magnitude
+# below the lowest healthy one, so the threshold is not load-bearing.
+#
+# It is a RATIO on purpose. A site that genuinely has five pages is small, not
+# narrow, and an absolute path count would flag it wrongly.
+NARROW_SAMPLE_PATHS_PER_1000 = 10.0
+
+
+def is_narrow_sample(unique_paths: int, capture_count: int) -> bool:
+    """True when the captures we hold cover too few distinct addresses to be
+    presented as a view of the domain.
+
+    Guards the coverage figure. That figure compares processed pages to selected
+    pages, which is informative when the download budget cut the run short and a
+    tautology when the selection itself is tiny: on mail.ru the cap came out at
+    100 because only 8 paths were visible, so the report would have announced
+    100 % coverage of a domain it had barely seen.
+    """
+    if capture_count <= 0:
+        return False
+    return (1000.0 * unique_paths / capture_count) < NARROW_SAMPLE_PATHS_PER_1000
+
+
+def is_usable_capture(snap: dict) -> bool:
+    """A capture archive.org can actually serve as a page: HTML, and fetched OK.
+
+    This pair of conditions used to be enforced by archive.org itself, through
+    ``filter=statuscode:200`` and ``filter=mimetype:text/html`` on the CDX query.
+    Measured on 2026-09-06: those two filters force a full walk of the domain
+    index because the limit can never short-circuit, taking ehesp.fr from 8.7 s
+    to over 50 s, past the deadline the scan allows itself. They were dropped
+    from the query and the same selection is made here instead.
+
+    A missing status is treated as usable rather than dropped: CDX is the only
+    producer of these rows and always sends the column, so an absent value means
+    an unexpected shape, and silently discarding captures is the worse failure.
+    """
+    if snap.get("mimetype") != "text/html":
+        return False
+    status = snap.get("status")
+    return status is None or status == "200"
+
+
 def filter_snapshots(snapshots: list[dict], config: ScanConfig | None = None) -> dict:
-    html_only = [s for s in snapshots if s.get("mimetype") == "text/html"]
+    html_only = [s for s in snapshots if is_usable_capture(s)]
 
     # Keyword blacklist: drop URLs containing any excluded substring before
     # anything else, so the cap budget is spent only on wanted pages.
@@ -341,6 +393,8 @@ def filter_snapshots(snapshots: list[dict], config: ScanConfig | None = None) ->
             "pages_deduped": 0,
             "date_first_seen": None,
             "date_last_seen": None,
+            "unique_paths": 0,
+            "narrow_sample": False,
         }
 
     html_only.sort(key=lambda s: s["timestamp"])
@@ -413,6 +467,11 @@ def filter_snapshots(snapshots: list[dict], config: ScanConfig | None = None) ->
         "pages_deduped": dedup_saved,
         "date_first_seen": date_first,
         "date_last_seen": date_last,
+        # How wide the view is, next to how deep it goes. Computed on the whole
+        # usable pool, not on the selection: the cap changes how much we
+        # download, not how much of the domain we actually saw.
+        "unique_paths": unique_paths,
+        "narrow_sample": is_narrow_sample(unique_paths, len(html_only)),
     }
 
 

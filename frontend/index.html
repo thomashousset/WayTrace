@@ -138,6 +138,10 @@
     <div id="error-scope" class="error-msg"></div>
     <div class="scope-domain" id="scope-domain"></div>
     <div class="scope-sub" id="scope-sub">Tune the scan before launching it.</div>
+    <!-- Shown only when the preflight could not read the index: offers a retry
+         before the launch, since a scan started now repeats the same failed
+         request. Populated by showFallbackScopeUI. -->
+    <div class="scope-fallback-actions" id="scope-fallback-actions" hidden></div>
     <div class="scope-loading" id="scope-loading" data-i18n="Querying archive.org for subdomains...">Querying archive.org for subdomains...</div>
 
     <div class="scope-empty" id="scope-empty" hidden>

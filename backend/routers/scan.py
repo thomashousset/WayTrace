@@ -25,7 +25,7 @@ from models import (
     SnapshotDetail,
     SubdomainGroup,
 )
-from services.cdx import fetch_cdx_snapshots
+from services.cdx import CDX_DILUTION_FACTOR, fetch_cdx_snapshots
 from services import archive_health
 from services.extractor import (
     ALL_CATEGORIES, compute_highlights,
@@ -97,31 +97,55 @@ def format_sse_event(event_id: int, event_type: str, data: dict) -> str:
 # cases the taxonomy has not met yet.
 _FAILURE_SIGNATURES: tuple[tuple[str, str, str], ...] = (
     # (code, substring to look for, message shown to the person who ran the scan)
-    ("cdx_unreachable", "cdx api unreachable",
-     "archive.org did not return the snapshot index in time"),
-    ("cdx_malformed", "malformed json",
-     "archive.org returned an unusable snapshot index"),
+    #
+    # Order matters: the timeout signature is checked before the generic
+    # unreachable one, because the RuntimeError text carries both.
     ("archive_paused", "rate-limiting us",
-     "archive.org is rate-limiting this server; scanning is paused"),
+     "Scanning is paused so this server does not get blocked by archive.org. "
+     "Try again in a few minutes."),
     ("archive_paused", "cooling down",
-     "archive.org is rate-limiting this server; scanning is paused"),
+     "Scanning is paused so this server does not get blocked by archive.org. "
+     "Try again in a few minutes."),
+    ("cdx_malformed", "malformed json",
+     "Archive.org returned a snapshot index for this domain that we could not "
+     "read."),
+    # We stopped waiting. Not a size problem: measured 2026-09-06, the same
+    # query took 8.7 s on one domain and over 50 s on a smaller one, and the
+    # speed of that index varies through the day. Saying "archive.org is slow"
+    # here would blame a third party for our own deadline.
+    ("cdx_timeout", "timeouterror",
+     "Archive.org's snapshot index for this domain did not answer within the "
+     "time we allow. This is not about the size of the site, that index varies "
+     "in speed from one hour to the next. Try again a little later."),
+    # Archive.org answered, with an error. Here it really is their side.
+    ("cdx_error", "cdx api unreachable",
+     "Archive.org refused the snapshot index request. That is temporary on "
+     "their side, try again in a few minutes."),
 )
 
 
 def classify_failure(exc: BaseException) -> tuple[str, str]:
     """Map an exception to (code, user-facing message).
 
-    Mega-domains (google.com, instagram.com, mail.ru) exhaust the CDX budget
-    before a single page is downloaded, which is by far the most common failure
-    and is not the user's fault, so it gets its own code and its own sentence
-    instead of a bare "Scan failed"."""
+    The codes name what the person can act on. `cdx_timeout` and `cdx_error`
+    used to share one code, `cdx_unreachable`, which forced a single sentence
+    onto two opposite situations: a deadline we set ourselves, and an error
+    archive.org returned. Only the second is archive.org's fault, and the
+    product should not attribute the first to them.
+    """
     if isinstance(exc, asyncio.TimeoutError):
-        return "scan_timeout", f"Timed out after {settings.scan_timeout_seconds // 60}min"
+        return "scan_timeout", (
+            f"The scan passed {settings.scan_timeout_seconds // 60} minutes and was "
+            "stopped."
+        )
     text = str(exc).lower()
     for code, needle, message in _FAILURE_SIGNATURES:
         if needle in text:
             return code, message
-    return "unexpected", "Scan failed"
+    return "unexpected", (
+        "The scan failed for a reason we have not identified yet. The details "
+        "are recorded on our side."
+    )
 
 
 def _failure_meta(domain: str, code: str, exc: BaseException, start: float) -> dict:
@@ -279,6 +303,11 @@ async def _scan_pipeline(
 
     try:
         pages_deduped = 0
+        # Largeur de l'echantillon. En mode avance l'utilisateur a choisi ses
+        # captures lui-meme, on ne connait pas le vivier dont elles sortent,
+        # donc on ne remonte pas de chiffre plutot que d'en inventer un.
+        unique_paths = None
+        narrow_sample = False
         if selected_snapshots:
             # Advanced mode: user-selected snapshots ; skip CDX + filter
             await store.update_job(
@@ -300,13 +329,15 @@ async def _scan_pipeline(
             )
             try:
                 cdx_result = await fetch_cdx_snapshots(
-                    domain, max_snapshots=15_000, server_limit=15_000,
+                    domain, max_snapshots=15_000,
+                    server_limit=int(15_000 * CDX_DILUTION_FACTOR),
                     deadline_seconds=55, request_timeout=45, retries=2,
                     collapse="timestamp:6",
                 )
             except RuntimeError:
                 cdx_result = await fetch_cdx_snapshots(
-                    domain, max_snapshots=12_000, server_limit=12_000,
+                    domain, max_snapshots=12_000,
+                    server_limit=int(12_000 * CDX_DILUTION_FACTOR),
                     deadline_seconds=35, request_timeout=30, retries=1,
                     collapse="urlkey",
                 )
@@ -346,6 +377,8 @@ async def _scan_pipeline(
             date_first = filtered["date_first_seen"]
             date_last = filtered["date_last_seen"]
             pages_deduped = filtered.get("pages_deduped", 0)
+            unique_paths = filtered.get("unique_paths")
+            narrow_sample = bool(filtered.get("narrow_sample"))
 
         # Phase 3: Scraping
         await store.update_job(
@@ -484,6 +517,11 @@ async def _scan_pipeline(
             "pages_attempted": pages_attempted,
             "truncated": truncated,
             "truncation_reason": truncation_reason,
+            # Combien d'adresses distinctes ce rapport couvre, et si cette
+            # largeur est trop faible pour que la couverture veuille dire
+            # quelque chose. Voir filters.is_narrow_sample.
+            "unique_paths": unique_paths,
+            "narrow_sample": narrow_sample,
             "date_first_seen": date_first,
             "date_last_seen": date_last,
             "scan_duration_seconds": duration,
@@ -618,13 +656,15 @@ async def scan_preflight(body: JobCreate, request: Request):
             # instead of re-querying archive.org. Big lever against throttling on
             # repeat lookups; the TTL keeps it fresh enough for a preview.
             cdx_result = await fetch_cdx_snapshots(
-                body.domain, max_snapshots=15_000, server_limit=15_000,
+                body.domain, max_snapshots=15_000,
+                server_limit=int(15_000 * CDX_DILUTION_FACTOR),
                 deadline_seconds=55, request_timeout=45, retries=2,
                 collapse="timestamp:6", use_cache=True,
             )
         except RuntimeError:
             cdx_result = await fetch_cdx_snapshots(
-                body.domain, max_snapshots=12_000, server_limit=12_000,
+                body.domain, max_snapshots=12_000,
+                server_limit=int(12_000 * CDX_DILUTION_FACTOR),
                 deadline_seconds=35, request_timeout=30, retries=1,
                 collapse="urlkey", use_cache=False,
             )

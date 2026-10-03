@@ -433,8 +433,13 @@ async def scrape_snapshots(
     # e.g. "conn=812 http_404=90 ok=298" points straight at connection
     # throttling vs missing captures.
     breakdown = " ".join(f"{k}={v}" for k, v in outcomes.most_common())
+    # "throttled" rather than "429 hits": the counter is incremented both on an
+    # HTTP 429 and on a connection-level drop or stall, and archive.org throttles
+    # almost exclusively through the second. Reading it as a 429 count led
+    # straight to the wrong conclusion during the concurrency measurements, so
+    # the label now says what the number actually is.
     logger.info(
-        "Scraped {}/{} pages successfully (429 hits: {}) [{}] adaptive_rate={}/min",
+        "Scraped {}/{} pages successfully (throttled: {}) [{}] adaptive_rate={}/min",
         success, total, _rate_limit_hits["count"], breakdown,
         archive_rate.current_rate_per_minute(),
     )

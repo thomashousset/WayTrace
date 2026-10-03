@@ -11,6 +11,7 @@ from loguru import logger
 
 from config import settings
 from services import archive_health, archive_rate
+from services.filters import is_usable_capture  # the HTML/200 selection CDX used to do
 from services.scraper import _get_global_sem  # shared archive.org concurrency cap
 
 CDX_URL = "https://web.archive.org/cdx/search/cdx"
@@ -87,6 +88,20 @@ async def _save_cache(domain: str, result: dict) -> None:
     await asyncio.to_thread(_save_cache_sync, domain, result)
 
 
+def _attempt_timeout(deadline: float, request_timeout: int, now: float | None = None) -> float:
+    """How long a single CDX request may take without overrunning the call.
+
+    The deadline used to be checked only before starting an attempt, so an
+    attempt that started just under it still got its full request_timeout on top.
+    Observed in production on 2026-09-06: a 55 s deadline produced a 98 s call on
+    mail.ru, because the second attempt started at t+50 and then ran its own 45 s.
+    Clamping the per-request timeout to whatever is left makes the announced
+    deadline the real one.
+    """
+    remaining = deadline - (time.monotonic() if now is None else now)
+    return max(0.0, min(float(request_timeout), remaining))
+
+
 def build_cdx_params(
     domain: str,
     *,
@@ -105,12 +120,29 @@ def build_cdx_params(
     ``/jobs``, ``/.well-known/security.txt``) never makes it into the
     sample. ``timestamp:6`` keeps month-level evolution while exposing
     the full URL surface to the post-CDX path-scoring filter.
+
+    **No server-side ``filter=``.** The query used to carry
+    ``filter=statuscode:200`` and ``filter=mimetype:text/html``. A filter
+    prevents archive.org from ever stopping early on ``limit``: it has to walk
+    the whole domain index looking for matches, and the sparser the matches the
+    longer that takes. Measured 2026-09-06 on ehesp.fr, an index of only 98
+    pages: 8.7 s without the filters, over 50 s with them, past the deadline the
+    scan allows itself. Index size did not predict it, nginx.org (958 pages)
+    took 108 s and security.nl (159 pages) 32.7 s on the same query shape.
+    Dropping them is also cheaper for archive.org, a bounded range read instead
+    of a full scan, at the cost of transferring rows we discard. The same
+    selection is now made in ``filters.is_usable_capture``.
+
+    ``collapse`` stays on the server. Measured on the same day, it costs
+    nothing (sodebo.com answered in 19.4 s with it and 26.2 s without) and
+    removing it destroys path diversity: without it, security.nl and nginx.org
+    both returned 15 000 rows covering exactly **one** distinct path, the whole
+    budget spent on one URL's capture history.
     """
     params: dict = {
         "url": f"*.{domain}/*",
         "output": "json",
         "fl": "timestamp,original,statuscode,mimetype,digest",
-        "filter": ["statuscode:200", "mimetype:text/html"],
         "showResumeKey": "true",
     }
     if collapse:
@@ -126,10 +158,21 @@ def build_cdx_params(
 # Archive.org's CDX indexes data into blocks of roughly this size; the
 # multiplication is rough (within a factor of ~2) but sufficient for
 # depth-selection thresholding. The figure is **pre-filter**: it does
-# not account for the statuscode=200 / mimetype=text/html filters we
-# apply later. the real HTML snapshot count is typically 10-30 % of
-# the raw record count, which the auto-depth thresholds bake in.
+# not account for the HTML/200 selection we now apply after the fetch.
+#
+# Measured 2026-09-06 on four domains (sodebo.com, ehesp.fr, security.nl,
+# nginx.org), the usable share of the returned rows is **45 to 70 %**, not the
+# 10 to 30 % this comment claimed before anyone measured it. That share sets how
+# far the request limit must be raised now that the filtering happens on our
+# side, so being wrong by a factor of three here would have picked a badly wrong
+# multiplier. See CDX_DILUTION_FACTOR.
 _CDX_RECORDS_PER_PAGE = 3000
+
+# Multiplier applied to the request limit to compensate for the rows we now
+# fetch and discard. Set from the worst usable share measured, 44.9 % on
+# sodebo.com, so a request still yields about as many usable captures as the
+# server-filtered query returned.
+CDX_DILUTION_FACTOR = 2.5
 
 
 async def cdx_size_probe(
@@ -310,27 +353,43 @@ async def fetch_cdx_snapshots(
             # wanted a quick preflight.
             if time.monotonic() > deadline:
                 break
-            _attempt_start = time.monotonic()
+            # Stopwatch starts INSIDE the slot, on purpose. It used to start
+            # here, before acquiring the global concurrency permit and the rate
+            # token, so the "archive.org latency" it produced was really our own
+            # queueing plus their response time, and it grew whenever we were
+            # busy. What is recorded below is the HTTP request alone.
+            _request_seconds = 0.0
+            _rate_limited = False
             try:
-                async with archive_rate.slot(_get_global_sem()), session.get(CDX_URL, params=params, allow_redirects=False) as resp:
-                    if resp.status == 429:
-                        # Rate-limited: count it toward the breaker and stop
-                        # early once it trips rather than sleeping + retrying
-                        # into the wall.
-                        archive_health.record_failure()
-                        if archive_health.is_open():
-                            last_error = RuntimeError("rate-limited (429), breaker open")
-                            break
-                        wait = 30 * (2 ** attempt)
-                        logger.warning(
-                            "CDX rate-limited (429), waiting {}s (attempt {}/{})",
-                            wait, attempt + 1, 1 + retries,
-                        )
-                        await asyncio.sleep(wait)
-                        continue
-
-                    resp.raise_for_status()
-                    raw = await resp.read()
+                async with archive_rate.slot(_get_global_sem()):
+                    # Recomputed here, not before the slot: waiting for a permit
+                    # and a rate token spends the deadline too, and on a busy
+                    # process that wait is the larger part.
+                    attempt_timeout = _attempt_timeout(deadline, request_timeout)
+                    if attempt_timeout <= 0:
+                        if last_error is None:
+                            last_error = RuntimeError(
+                                f"deadline of {deadline_seconds}s reached before the "
+                                "request could be sent"
+                            )
+                        break
+                    _request_start = time.monotonic()
+                    async with session.get(
+                        CDX_URL, params=params, allow_redirects=False,
+                        timeout=aiohttp.ClientTimeout(total=attempt_timeout),
+                    ) as resp:
+                        if resp.status == 429:
+                            # Rate-limited: count it toward the breaker and stop
+                            # early once it trips rather than sleeping +
+                            # retrying into the wall. The sleep happens after
+                            # the slot is released, so a retry wait no longer
+                            # holds one of the few global permits.
+                            archive_health.record_failure()
+                            _rate_limited = True
+                        else:
+                            resp.raise_for_status()
+                            raw = await resp.read()
+                            _request_seconds = time.monotonic() - _request_start
 
             except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
                 last_error = exc
@@ -346,6 +405,18 @@ async def fetch_cdx_snapshots(
                     repr(exc), delay, attempt + 1, 1 + retries,
                 )
                 await asyncio.sleep(delay)
+                continue
+
+            if _rate_limited:
+                if archive_health.is_open():
+                    last_error = RuntimeError("rate-limited (429), breaker open")
+                    break
+                wait = 30 * (2 ** attempt)
+                logger.warning(
+                    "CDX rate-limited (429), waiting {}s (attempt {}/{})",
+                    wait, attempt + 1, 1 + retries,
+                )
+                await asyncio.sleep(wait)
                 continue
 
             try:
@@ -369,12 +440,17 @@ async def fetch_cdx_snapshots(
                 return {"snapshots": [], "total_found": 0}
 
             resume_key, data = detect_and_strip_resume_key(data)
-            all_snapshots = parse_cdx_rows(data)
+            # The HTML/200 selection archive.org used to make for us. Applied
+            # here rather than only in filter_snapshots so every caller, the
+            # preflight included, sees exactly the rows the filtered query used
+            # to return, and so max_snapshots keeps counting usable captures.
+            raw_rows = parse_cdx_rows(data)
+            all_snapshots = [s for s in raw_rows if is_usable_capture(s)]
 
             if resume_key:
                 logger.info(
-                    "CDX returned {} snapshots with resumeKey, fetching more...",
-                    len(all_snapshots),
+                    "CDX returned {} usable snapshots of {} rows with resumeKey, fetching more...",
+                    len(all_snapshots), len(raw_rows),
                 )
                 extra = await _fetch_cdx_resume(
                     session, domain, resume_key,
@@ -384,16 +460,25 @@ async def fetch_cdx_snapshots(
                 all_snapshots.extend(extra)
 
             logger.info(
-                "CDX returned {} snapshots for {}", len(all_snapshots), domain
+                "CDX returned {} snapshots for {} ({} rows fetched)",
+                len(all_snapshots), domain, len(raw_rows),
             )
-            archive_health.record_latency(time.monotonic() - _attempt_start)
+            archive_health.record_latency(_request_seconds)
             archive_health.record_success()
             result = {"snapshots": all_snapshots, "total_found": len(all_snapshots)}
             if use_cache:
                 await _save_cache(domain, result)
             return result
 
-    reason = str(last_error) if last_error else "rate-limited (429)"
+    # Name the exception type, not just its text: a bare TimeoutError stringifies
+    # to nothing, which is exactly what made these failures unreadable. The type
+    # is also what lets classify_failure tell "we gave up waiting" apart from
+    # "archive.org answered with an error", two causes that need opposite
+    # sentences to the person who ran the scan.
+    if last_error is None:
+        reason = "rate-limited (429)"
+    else:
+        reason = f"{type(last_error).__name__}: {last_error}".rstrip(": ")
     raise RuntimeError(
         f"CDX API unreachable after {1 + retries} attempts: {reason}"
     )
@@ -432,20 +517,43 @@ async def _fetch_cdx_resume(
             break
         params = build_cdx_params(domain, resume_key=current_key)
 
+        throttled = False
         try:
-            async with archive_rate.slot(_get_global_sem()), session.get(CDX_URL, params=params, allow_redirects=False) as resp:
-                if resp.status == 429:
-                    wait = 30 * (2 ** min(page, 3))
-                    logger.warning("CDX resume rate-limited, waiting {}s", wait)
-                    await asyncio.sleep(wait)
-                    continue
-                if resp.status != 200:
-                    logger.warning("CDX resume page {} returned {}", page + 1, resp.status)
-                    break
-                raw = await resp.read()
+            async with archive_rate.slot(_get_global_sem()):
+                # Same clamp as the first page: a page started just under the
+                # deadline must not then run for a full request timeout on top.
+                kwargs = {}
+                if deadline is not None:
+                    left = deadline - time.monotonic()
+                    if left <= 0:
+                        break
+                    kwargs["timeout"] = aiohttp.ClientTimeout(total=left)
+                async with session.get(CDX_URL, params=params,
+                                       allow_redirects=False, **kwargs) as resp:
+                    if resp.status == 429:
+                        throttled = True
+                    elif resp.status != 200:
+                        logger.warning("CDX resume page {} returned {}", page + 1, resp.status)
+                        break
+                    else:
+                        raw = await resp.read()
         except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
             logger.warning("CDX resume fetch failed on page {}: {}", page + 1, exc)
             break
+
+        if throttled:
+            # Outside the slot: a retry wait must not hold one of the few global
+            # permits. And there is no point waiting past the deadline.
+            wait = 30 * (2 ** min(page, 3))
+            if deadline is not None and time.monotonic() + wait > deadline:
+                logger.warning(
+                    "CDX resume rate-limited on {} and the {}s wait would pass the "
+                    "deadline; stopping with {} extra rows", domain, wait, len(all_extra),
+                )
+                break
+            logger.warning("CDX resume rate-limited, waiting {}s", wait)
+            await asyncio.sleep(wait)
+            continue
 
         try:
             data = json.loads(raw)
@@ -458,14 +566,19 @@ async def _fetch_cdx_resume(
                 break
 
         next_key, data = detect_and_strip_resume_key(data)
-        snapshots = parse_cdx_rows(data)
-        if not snapshots:
+        raw_rows = parse_cdx_rows(data)
+        # Same HTML/200 selection as the first page: the server no longer does
+        # it. A page can be non-empty yet yield nothing usable, so pagination
+        # stops on raw rows, not on usable ones, or a page of images would end
+        # the walk early.
+        snapshots = [s for s in raw_rows if is_usable_capture(s)]
+        if not raw_rows:
             break
 
         all_extra.extend(snapshots)
         logger.info(
-            "CDX resume page {} returned {} snapshots (total extra: {})",
-            page + 1, len(snapshots), len(all_extra),
+            "CDX resume page {} returned {} usable of {} rows (total extra: {})",
+            page + 1, len(snapshots), len(raw_rows), len(all_extra),
         )
 
         if next_key is None:

@@ -678,6 +678,15 @@
       font-size: 14px; color: var(--text-dim); margin-bottom: 24px;
       line-height: 1.55;
     }
+    /* Retry offered when the preflight could not read the index. Plain row, no
+       accent bar and no coloured panel: this is a normal outcome on a slow
+       index, not an alarm. */
+    .scope-fallback-actions {
+      display: flex; align-items: center; flex-wrap: wrap; gap: 12px;
+      margin: -12px 0 24px;
+    }
+    .scope-fallback-actions[hidden] { display: none; }
+    .scope-fb-hint { font-size: 13px; color: var(--text-dim); }
     .scope-list {
       display: flex; flex-direction: column; gap: 6px;
       margin-bottom: 24px; max-height: 400px; overflow-y: auto;
@@ -1903,15 +1912,16 @@
 
     .nav-theme-btn { font-family: var(--mono); letter-spacing: .04em; }
 
-    /* service status banner (archive.org health, WayTrace load, maintenance) */
+    /* service status banner (WayTrace load, maintenance).
+       The .slow and .paused variants went with the archive.org health banner:
+       the product no longer publishes a standing diagnostic on a third party.
+       The id stays archive-banner so the element keeps its place in the DOM. */
     .archive-banner[hidden] { display: none; }
     .archive-banner {
       padding: 9px 16px; text-align: center; font-size: 13px; font-weight: 500;
       border-bottom: 1px solid var(--border);
     }
-    .archive-banner.slow { background: rgba(216,166,87,.16); color: var(--warn); border-bottom-color: rgba(216,166,87,.4); }
-    .archive-banner.paused { background: rgba(232,112,96,.18); color: var(--red, var(--accent)); border-bottom-color: var(--red, var(--accent)); }
-    /* WayTrace's own load (deep queue), quieter than an archive.org problem */
+    /* WayTrace's own load (deep queue) */
     .archive-banner.busy { background: var(--accent-glow2); color: var(--accent); border-bottom-color: rgba(232,122,72,.35); }
     /* Maintenance flag set by the operator, or the API not answering at all */
     .archive-banner.maintenance { background: rgba(232,112,96,.14); color: var(--red, var(--accent)); border-bottom-color: rgba(232,112,96,.35); }

@@ -84,11 +84,20 @@ window.addEventListener('error', (e) => _reportClientError(e.error || e.message)
 window.addEventListener('unhandledrejection', (e) => _reportClientError(e.reason));
 
 // Poll the unified service status and surface a single banner with priority:
-// maintenance > archive paused > high traffic > archive slow > admin notice.
+// maintenance > high traffic > admin notice.
 // A run of genuine
 // NETWORK failures (the API unreachable, fetch throws) flips to a maintenance
 // notice; a mere non-200 (429/502/503 blip under launch load) does NOT, so a
 // busy moment never masquerades as an outage.
+//
+// The banner no longer reports on archive.org's health. It used to show "slow"
+// or "paused" from archive_health, and two failed CDX attempts inside two
+// minutes were enough to light it, which is exactly what a failing scan
+// produces. So a scan that failed lit a banner blaming archive.org, next to a
+// failure message blaming archive.org, for what was measured on 2026-09-06 to
+// be our own deadline running out. The breaker itself is untouched and still
+// protects the server: when it is open, POST /api/scan answers 503 with the
+// reason, at the moment the person acts, which is where that belongs.
 let _statusNetFailStreak = 0;
 let _lastSvc = null;          // last /api/service-status service object
 let _setupRedirected = false; // one-shot guard for the first-run wizard gate
@@ -129,13 +138,9 @@ async function checkServiceStatus() {
   if (svc.state === 'maintenance') {
     _showStatusBanner('maintenance', svc.maintenance_message ||
       t('Maintenance in progress. Scanning may be unavailable for a short while.'));
-  } else if (arc.state === 'paused') {
-    _showStatusBanner('paused', _archiveStatusMessage(arc));
   } else if (svc.state === 'busy') {
     _showStatusBanner('busy',
       t('WayTrace is a victim of its own success right now. New scans are queued and start as soon as a slot frees up.'));
-  } else if (arc.state === 'slow') {
-    _showStatusBanner('slow', _archiveStatusMessage(arc));
   } else if (svc.notice) {
     // Admin-set informational banner: the service is fully available, this
     // only sets expectations (e.g. slower scans under high traffic).
@@ -153,18 +158,11 @@ function _showStatusBanner(kind, msg) {
   el.hidden = false;
 }
 
-// Localise the archive.org banner client-side (the backend message is English
-// only). Distinguishes a hard IP block from ordinary throttling.
-function _archiveStatusMessage(d) {
-  if (d.state === 'paused') {
-    if (d.blocked) {
-      const mins = Math.max(1, Math.round((d.cooldown_remaining || 0) / 60));
-      return t('Archive.org is refusing connections from this server (it looks IP-blocked). Scanning is paused for about {n} min to let it recover.').replace('{n}', mins);
-    }
-    return t('Scanning is paused for about {s}s: archive.org is rate-limiting us. Please retry in a moment.').replace('{s}', d.cooldown_remaining || 0);
-  }
-  return t('Archive.org is slow right now; scans may take longer than usual.');
-}
+// _archiveStatusMessage was removed with the archive.org banner. The breaker
+// still answers at the point of action: POST /api/scan returns 503 with
+// archive_health's own message when it is open, and a failed scan carries a
+// cause and a sentence of its own. Nothing needs a standing diagnostic on a
+// third party's health.
 
 // Show the clean 404 view for unknown routes (and for routes a viewer cannot
 // access, without revealing whether they exist).
@@ -514,6 +512,37 @@ const I18N = {
     'Markdown': 'Markdown', 'JSON': 'JSON', 'CSV': 'CSV', 'pages': 'pages',
     'Timeline &amp; density': 'Chronologie et densité',
     'scope.intro': "WayTrace ne lit que ce que la <b>Wayback Machine</b> a déjà archivé pour ce domaine. archive.org est limité en débit, donc un scan échantillonne un ensemble représentatif de snapshots plutôt que chaque capture. Réglez le scan ci-dessous, puis lancez : <b>1</b> choisir les sous-domaines, <b>2</b> écarter les pages bruyantes, <b>3</b> régler la plage de dates et la densité. Une sélection plus large veut dire un scan plus long.",
+    // --- messages d'échec de scan, rédigés côté serveur (routers/scan.py) ---
+    // La clé est la phrase anglaise exacte que renvoie classify_failure. Si
+    // elle change là-bas sans être changée ici, t() renvoie l'anglais, ce qui
+    // dégrade sans casser.
+    "Archive.org's snapshot index for this domain did not answer within the time we allow. This is not about the size of the site, that index varies in speed from one hour to the next. Try again a little later.":
+      "L'index des captures d'archive.org pour ce domaine n'a pas répondu dans le temps que nous lui accordons. Ce n'est pas une question de taille du site, la vitesse de cet index varie d'une heure à l'autre. Réessayez un peu plus tard.",
+    'Archive.org refused the snapshot index request. That is temporary on their side, try again in a few minutes.':
+      "Archive.org a refusé la requête d'index. C'est passager de leur côté, réessayez dans quelques minutes.",
+    'Archive.org returned a snapshot index for this domain that we could not read.':
+      "Archive.org a renvoyé pour ce domaine un index que nous n'arrivons pas à lire.",
+    'Scanning is paused so this server does not get blocked by archive.org. Try again in a few minutes.':
+      'Nos requêtes vers archive.org sont en pause pour éviter un blocage de notre serveur. Réessayez dans quelques minutes.',
+    'The scan failed for a reason we have not identified yet. The details are recorded on our side.':
+      "Le scan a échoué pour une raison que nous n'avons pas encore identifiée. Le détail est enregistré de notre côté.",
+    // Le nombre suit settings.scan_timeout_seconds. S'il change côté serveur,
+    // cette clé ne correspond plus et la phrase reste en anglais.
+    'The scan passed 60 minutes and was stopped.':
+      'Le scan a dépassé 60 minutes et a été arrêté.',
+    'distinct addresses': 'adresses distinctes',
+    'Scan failed': 'Échec du scan',
+    'Scan cancelled': 'Scan annulé',
+    'Back to homepage': "Retour à l'accueil",
+    // --- préflight qui n'a pas pu lire l'index ---
+    'We could not read the archive index for this domain.':
+      "Nous n'avons pas pu lire l'index d'archive.org pour ce domaine.",
+    'A scan started now would send the very same request, and would most likely fail the same way after a couple of minutes.':
+      'Un scan lancé maintenant enverrait exactement la même requête, et échouerait très probablement de la même façon au bout de deux minutes.',
+    'The speed of that index varies through the day, so the usual fix is simply to try again a little later.':
+      "La vitesse de cet index varie au fil de la journée, donc le remède habituel est simplement de réessayer un peu plus tard.",
+    'Try reading the index again': "Réessayer de lire l'index",
+    'or launch the scan anyway, below': 'ou lancer quand même le scan, ci-dessous',
     // --- toasts / confirms / errors that were hardcoded in JS ---
     'Copy failed': 'Échec de la copie',
     'Copy failed. URL: ': 'Échec de la copie. URL : ',
@@ -816,9 +845,8 @@ const I18N = {
     'of': 'sur',
     'pages scraped': 'pages récupérées',
     'snapshots analysed': 'snapshots analysés',
-    'Archive.org is refusing connections from this server (it looks IP-blocked). Scanning is paused for about {n} min to let it recover.': "Archive.org refuse les connexions depuis ce serveur (IP vraisemblablement bloquée). Les scans sont en pause pendant environ {n} min, le temps que ça se rétablisse.",
-    'Scanning is paused for about {s}s: archive.org is rate-limiting us. Please retry in a moment.': "Scans en pause pendant environ {s}s : archive.org nous limite. Réessayez dans un instant.",
-    'Archive.org is slow right now; scans may take longer than usual.': "Archive.org est lent en ce moment ; les scans peuvent prendre plus de temps que d'habitude.",
+    'That address rejected our previous emails, so we cannot send a sign-in link to it. Write to us and we will sort it out.':
+      "Cette adresse a rejeté nos messages précédents, nous ne pouvons plus lui envoyer de lien de connexion. Écrivez nous et on règle ça.",
     'Maintenance in progress. Scanning may be unavailable for a short while.': 'Maintenance en cours. Le scan peut être indisponible quelques instants.',
     'Maintenance in progress. WayTrace will be back shortly.': 'Maintenance en cours. WayTrace revient très vite.',
     'WayTrace is a victim of its own success right now. New scans are queued and start as soon as a slot frees up.': "WayTrace est victime de son succès en ce moment. Les nouveaux scans sont mis en file et démarrent dès qu'une place se libère.",
@@ -1926,9 +1954,9 @@ function renderPublicScan(job) {
     body.innerHTML = `
       <div class="pub-error">
         ${_PUB_ERROR_ICON}
-        <h2>${status === 'cancelled' ? 'Scan cancelled' : 'Scan failed'}</h2>
-        <p>${esc(job.step || '')}</p>
-        <a href="#/" class="btn btn-accent">Back to homepage</a>
+        <h2>${status === 'cancelled' ? t('Scan cancelled') : t('Scan failed')}</h2>
+        <p>${esc(t(job.step || ''))}</p>
+        <a href="#/" class="btn btn-accent">${t('Back to homepage')}</a>
       </div>
     `;
   }
@@ -2199,10 +2227,15 @@ function renderHomeStatus(svc, arc) {
   const el = $('home-status');
   const line = $('home-status-line');
   if (!el || !line) return;
+  // 'Scanning paused' stays: it states OUR availability, the breaker is open and
+  // a scan submitted now is refused, which the person can act on. The former
+  // `arc.state === 'slow'` arm is gone with the banner: it claimed archive.org
+  // was slow from a latency that included our own queueing, and lit on two
+  // failed attempts inside two minutes, which is what one failing scan produces.
   let dot = 'ok', label = t('Operational');
   if (svc.state === 'maintenance') { dot = 'down'; label = t('Maintenance'); }
   else if (arc.state === 'paused') { dot = 'down'; label = t('Scanning paused'); }
-  else if (svc.state === 'busy' || arc.state === 'slow') { dot = 'warn'; label = t('Slower than usual'); }
+  else if (svc.state === 'busy') { dot = 'warn'; label = t('Slower than usual'); }
   // Counts are server ints, but coerce defensively: this string goes to innerHTML.
   const running = Math.max(0, parseInt(svc.active, 10) || 0);
   const queued = Math.max(0, parseInt(svc.waiting, 10) || 0);
@@ -2470,6 +2503,7 @@ async function loadScope(domain) {
   $('scope-sub').textContent = t('Tune the scan before launching it.');
   { const c = $('scope-intro-cap'); if (c) c.textContent = SCOPE_CAP.toLocaleString(); }
   { const intro = document.querySelector('.scope-intro'); if (intro) intro.style.display = ''; }
+  { const fb = $('scope-fallback-actions'); if (fb) { fb.hidden = true; fb.innerHTML = ''; } }
   $('scope-loading').style.display = '';
   $('scope-loading').textContent = t('Querying archive.org for subdomains...');
   { const e = $('scope-empty'); if (e) e.hidden = true; }
@@ -2563,10 +2597,21 @@ function showScopeEmpty() {
 }
 
 function showFallbackScopeUI(domain, detailMsg) {
-  // Preflight failed (usually a huge domain the bounded 60s preflight could
-  // not enumerate). The scan itself has a longer budget, so still offer a
-  // launch - minus the subdomain/timeline pickers we have no data for. The
-  // keyword blacklist stays useful and applies server-side.
+  // The preflight could not read the index for this domain.
+  //
+  // This used to be presented as a soft fallback: hide the pickers, say the
+  // scan would "pick its own depth from the live archive", leave the launch
+  // button looking like the normal next step. It is not. The preflight sends
+  // the SAME CDX query as the scan, with the same 55 s and 35 s deadlines
+  // (routers/scan.py, the preflight and scan call sites are identical), so a
+  // scan launched right after a failed preflight repeats the request that just
+  // failed and, two minutes later, fails too. That is where most of the 23
+  // production failures came from, and the person had no way to know.
+  //
+  // Launching stays possible on purpose: archive.org is erratic, a retry does
+  // sometimes go through, and refusing outright would take a real option away.
+  // What changes is that it is no longer dressed up as the normal path, and
+  // that retrying is offered first.
   scopeFallback = true;
   scopeSubdomains = [];
   _scopePathGroups = [];
@@ -2579,13 +2624,24 @@ function showFallbackScopeUI(domain, detailMsg) {
   // The guided intro describes the 1/2/3 cards, which are hidden in fallback.
   { const intro = document.querySelector('.scope-intro'); if (intro) intro.style.display = 'none'; }
   const fbReason = LANG === 'fr' ? 'raison inconnue' : 'unknown reason';
-  const fbTail = LANG === 'fr'
-    ? '</span>. Le scan choisira lui-même sa profondeur depuis l’archive en direct. Vous pouvez tout de même exclure des mots-clés ci-dessous avant de lancer.'
-    : '</span>. The scan will pick its own depth from the live archive. You can still exclude keywords below before launching.';
   $('scope-sub').innerHTML =
-    t('Could not enumerate subdomains') + ': <span style="color:var(--text-dim)">'
-    + esc(String(detailMsg || fbReason))
-    + fbTail;
+    '<b>' + t('We could not read the archive index for this domain.') + '</b> '
+    + t('A scan started now would send the very same request, and would most likely fail the same way after a couple of minutes.')
+    + ' ' + t('The speed of that index varies through the day, so the usual fix is simply to try again a little later.')
+    + '<br><span style="color:var(--text-dim)">' + esc(String(detailMsg || fbReason)) + '</span>';
+
+  // Retry first, launch anyway second. The retry replays the preflight, which
+  // is one request, against a scan that costs thousands and holds the queue.
+  const actions = $('scope-fallback-actions');
+  if (actions) {
+    actions.innerHTML =
+      '<button type="button" class="btn btn-accent" id="scope-retry-preflight">'
+      + esc(t('Try reading the index again')) + '</button>'
+      + '<span class="scope-fb-hint">' + esc(t('or launch the scan anyway, below')) + '</span>';
+    actions.hidden = false;
+    const retry = $('scope-retry-preflight');
+    if (retry) retry.addEventListener('click', () => { actions.hidden = true; loadScope(domain); });
+  }
   _applyScopePrefill();
   renderScopeChips();
   _initScopeCats();
@@ -3218,19 +3274,44 @@ function renderResultsHeader(info) {
     const attempted = (typeof m.pages_attempted === 'number') ? m.pages_attempted : ana;
     const partial = !!m.truncated && ana > 0 && attempted < ana;
     const pct = (ana > 0) ? Math.round((attempted / ana) * 100) : 100;
-    const coverage = partial
-      ? (LANG === 'fr'
-          ? `Couverture partielle : <b>${n(attempted)}</b> des <b>${n(ana)}</b> captures retenues ont été traitées (${pct} %), `
-            + `le budget de téléchargement a été atteint avant la fin de la sélection. `
-            + `Relancez avec « Scanner plus » pour poursuivre sur les captures restantes.`
-          : `Partial coverage: <b>${n(attempted)}</b> of the <b>${n(ana)}</b> selected captures were processed (${pct}%), `
-            + `the download budget ran out before the end of the selection. `
-            + `Use "Scan more" to continue on the remaining captures.`)
-      : '';
+    /* How WIDE the report is, next to how deep. On mail.ru the cap came out at
+       100 because only 8 distinct addresses were visible in the index window,
+       so "100 of 100 processed" would have read as full coverage of a domain
+       barely seen. When the sample is that narrow a percentage is a tautology,
+       so the breadth sentence replaces it instead of sitting next to it. */
+    const paths = (typeof m.unique_paths === 'number') ? m.unique_paths : null;
+    const narrow = !!m.narrow_sample && paths !== null;
+    const partialFr = `Le budget de téléchargement a été atteint avant la fin de la sélection, `
+      + `<b>${n(attempted)}</b> des <b>${n(ana)}</b> captures retenues ont été traitées. `
+      + `Relancez avec « Scanner plus » pour poursuivre.`;
+    const partialEn = `The download budget ran out before the end of the selection, `
+      + `<b>${n(attempted)}</b> of the <b>${n(ana)}</b> selected captures were processed. `
+      + `Use "Scan more" to continue.`;
+    let coverage = '';
+    if (narrow) {
+      coverage = (LANG === 'fr'
+        ? `Ce scan couvre <b>${n(paths)}</b> adresse${paths > 1 ? 's' : ''} distincte${paths > 1 ? 's' : ''}. `
+          + `L'index d'archive.org pour ce domaine est bien plus large que la fenêtre que nous avons pu en lire, `
+          + `donc ce rapport est un échantillon étroit et non une vue du domaine.`
+        : `This scan covers <b>${n(paths)}</b> distinct address${paths > 1 ? 'es' : ''}. `
+          + `Archive.org's index for this domain is far wider than the window we could read of it, `
+          + `so this report is a narrow sample and not a view of the domain.`)
+        + (partial ? ' ' + (LANG === 'fr' ? partialFr : partialEn) : '');
+    } else if (partial) {
+      coverage = (LANG === 'fr'
+        ? `Couverture partielle : <b>${n(attempted)}</b> des <b>${n(ana)}</b> captures retenues ont été traitées (${pct} %), `
+          + `le budget de téléchargement a été atteint avant la fin de la sélection. `
+          + `Relancez avec « Scanner plus » pour poursuivre sur les captures restantes.`
+        : `Partial coverage: <b>${n(attempted)}</b> of the <b>${n(ana)}</b> selected captures were processed (${pct}%), `
+          + `the download budget ran out before the end of the selection. `
+          + `Use "Scan more" to continue on the remaining captures.`);
+    }
     el.innerHTML =
       `<div class="rm-line">`
       + `<span class="rm-stat"><span class="rm-num">${n(fnd)}</span> ${t('findings')}</span>`
       + `<span class="rm-stat"><span class="rm-num">${n(attempted)}${partial ? ` / ${n(ana)}` : ''}</span> ${t('snapshots analysed')}</span>`
+      + (paths !== null
+          ? `<span class="rm-stat"><span class="rm-num">${n(paths)}</span> ${t('distinct addresses')}</span>` : '')
       + `<span class="rm-stat"><span class="rm-num">${n(scr)}</span> ${t('pages scraped')}</span>`
       + (range ? `<span class="rm-range">${esc(range)}</span>` : '')
       + `</div>`
