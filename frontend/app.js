@@ -184,45 +184,38 @@ function showError(elId, msg) {
 /* The old button label had to mean both the state and the action: "Light"
    could be read as "you are in light" or "click for light". The menu states
    both modes and ticks the one in use, so there is nothing to interpret. */
-function applyThemeLabel() { if (!$('pref-menu')?.hidden) renderPrefMenu(); }
+/* Mode, palette and language are three different things and now have three
+   buttons. They shared one paintbrush that opened a menu, which meant changing
+   the language required guessing that a paintbrush also held languages.
 
-function setMode(mode) {
-  const cur = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
-  if (mode !== cur) toggleTheme();
-  renderPrefMenu();
+   The mode button is a toggle again, which was ambiguous the first time: an
+   icon alone can be read as "you are here" or as "click for this". The icon
+   states the mode you are in and the label states what the click does, so
+   neither has to be guessed. */
+const _MOON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg>';
+const _SUN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.4v2.2M12 19.4v2.2M4.2 4.2l1.6 1.6M18.2 18.2l1.6 1.6M2.4 12h2.2M19.4 12h2.2M4.2 19.8l1.6-1.6M18.2 5.8l1.6-1.6"/></svg>';
+
+function applyThemeLabel() {
+  const btn = $('mode-btn');
+  if (!btn) return;
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  btn.innerHTML = dark ? _MOON : _SUN;
+  // This runs once at module scope, above where LANG is declared, so t()
+  // reads a let binding in its temporal dead zone. `typeof` does not help
+  // there, it throws like any other read, and an uncaught throw here aborts
+  // the rest of app.js: LANG then never initialises at all and every later
+  // call fails the same way. The markup ships the English label and applyI18n
+  // paints it again once the dictionary exists, so swallowing this is not
+  // hiding a problem, it is the boot order working as intended.
+  try {
+    const label = dark ? t('Switch to light') : t('Switch to dark');
+    btn.setAttribute('aria-label', label);
+    btn.title = label;
+  } catch (_) { /* pre-i18n boot, markup default stands */ }
 }
 
-function renderPrefMenu() {
-  const el = $('pref-menu');
-  if (!el) return;
-  const mode = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
-  const tick = (on) => `<span class="nav-tick">${on ? '✓' : ''}</span>`;
-  el.innerHTML =
-    `<div class="nav-drop-head">${esc(t('Mode'))}</div>`
-    + `<button class="nav-drop-item" role="menuitemradio" aria-checked="${mode === 'dark'}" onclick="setMode('dark')">${tick(mode === 'dark')}${esc(t('mode.dark'))}</button>`
-    + `<button class="nav-drop-item" role="menuitemradio" aria-checked="${mode === 'light'}" onclick="setMode('light')">${tick(mode === 'light')}${esc(t('mode.light'))}</button>`
-    + `<div class="nav-drop-sep"></div>`
-    + `<div class="nav-drop-head">${esc(t('Language'))}</div>`
-    + `<button class="nav-drop-item" role="menuitemradio" aria-checked="${LANG === 'fr'}" onclick="setLang('fr');renderPrefMenu()">${tick(LANG === 'fr')}Français</button>`
-    + `<button class="nav-drop-item" role="menuitemradio" aria-checked="${LANG === 'en'}" onclick="setLang('en');renderPrefMenu()">${tick(LANG === 'en')}English</button>`
-    + `<div class="nav-drop-sep"></div>`
-    + `<button class="nav-drop-item" role="menuitem" onclick="hidePrefMenu();location.hash='#/themes'">`
-    + `<span class="nav-tick"></span>${esc(t('All palettes'))}</button>`;
-}
+function toggleLang() { setLang(LANG === 'fr' ? 'en' : 'fr'); }
 
-function togglePrefMenu() {
-  const el = $('pref-menu');
-  if (!el) return;
-  const open = el.hidden;
-  if (open) renderPrefMenu();
-  el.hidden = !open;
-  $('pref-btn')?.setAttribute('aria-expanded', String(open));
-}
-function hidePrefMenu() {
-  const el = $('pref-menu');
-  if (el) el.hidden = true;
-  $('pref-btn')?.setAttribute('aria-expanded', 'false');
-}
 function toggleTheme() {
   const next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
   if (next === 'light') document.documentElement.setAttribute('data-theme', 'light');
@@ -805,7 +798,6 @@ const I18N = {
     '{n}d ago': 'il y a {n} j',
     'nav.themes': 'Th\u00e8mes',
     'nav.source': 'Code source',
-    'home.foot.public': 'Donn\u00e9es publiques uniquement',
     'home.foot.legal': 'Mentions l\u00e9gales',
     'home.foot.source': 'Code source',
     'home.foot.themes': 'Th\u00e8mes',
@@ -1114,8 +1106,6 @@ const I18N = {
     'legal.p8': "WayTrace est open source sous <strong>licence MIT</strong>. Vous pouvez l'auto-héberger ; la version auto-hébergée n'a pas de plafond de snapshots et peut analyser un domaine en intégralité. Le logiciel est fourni <strong>« EN L'ÉTAT », sans aucune garantie</strong>, expresse ou implicite ; voir le fichier LICENSE du dépôt.",
     'legal.h9': '9. Non-responsabilité et limitation de responsabilité',
     'legal.p9': "WayTrace est fourni comme une aide à la recherche, <strong>« en l'état » et « selon disponibilité », sans aucune garantie.</strong> Dans toute la mesure permise par la loi, l'auteur et l'opérateur déclinent toute responsabilité pour tout dommage direct, indirect, accessoire ou consécutif résultant de l'usage, du mésusage ou de la confiance accordée à l'outil ou à ses résultats, ainsi que pour le contenu des pages archivées. <strong>Vous utilisez WayTrace à vos propres risques.</strong>",
-    'legal.h10': '10. Contact / abus / retrait',
-    'legal.p10': "Signalements d'abus et demandes de retrait : <a href=\"mailto:housset.thomas@pm.me\">housset.thomas@pm.me</a>. Les demandes légitimes sont examinées, et un scan hébergé peut être supprimé sur demande.",
     'legal.back': 'Retour à WayTrace',
     // --- Scope / scan journey (static labels) ---
     'Subdomains': 'Sous-domaines',
@@ -1375,6 +1365,7 @@ function _i18nApplyAttr(attr, prop) {
 }
 
 function applyI18n() {
+  try { applyThemeLabel(); } catch (_) {}
   _i18nApplyAttr('data-i18n', 'textContent');
   _i18nApplyAttr('data-i18n-html', 'innerHTML');
   _i18nApplyAttr('data-i18n-ph', 'placeholder');
@@ -1396,9 +1387,12 @@ function setLang(l) {
   try {
     const lb = document.getElementById('pref-lang');
     if (lb) lb.textContent = LANG.toUpperCase();
-    const pb = document.getElementById('pref-btn');
+    const pb = document.getElementById('lang-btn');
     if (pb) {
-      const name = t('Appearance and language') + ' · ' + (LANG === 'fr' ? 'Français' : 'English');
+      // The code on the button says where you are, the label says where the
+      // click takes you. Written in the target language, because someone who
+      // cannot read the current one still has to understand the way out.
+      const name = LANG === 'fr' ? 'Switch to English' : 'Passer en français';
       pb.setAttribute('aria-label', name);
       pb.setAttribute('title', name);
     }
@@ -1938,7 +1932,7 @@ function navigate(hash) {
     if (el) el.classList.toggle('active', v === view);
   });
 
-  $('history-btn').classList.toggle('active', view === 'history');
+  $('history-btn')?.classList.toggle('active', view === 'history');
   stopPublicScanPolling();
   // Clear v2 public mode when navigating away from /s/{url_id}.
   if (view !== 'scan-public') v2PublicMode = false;
@@ -2855,8 +2849,11 @@ function lastScanAge(iso) {
 }
 
 function renderHomeStatus(svc, arc) {
-  const navSettings = $('nav-settings-btn');
-  if (navSettings) navSettings.hidden = !svc.config_panel;
+  // Settings is a page like the others, so it lives in the account menu. The
+  // build that exposes it is the one without accounts, which has no menu, so
+  // the entry is simply absent there and the page is reached from its own URL.
+  const menuSettings = $('account-menu-settings');
+  if (menuSettings) menuSettings.hidden = !svc.config_panel;
   const line = $('home-status-line');
   if (!line) return;
 

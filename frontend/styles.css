@@ -306,7 +306,6 @@
        Sign in<->Connexion) or toggling the theme label never reflows the navbar. */
     .nav-btn { justify-content: center; }
     #history-btn { min-width: 96px; }
-    #nav-settings-btn { min-width: 88px; }
     #account-btn { min-width: 92px; }
     /* Sign in is the only action in the bar that changes what you can do, so
        it is the only one that is filled. The rest read as navigation. */
@@ -410,20 +409,29 @@
       margin: 0; padding: 0;
     }
 
-    /* The version, set once on the wordmark when someone who already knew
-       WayTrace comes back. Selector is .home-title .home-ver and not .home-ver
-       alone: `.home-title span` above is more specific than a bare class and
-       would paint it accent, which is the colour of the logo and not of a
-       signal. */
+    /* The version, carried on the wordmark the way a masthead carries an
+       edition. Selector is .home-title .home-ver and not .home-ver alone:
+       `.home-title span` above is more specific than a bare class and would
+       paint it accent, which is the colour of the logo and not of a mention.
+
+       Set in the site's sans, like everything else here. A small green number
+       in a fixed-width face next to a logo is the one detail that made the
+       header look machine-made, and WayTrace has no monospace anywhere near
+       its identity. The "v" says "version" on its own, so the colour stops
+       having to: the mark sits in the faint tone, reads on a second look, and
+       leaves the accent to the logo. The prefix is generated content because
+       showVersionMark writes textContent, which is what keeps an API string
+       out of the HTML parser. */
     .home-title .home-ver {
       position: absolute; top: 2px; right: -2.4em;
-      font-family: var(--mono); font-weight: 500;
-      font-size: .19em; letter-spacing: .02em;
-      color: var(--green);
+      font-family: var(--font); font-weight: 500;
+      font-size: .17em; letter-spacing: .01em;
+      color: var(--text-faint);
       opacity: 0; transform: translateY(6px);
       animation: homeVerRise .55s var(--ease-out) .4s forwards;
       pointer-events: none;
     }
+    .home-title .home-ver::before { content: 'v'; opacity: .55; }
     @keyframes homeVerRise { to { opacity: 1; transform: translateY(0); } }
 
     /* Hero search: pill form, prominent, copies value to #domain-input
@@ -825,6 +833,34 @@
       transform: translateY(0);
     }
 
+    /* The quiet half of a pair, for the "no" that sits beside an accent-filled
+       "yes". A second filled button competes with the primary, and a bordered
+       one draws a box around the action nobody is being invited to take, so
+       this one spends nothing until it is hovered. It keeps .btn's height and
+       padding, which is what lines the two up.
+
+       Modifier only: it must be written `btn btn-ghost`. On its own it styles
+       nothing and the button falls back to the browser's native control, which
+       is exactly how both dialogs shipped their Cancel. */
+    .btn-ghost {
+      background: transparent;
+      border-color: transparent;
+      color: var(--text-dim);
+      font-weight: 500;
+      box-shadow: none;
+    }
+    .btn-ghost:hover {
+      background: var(--surface2);
+      border-color: var(--border);
+      color: var(--text-bright);
+      box-shadow: none;
+      transform: none;
+    }
+    .btn-ghost:active {
+      background: var(--surface3);
+      box-shadow: inset 0 1px 2px rgba(0,0,0,.18);
+    }
+
     /* ===== LOADING SKELETON ===== */
     .skel {
       display: inline-block; border-radius: var(--radius);
@@ -896,7 +932,6 @@
        including the local filter, the category rail and the preferences. */
     body.wt-export .nav-search,
     body.wt-export #history-btn,
-    body.wt-export #nav-settings-btn,
     body.wt-export #account-btn,
     body.wt-export .wt-fabs,
     body.wt-export .r2-search-server { display: none; }
@@ -2680,7 +2715,7 @@
       body { background: #fff; }
 
       /* Controls print as ink and do nothing on paper. */
-      .navbar, .results-actions, .r2-searches, .r2-kbhint, .wt-fabs,
+      .navbar, .results-actions, .r2-searches, .r2-kbhint,
       .wt-tabs, .r2-copycol, .r2-copy, .r2-rall, .r2-emptytoggle,
       .v2-expires-badge, .toast, .kb-overlay, .r2-nav,
       .exp-drawer, .fd-drawer,

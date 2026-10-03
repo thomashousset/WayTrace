@@ -261,7 +261,7 @@ async def export_scan_csv(url_id: str):
     Provenance-first (matches the neutral report): each row carries the archived
     source page rather than a severity verdict."""
     # Imported here to avoid a circular import at module load.
-    from routers.analyze import _item_value
+    from services.extractor.item_values import item_value as _item_value
     persisted = await get_job_by_url_id(url_id)
     if persisted is None:
         raise HTTPException(status_code=404, detail="Scan not found")

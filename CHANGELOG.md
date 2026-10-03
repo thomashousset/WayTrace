@@ -1,5 +1,56 @@
 # Changelog
 
+## v2.1.0
+
+**Ten highlight types announced a count and named nothing.** `_add` drops
+falsy entries from its values list, and the callers built that list with
+`item.get("value")`. Ten of the categories reaching it keep their value
+somewhere else: favicons under `url`, internal IPs under `ip`, trackers under
+`id`, endpoints and directory listings under `path`, JWTs under `token`,
+crypto addresses under `address`, verification tags under `verification_id`,
+JS URLs under `url`, social profiles under `url`. Every one collapsed to an
+empty list, so a report said "2 favicon change(s) detected" and named neither.
+The map of where a category keeps its value already existed, for the CSV
+export, in another file. Two callers knowing the same thing separately is what
+let them disagree, so there is now one `item_value` and both go through it.
+
+**The version on the wordmark is set in the site's sans.** A small green
+number in a fixed-width face next to a logo is the one detail that made the
+header look machine-made. It reads `v2.1` in the faint text tone: the "v"
+carries the meaning, so the colour no longer has to.
+
+**The favicon drops its background square.** The rounded square boxed the mark
+in at every size and kept it inside its own padding, which a 16 px icon cannot
+afford. The viewBox crops to the ink. Because the square was also guaranteeing
+contrast, the light stroke now flips dark on a light browser tab, which only
+an SVG can do; the PNG and .ico variants keep their square on purpose.
+
+**Three settings behind one paintbrush become three buttons.** Mode, palette
+and language shared one icon that opened a menu, so changing the language
+meant guessing that a paintbrush also held languages. Each has its own control
+now, and each label states what the click does. History moves to the account
+menu where the other pages live, and stays in the bar in the build that has no
+account menu to hold it.
+
+**A bug report says who sent it and what they were doing.** It used to arrive
+as "From: <an IP address>", which names nobody and reads like a signed-in user
+whose email failed to resolve. The mail now distinguishes the two, parses the
+user agent into a browser and a system, and carries what the page knew: view,
+domain, language, theme, viewport, timezone, version, and the last five
+JavaScript errors it threw. The url_id of an open scan stays out of it: it is
+the credential for that scan.
+
+**The generated public tree shipped a test suite that would not collect.** A
+test for a hosted-only endpoint had never been added to the server-only list,
+and it aborted collection rather than failing, taking the whole suite with it.
+Anyone who cloned the repository and ran pytest saw two errors and no tests.
+
+**Smaller:** the Cancel buttons in both dialogs were unstyled native controls,
+because `.btn-ghost` was referenced in the markup and defined nowhere; a
+button must now carry at least one class the stylesheet actually draws.
+"Public data only" leaves the footer, where it repeated the Wayback Machine
+link beside it. Two dead selectors removed.
+
 ## v2.0.2
 
 **A scan could crash on a domain with a hidden form field.** The highlight for

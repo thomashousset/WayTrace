@@ -80,7 +80,7 @@ def test_every_partial_highlight_names_its_values():
         sev, cat, body = m.groups()
         iterated = re.findall(r"for \w+ in (\w+)[\[\)]", body)
         # Iterating something other than the category itself means a subset.
-        if iterated and iterated[0] != cat and "values=" not in body:
+        if iterated and iterated[0] != cat and "items=" not in body:
             offenders.append(f"{sev} {cat} (over {iterated[0]})")
     assert not offenders, (
         "these describe part of a category without naming which part:\n  "

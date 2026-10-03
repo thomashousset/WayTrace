@@ -1,14 +1,19 @@
-"""Finding value formatting helper.
+"""The one place that knows where a category keeps its value.
 
-`_item_value` maps a raw extractor item to its canonical display value, used by
-the CSV export in routers/public.py. (The legacy DB-backed analysis pipeline and
-the OSINT-value severity classifier that used to live here were removed once the
-report became provenance-first and neutral.)
+Extractor accumulators are not uniform: favicons keep a URL, internal IPs
+keep an ip, analytics trackers keep an id, endpoints keep a path. Anything
+that has to turn an item back into a string has to know that, and for a long
+time two callers knew it separately. The CSV export knew it here and the
+highlight builder assumed `item["value"]` everywhere, so ten categories
+produced highlights that announced a count and named none of it.
+
+Everything that needs the canonical value of a finding calls item_value.
+Adding a category means adding its branch here, once.
 """
 from __future__ import annotations
 
 
-def _item_value(category: str, item: dict) -> str | None:
+def item_value(category: str, item: dict) -> str | None:
     """Extract the canonical string value for an item."""
     if category == "analytics_trackers":
         return item.get("id") or item.get("value")
