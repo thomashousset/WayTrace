@@ -1,5 +1,30 @@
 # Changelog
 
+## v2.0.1
+
+**You can suggest a feature, next to the bug button.** Same shape as reporting
+a bug, minus everything a suggestion has no business carrying: no screenshot,
+no page URL, no user agent. Just what you wrote and the account you wrote it
+from. Suggestions are read in the operator panel rather than mailed, because a
+burst of them must not burn the sending quota the sign-in links depend on.
+
+The guardrails, in the order they stop something going wrong: sign-in required,
+which is the only filter an anonymous flood cannot walk around and which also
+attaches a reply address; three per account per hour, since a suggestion is
+never urgent; two thousand characters, cut on the server and not merely on the
+form; a whole-service ceiling per day, so many accounts at once still cannot
+fill the disk overnight; and no attachment of any kind, because every
+attachment is a payload path.
+
+**The bug report dialog was sending the scan's credential.** It attached
+`location.href` verbatim, and on a report page that address contains the
+url_id, which is the key to that scan. It now sends the page address with the
+identifier masked, and says so in the dialog instead of the vague "the current
+page is captured automatically". Its two buttons also had the hierarchy
+backwards, with Cancel looking stronger than Send, and five of its strings were
+never translated because they live in an inline script the language sweep never
+looked at.
+
 ## v2.0.0
 
 A full redesign of every screen, followed by an audit that used the product

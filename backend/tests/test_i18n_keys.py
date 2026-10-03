@@ -101,3 +101,33 @@ def test_the_english_map_is_not_just_the_keys_again():
     assert pairs, "I18N_EN parsed empty; the regex above has drifted"
     echoes = [k for k, v in pairs if v[1:-1] == k]
     assert not echoes, f"English text identical to the key: {echoes[:10]}"
+
+
+def test_no_translation_key_is_used_twice_on_different_content():
+    """applyI18n paints one translation into every element carrying the key, so
+    two elements sharing a key with different English text means one of them
+    gets overwritten by the other's copy. I did exactly that adding a paragraph
+    to the legal page, reusing legal.p6e because it looked free."""
+    import re
+    from pathlib import Path
+    html = (Path(__file__).resolve().parents[2] / "frontend" / "index.html").read_text(encoding="utf-8")
+    par_cle = {}
+    for m in re.finditer(r'data-i18n(?:-html)?="([^"]+)"[^>]*>(.{0,120}?)</', html, re.S):
+        cle, texte = m.group(1), " ".join(m.group(2).split())
+        par_cle.setdefault(cle, set()).add(texte)
+    collisions = {k: sorted(v)[:2] for k, v in par_cle.items() if len(v) > 1}
+    assert collisions == {}, f"same key, different copy: {collisions}"
+
+
+def test_the_retention_intro_states_no_count():
+    """The list under it is shorter in the self-hosted build, which has no
+    accounts, so a number in the sentence above is wrong in one of the two.
+    I wrote "three" while the hosted list had four items and the public one
+    three."""
+    import re
+    from pathlib import Path
+    html = (Path(__file__).resolve().parents[2] / "frontend" / "index.html").read_text(encoding="utf-8")
+    i = html.index('data-i18n-html="legal.p6"')
+    intro = html[i:html.index("</p>", i)]
+    nombres = re.findall(r"\b(one|two|three|four|five|un|deux|trois|quatre|cinq)\b", intro, re.I)
+    assert nombres == [], f"the intro names a count the build can change: {nombres}"

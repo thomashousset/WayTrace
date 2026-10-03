@@ -14,7 +14,7 @@ ENV_FILES = (_REPO_ROOT / ".env", Path(".env"))
 
 # Single source of truth for the tool version, surfaced in the API (/api/health,
 # OpenAPI) and injected into the frontend footer.
-APP_VERSION = "2.0.0"
+APP_VERSION = "2.0.1"
 
 
 class Settings(BaseSettings):

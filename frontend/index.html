@@ -83,7 +83,7 @@
       <button class="nav-icon" id="pref-btn" type="button" aria-haspopup="menu" aria-expanded="false"
               onclick="togglePrefMenu()" aria-label="Appearance and language" title="Appearance and language">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18c1 0 1.6-.7 1.6-1.5 0-.5-.2-.8-.5-1.1-.3-.3-.5-.7-.5-1.1 0-.8.7-1.5 1.5-1.5H16a5 5 0 0 0 5-5c0-4.4-4-8-9-8z"/><circle cx="7.5" cy="11.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="10.5" cy="7.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="15" cy="8.5" r="1.1" fill="currentColor" stroke="none"/></svg>
-      </button>
+      <span class="nav-lang" id="pref-lang" aria-hidden="true"></span></button>
       <div class="nav-drop" id="pref-menu" role="menu" hidden></div>
     </div>
     <a class="nav-icon" id="source-btn" href="https://github.com/thomashousset/WayTrace" target="_blank" rel="noopener" aria-label="Source on GitHub" title="Source on GitHub">
@@ -99,7 +99,7 @@
 <main id="wt-main">
 <div id="view-home" class="view">
   <div class="home-hero">
-    <h1 class="home-title">Way<span>Trace</span></h1>
+    <h1 class="home-title">Way<span>Trace</span><span class="home-ver" id="home-ver" hidden aria-hidden="true"></span></h1>
     <p class="home-tagline" data-i18n-html="home.tagline">The internet <span class="dotmark">never forgets.</span></p>
     <p class="home-sub" data-i18n-html="home.sub">OSINT tool for researchers and professionals. Reveal what a domain has exposed over time (emails, subdomains, tech, leaks) from the <a href="https://web.archive.org" target="_blank" rel="noopener">Wayback Machine</a> archive.</p>
     <form class="home-search" onsubmit="event.preventDefault(); document.getElementById('domain-input').value = this.querySelector('.home-search-input').value.trim(); if (document.getElementById('domain-input').value) startAdvancedScan();">
@@ -377,7 +377,7 @@
     <div class="legal-head">
       <div>
         <h1 data-i18n="legal.title">Legal, licence & acceptable use</h1>
-        <p class="legal-updated" data-i18n="legal.updated">Last updated 2026-07 · WayTrace</p>
+        <p class="legal-updated" data-i18n="legal.updated">Last updated 2026-09 · WayTrace</p>
       </div>
       <div class="legal-head-acts">
         <button class="btn" type="button" onclick="window.print()" data-i18n="legal.print">Print</button>
@@ -398,7 +398,7 @@
       <div class="legal-tldr-title" data-i18n="legal.tldr.title">The short version</div>
       <ul>
         <li data-i18n-html="legal.tldr.1">It reads <strong>only what archive.org already archived</strong>, and never contacts the domain you scan.</li>
-        <li data-i18n-html="legal.tldr.2">Your report is <strong>private</strong> unless you switch its link to readable by anyone.</li>
+        <li data-i18n-html="legal.tldr.2">Your report is <strong>private</strong>. Sharing it means handing someone the link.</li>
         <li data-i18n-html="legal.tldr.3">Findings are <strong>deleted after the retention window</strong>. A record that the scan happened is kept.</li>
         <li data-i18n-html="legal.tldr.4">Use it for research, journalism and authorised security work. <strong>Not against people.</strong></li>
         <li data-i18n-html="legal.tldr.5">Want none of that? <strong>Run your own copy</strong>, nothing leaves your machine.</li>
@@ -469,15 +469,25 @@
     request removal of a scan (see Contact).</p>
 
 
+
     <h2 data-i18n="legal.h6">6. What this instance keeps, and why</h2>
     <!-- Two things are stored with two different lifetimes, and that is the
          whole section. Four dense paragraphs buried it; a list does not. -->
-    <p data-i18n-html="legal.p6">Two different things are stored here, and they do not have the same
-    lifetime.</p>
+    <!-- No count in this sentence: the list below is shorter in the
+         self-hosted build, which has no accounts, so any number stated here
+         would be wrong in one of the two. -->
+    <p data-i18n-html="legal.p6">What is stored does not have the same lifetime everywhere. Some of it
+    lives on this server. Some never leaves your browser.</p>
     <ul class="legal-keeps">
       <li data-i18n-html="legal.p6b"><strong>The results.</strong> Deleted from this instance at the end of
       the retention window shown on the scan page. The findings, and the archived
       page content behind them, go for good and the scan link stops working.</li>
+      <!-- The section described the server and said nothing about the visitor's
+           own machine. Saying it plainly is worth more than a consent banner
+           for storage that needs no consent. -->
+      <li data-i18n-html="legal.p6browser"><strong>What stays in your browser.</strong> Your theme, your language
+      and, while a scan is being prepared, the domain you typed. They are yours,
+      they never reach the server, and clearing your browser data removes them.</li>
     </ul>
 
     <h2 data-i18n="legal.h7">7. Source data & the Internet Archive</h2>
@@ -564,6 +574,8 @@
       </button>
       <div id="pagesearch-results" class="page-search-results" aria-live="polite"></div>
       <div id="r2-summary"></div>
+      <!-- DEMO 2.0 (B) -->
+      <div id="r2-scrub" class="scrub"></div>
       <div class="r2-body">
         <aside class="r2-rail" id="r2-rail"></aside>
         <div class="r2-main" id="r2-main"></div>

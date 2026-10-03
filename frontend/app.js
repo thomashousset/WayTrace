@@ -563,6 +563,11 @@ let LANG = 'en';
    and t() shipped "adm.scans_per_day" to screen for anyone reading in English.
    This map is the English side of those. */
 const I18N_EN = {
+  'adm.tab.features': "Ideas",
+  'adm.features': "Suggested features",
+  'adm.no_features': "no suggestions yet",
+  'adm.load_failed': "Could not load.",
+  'adm.confirm_delete_feature': "Delete this suggestion?",
   'cfg.default': '(default)',
   // Auth sentences that carry a number, rebuilt from a key.
   'auth.rate_signup':
@@ -615,6 +620,11 @@ const I18N_EN = {
 
 const I18N = {
   fr: {
+    'adm.tab.features': "Idées",
+    'adm.features': "Idées proposées",
+    'adm.no_features': "aucune idée pour l'instant",
+    'adm.load_failed': "Chargement impossible.",
+    'adm.confirm_delete_feature': "Supprimer cette idée ?",
     'nav.history': 'Historique',
     'nav.settings': 'Réglages',
     // --- 404, export drawer, scope intro (added i18n pass) ---
@@ -645,6 +655,7 @@ const I18N = {
     'The scan passed 60 minutes and was stopped.':
       'Le scan a dépassé 60 minutes et a été arrêté.',
     'distinct addresses': 'adresses distinctes',
+    'distinct address': 'adresse distincte',
     'Scan failed': 'Échec du scan',
     'Scan cancelled': 'Scan annulé',
     'Back to homepage': "Retour à l'accueil",
@@ -880,7 +891,7 @@ const I18N = {
     // Legal page
     'scope.terms': "En lan\u00e7ant un scan, vous acceptez les <a href=\"#/legal\">conditions d'utilisation</a>, y compris ce qui est conserv\u00e9 au sujet du scan.",
     'legal.title': 'Mentions légales, licence et usage acceptable',
-    'legal.updated': 'Dernière mise à jour 2026-07 · WayTrace',
+    'legal.updated': 'Dernière mise à jour 2026-09 · WayTrace',
     'legal.note': "WayTrace est un outil de reconnaissance OSINT. Il lit uniquement ce que l'Internet Archive (Wayback Machine) a <strong>déjà</strong> archivé publiquement. Il n'effectue <strong>aucun scan actif, sondage ou connexion</strong> sur un site cible, n'envoie aucun trafic vers la cible, et n'ajoute rien qui n'était pas déjà public. Cette page est rédigée en langage clair par souci de transparence ; elle ne constitue pas un avis juridique.",
     'legal.accept': "<strong>En accédant à WayTrace ou en l'utilisant, vous acceptez les présentes conditions ainsi que les <a href=\"https://archive.org/about/terms.php\" target=\"_blank\" rel=\"noopener\">conditions d'utilisation de l'Internet Archive</a>, qui régissent les données source.</strong> Si vous n'êtes pas d'accord, n'utilisez pas WayTrace.",
     'legal.h1': '1. Ce que fait WayTrace',
@@ -900,11 +911,11 @@ const I18N = {
     'legal.p3.li5': 'toute autre activité illégale ou abusive.',
     'legal.p3b': "Tout accès utilisé pour faciliter ce qui précède peut être bloqué, et les abus peuvent être signalés aux autorités compétentes.",
     'legal.h4': '4. Votre responsabilité',
-    'legal.p4': "Vous seul décidez quoi analyser et quoi faire des résultats, et <strong>vous en portez l'entière responsabilité.</strong> Vous devez respecter toutes les lois qui vous sont applicables et applicables au sujet de votre recherche, y compris dans la juridiction du sujet. Lorsque les résultats contiennent des données personnelles, <strong>vous</strong> agissez en tant que responsable du traitement pour tout traitement ultérieur. WayTrace ne fait que révéler des données qu'un tiers avait déjà rendues publiques ; cela ne rend pas leur usage licite entre vos mains.",
+    'legal.p4': "Vous seul décidez quoi analyser et quoi faire des résultats, et <strong>vous en portez l'entière responsabilité.</strong> Vous devez respecter la loi de l\u00e0 o\u00f9 vous \u00eates, et celle du lieu o\u00f9 se trouve le sujet de votre recherche. Lorsque les résultats contiennent des données personnelles, <strong>vous</strong> agissez en tant que responsable du traitement pour tout traitement ultérieur. WayTrace ne fait que révéler des données qu'un tiers avait déjà rendues publiques ; cela ne rend pas leur usage licite entre vos mains.",
     'legal.h5': '5. Données personnelles (RGPD)',
     'legal.p5': "Les pages archivées peuvent contenir des données personnelles (par exemple des adresses e-mail ou des noms). Il n'existe pas d'exemption générale pour les données personnelles publiquement disponibles au titre du RGPD. WayTrace minimise l'exposition par conception : il ne traite que des données déjà archivées publiquement, n'effectue aucun enrichissement au-delà de ces pages, conserve les scans terminés pour une durée limitée sur le service hébergé, et s'appuie sur l'<strong>intérêt légitime</strong> (recherche en sécurité et transparence du web), mis en balance avec les droits des personnes concernées. Les personnes concernées peuvent demander le retrait d'un scan (voir Contact).",
     'legal.h6': '6. Ce que cette instance conserve, et pourquoi',
-    'legal.p6': "Deux choses distinctes sont conserv\u00e9es ici, et elles n'ont pas la m\u00eame dur\u00e9e de vie.",
+    'legal.p6': "Ce qui est conserv\u00e9 n'a pas partout la m\u00eame dur\u00e9e de vie. Une partie vit sur ce serveur. Une partie ne quitte jamais votre navigateur.",
     'legal.p6b': "<strong>Les r\u00e9sultats.</strong> Supprim\u00e9s de cette instance au terme de la dur\u00e9e de conservation indiqu\u00e9e sur la page du scan. Les r\u00e9sultats, et le contenu des pages archiv\u00e9es qui les sous-tend, disparaissent d\u00e9finitivement et le lien du scan cesse de fonctionner.",
     // Ces libelles servent aussi a la version auto-hebergee: ils doivent rester
     // hors des blocs serveur, sinon build_public.py les emporte et l interface
@@ -940,6 +951,8 @@ const I18N = {
     'kb.esc': 'Fermer tout tiroir ou calque ouvert',
     'kb.help': 'Afficher cette aide',
     'kb.foot': "Les raccourcis sont ignor\u00e9s pendant la saisie dans un champ.",
+    'every finding in this report': 'tous les r\u00e9sultats du rapport',
+    'findings were live then': "r\u00e9sultats du rapport \u00e9taient pr\u00e9sents \u00e0 cette date",
     'Mode': 'Mode',
     'mode.dark': 'Sombre',
     'mode.light': 'Clair',
@@ -954,7 +967,7 @@ const I18N = {
     // Balisage statique : sans data-i18n, rien ne les voyait.
     'Cancel': 'Annuler',
     'Tell us what went wrong. We capture the current page automatically.':
-      "Dites-nous ce qui n'a pas marché. La page en cours est capturée automatiquement.",
+      "Dites-nous ce qui n'a pas marché. Plus c'est précis, plus c'est réparable.",
     'Attach screenshot':
       "Joindre une capture",
     'Send report':
@@ -964,6 +977,9 @@ const I18N = {
     'WayTrace · OSINT recon through the Wayback Machine':
       "WayTrace · reconnaissance OSINT via la Wayback Machine",
     'skip.main': 'Aller au contenu principal',
+    'legal.p6browser':
+      "<strong>Ce qui reste dans votre navigateur.</strong> Votre thème, votre langue et, le temps qu'un scan se prépare, le domaine que vous avez saisi. Ils vous appartiennent, ils n'atteignent jamais le serveur, et vider les données du navigateur les efface.",
+    'Appearance and language': 'Apparence et langue',
     'cfg.default': '(par défaut)',
     'Offline copy.': 'Copie hors ligne.',
     // Sign-in and account errors: the auth router answers with a sentence,
@@ -1056,6 +1072,8 @@ const I18N = {
     'kept': 'conserv\u00e9s',
     'ms.failed.word': 'en \u00e9chec',
     'next to expire': 'prochain \u00e0 expirer',
+    'All time': 'Toute la p\u00e9riode',
+    'Point in time': 'Instant',
     'notfound.note': "Vous cherchiez un rapport ? Les rapports sont conserv\u00e9s un temps limit\u00e9 puis supprim\u00e9s avec tout ce qu'ils contenaient, un ancien lien cesse donc de fonctionner.",
     'too many for one scan': 'trop pour un seul scan',
     'Fit it for me': 'Ajuster pour moi',
@@ -1084,7 +1102,7 @@ const I18N = {
     'legal.print': 'Imprimer',
     'legal.tldr.title': 'En bref',
     'legal.tldr.1': "Il lit <strong>uniquement ce qu'archive.org a d\u00e9j\u00e0 archiv\u00e9</strong>, et ne contacte jamais le domaine analys\u00e9.",
-    'legal.tldr.2': "Votre rapport est <strong>priv\u00e9</strong>, sauf si vous rendez son lien lisible par tous.",
+    'legal.tldr.2': "Votre rapport est <strong>priv\u00e9</strong>. Le partager, c'est confier le lien \u00e0 quelqu'un.",
     'legal.tldr.3': "Les r\u00e9sultats sont <strong>supprim\u00e9s au terme de la dur\u00e9e de conservation</strong>. La trace du scan, elle, est conserv\u00e9e.",
     'legal.tldr.4': "\u00c0 usage de recherche, de journalisme et de s\u00e9curit\u00e9 autoris\u00e9e. <strong>Pas contre des personnes.</strong>",
     'legal.tldr.5': "Rien de tout cela ne vous convient ? <strong>Faites tourner votre propre copie</strong>, rien ne quitte votre machine.",
@@ -1160,6 +1178,7 @@ const I18N = {
     'of': 'sur',
     'pages scraped': 'pages récupérées',
     'snapshots analysed': 'snapshots analysés',
+    'snapshot analysed': 'snapshot analysé',
     'That address rejected our previous emails, so we cannot send a sign-in link to it. Write to us and we will sort it out.':
       "Cette adresse a rejeté nos messages précédents, nous ne pouvons plus lui envoyer de lien de connexion. Écrivez nous et on règle ça.",
     'Maintenance in progress. Scanning may be unavailable for a short while.': 'Maintenance en cours. Le scan peut être indisponible quelques instants.',
@@ -1370,6 +1389,20 @@ function setLang(l) {
   try { localStorage.setItem('wt_lang', LANG); } catch (_) {}
   document.documentElement.lang = LANG;
   applyI18n();
+  // The language lived behind a palette icon, so changing it meant guessing
+  // that a paintbrush also held languages. The code shows on the button now,
+  // which costs no extra control in a bar that was deliberately thinned out.
+  // A code, not a flag: a flag is a country, and French is not only France.
+  try {
+    const lb = document.getElementById('pref-lang');
+    if (lb) lb.textContent = LANG.toUpperCase();
+    const pb = document.getElementById('pref-btn');
+    if (pb) {
+      const name = t('Appearance and language') + ' · ' + (LANG === 'fr' ? 'Français' : 'English');
+      pb.setAttribute('aria-label', name);
+      pb.setAttribute('title', name);
+    }
+  } catch (_) {}
   // The browser tab kept its English title in a French interface. An instance
   // that set its own name owns the title, so only touch the default one.
   try {
@@ -2322,6 +2355,22 @@ document.addEventListener('keydown', (e) => {
   else if (!e.shiftKey && here === last) { e.preventDefault(); first.focus(); }
 }, true);
 
+
+/* The version, on the wordmark, permanently.
+
+   It was a one-time announcement at first, shown once per browser and never to
+   a first-time visitor. It reads better as a fixture: the logo says which
+   version you are looking at, the way a masthead carries an edition. The text
+   comes from the API rather than a constant, so it cannot drift the way the
+   hand-written footer version once did. */
+function showVersionMark(version) {
+  const el = document.getElementById('home-ver');
+  if (!el || !version) return;
+  el.textContent = version.split('.').slice(0, 2).join('.');
+  el.hidden = false;
+}
+
+
 function _scanPhaseIndex(step) {
   const s = (step || '').toLowerCase();
   if (s.includes('extract')) return 3;
@@ -2890,8 +2939,59 @@ function relativeFutureTime(iso) {
 }
 
 
-window.addEventListener('hashchange', () => navigate(location.hash));
+/* DEMO 2.0 (A). The View Transitions API animates between two DOM states the
+   browser has captured itself, so a shared element can travel across a route
+   change instead of one view fading out while another fades in. Wrapped in a
+   capability check: where it is unsupported navigate() simply runs as before. */
+/* A report renders after its data arrives, so navigate() returns while the
+   page is still empty. The transition snapshots at that moment, finds nothing
+   carrying the travelling name, and degrades to a plain cross-fade: the shared
+   element had no destination. startViewTransition waits on a promise, so the
+   callback holds until the element it lands on actually exists. */
+function _waitForEl(sel, ready, budgetMs) {
+  return new Promise(resolve => {
+    const t0 = performance.now();
+    const tick = () => {
+      const el = document.querySelector(sel);
+      if (el && ready(el)) return resolve(true);
+      if (performance.now() - t0 > budgetMs) return resolve(false);
+      setTimeout(tick, 16);
+    };
+    tick();
+  });
+}
 
+/* Set from the console to preview the effect without touching an OS setting:
+   window.__wtForceMotion = true */
+function _motionOk() {
+  if (window.__wtForceMotion) return true;
+  return !matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+function _go(hash) {
+  if (!document.startViewTransition) { navigate(hash); return; }
+  // Reduced motion keeps the cross-fade and drops the travel: fading is not
+  // motion, and an abrupt swap is not an accommodation.
+  document.documentElement.classList.toggle('vt-calm', !_motionOk());
+  document.startViewTransition(async () => {
+    navigate(hash);
+    // Budgeted: past this the old page would sit frozen, which is worse than
+    // losing the effect, so it gives up and lets the plain fade happen.
+    if (/^#\/s\//.test(hash)) await _waitForEl('#res-domain', el => el.textContent.trim(), 700);
+  });
+}
+window.addEventListener('hashchange', () => _go(location.hash));
+
+/* The pair that travels. Only one element on the page may carry a given
+   view-transition-name at a time, so the outgoing one is tagged just before the
+   route changes and untagged once the transition owns it. */
+function markTravelling(el, name) {
+  if (!_motionOk()) return;   // nothing should travel across the screen
+  document.querySelectorAll('[style*="view-transition-name"]').forEach(n => {
+    n.style.viewTransitionName = '';
+  });
+  if (el) el.style.viewTransitionName = name;
+}
 window.addEventListener('DOMContentLoaded', () => {
   // Standalone HTML hydration: when this page is opened from a downloaded
   // export file, window.__WAYTRACE_PRELOAD__ is set by the injected script
@@ -3892,6 +3992,9 @@ function resetSessionState() {
 
 function renderResultsHeader(info) {
   $('res-domain').textContent = info.name;
+  // Same name as the row that was clicked, so the browser matches the two and
+  // moves one into the other rather than crossfading them.
+  if (_motionOk()) $('res-domain').style.viewTransitionName = 'wt-domain';
   const el = $('res-meta');
   const m = info.scanMeta;
   const n = (v) => Number(v || 0).toLocaleString(LANG === 'fr' ? 'fr-FR' : 'en-US');
@@ -3917,16 +4020,16 @@ function renderResultsHeader(info) {
     // actually means (a capture archive.org can no longer serve), not a tool
     // error, so it should not read like one.
     const explain = (LANG === 'fr')
-      ? `Sur ${found ? `<b>${n(found)}</b> snapshots archivés` : 'les snapshots archivés'}, `
+      ? `Sur ${found ? `<b>${n(found)}</b> snapshot${found > 1 ? 's' : ''} archivé${found > 1 ? 's' : ''}` : 'les snapshots archivés'}, `
         + (scr == null ? 'les pages ont été récupérées et analysées'
-                       : `<b>${n(scr)}</b> pages ont été récupérées et analysées`)
+                       : `<b>${n(scr)}</b> page${scr > 1 ? 's' : ''} ${scr > 1 ? 'ont' : 'a'} été récupérée${scr > 1 ? 's' : ''} et analysée${scr > 1 ? 's' : ''}`)
         + (gaps ? `, <b>${n(gaps)}</b> n'étaient plus disponibles côté archive (lacunes d'archive)` : '')
         + (dedup ? `, <b>${n(dedup)}</b> doublons ignorés` : '')
         + (blocked ? `, <b>${n(blocked)}</b> pages non récupérées (archive.org limitait le débit)` : '')
         + `${range ? `, couvrant ${esc(range)}` : ''}.`
-      : `Of ${found ? `<b>${n(found)}</b> archived snapshots` : 'the archived snapshots'}, `
+      : `Of ${found ? `<b>${n(found)}</b> archived snapshot${found > 1 ? 's' : ''}` : 'the archived snapshots'}, `
         + (scr == null ? 'the pages were retrieved and analysed'
-                       : `<b>${n(scr)}</b> pages were retrieved and analysed`)
+                       : `<b>${n(scr)}</b> page${scr > 1 ? 's' : ''} ${scr > 1 ? 'were' : 'was'} retrieved and analysed`)
         + (gaps ? `, <b>${n(gaps)}</b> were no longer available from the archive (archive gaps)` : '')
         + (dedup ? `, <b>${n(dedup)}</b> duplicates skipped` : '')
         + (blocked ? `, <b>${n(blocked)}</b> pages archive.org rate-limited this run` : '')
@@ -3973,9 +4076,9 @@ function renderResultsHeader(info) {
     }
     el.innerHTML =
       `<div class="rm-line">`
-      + `<span class="rm-stat"><span class="rm-num">${n(attempted)}${partial ? ` / ${n(ana)}` : ''}</span> ${t('snapshots analysed')}</span>`
+      + `<span class="rm-stat"><span class="rm-num">${n(attempted)}${partial ? ` / ${n(ana)}` : ''}</span> ${t(ana === 1 && !partial ? 'snapshot analysed' : 'snapshots analysed')}</span>`
       + (paths !== null
-          ? `<span class="rm-stat"><span class="rm-num">${n(paths)}</span> ${t('distinct addresses')}</span>` : '')
+          ? `<span class="rm-stat"><span class="rm-num">${n(paths)}</span> ${t(paths === 1 ? 'distinct address' : 'distinct addresses')}</span>` : '')
       + (scr && scr !== attempted
           ? `<span class="rm-stat"><span class="rm-num">${n(scr)}</span> ${t('pages scraped')}</span>` : '')
       + (range ? `<span class="rm-range">${esc(range)}</span>` : '')
@@ -4281,6 +4384,7 @@ function _r2Bounds() {
   // by _r2SetBoundsFrom (activity timelines use local bounds), so presence/live
   // colouring must read this immutable one instead of _r2.hi.
   _r2.globalHi = hi;
+  _r2.globalLo = lo;
 }
 
 // Set the timeline bounds from a SPECIFIC set of findings, so the axis always
@@ -4521,6 +4625,67 @@ function report2RenderSummary() {
 }
 function report2SetPresence(v) { report2State.presence = v; report2Render(); }
 
+/* DEMO 2.0 (B). Every finding already carries first_seen and last_seen as month
+   indices, so the report can answer a question it has never been asked: what did
+   this domain look like on a given date. Nothing is recomputed and no selection
+   logic is touched; the scrubber only reads the two bounds already in memory. */
+const SCRUB = { at: null };          // month index, or null for "all time"
+
+function _scrubAlive(f, at) {
+  const a = _r2Month(f.first_seen), b = _r2Month(f.last_seen);
+  if (a == null || b == null) return true;
+  return a <= at && at <= b;
+}
+
+function _scrubLabel(idx) {
+  const y = Math.floor(idx / 12), m = idx % 12;
+  const names = LANG === 'fr'
+    ? ['janv','févr','mars','avr','mai','juin','juil','août','sept','oct','nov','déc']
+    : ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return names[m] + ' ' + y;
+}
+
+function renderScrubber() {
+  const host = document.getElementById('r2-scrub');
+  if (!host || !_r2.findings.length) return;
+  const lo = _r2.globalLo, hi = _r2.globalHi;
+  if (!isFinite(lo) || !isFinite(hi) || hi <= lo) { host.innerHTML = ''; return; }
+  const at = SCRUB.at == null ? hi : SCRUB.at;
+  const alive = _r2.findings.filter(f => _scrubAlive(f, at)).length;
+  const all = _r2.findings.length;
+  const isAll = SCRUB.at == null;
+  host.innerHTML = `
+    <div class="scrub-head">
+      <span class="scrub-when">${isAll ? esc(t('All time')) : esc(_scrubLabel(at))}</span>
+      <span class="scrub-count">${isAll
+        ? esc(t('every finding in this report'))
+        : `<b>${alive}</b> ${esc(t('of the report\'s'))} ${all} ${esc(t('findings were live then'))}`}</span>
+      <button class="scrub-reset" type="button" onclick="setScrub(null)">${esc(t('All time'))}</button>
+    </div>
+    <input class="scrub-range" type="range" min="${lo}" max="${hi}" step="1" value="${at}"
+           aria-label="${escAttr(t('Point in time'))}" oninput="setScrub(this.value)">
+    <div class="scrub-ends"><span>${esc(_scrubLabel(lo))}</span><span>${esc(_scrubLabel(hi))}</span></div>`;
+}
+
+function setScrub(v) {
+  SCRUB.at = (v === null || v === 'null') ? null : parseInt(v, 10);
+  renderScrubber();
+  applyScrubToRows();
+  report2RenderRail();   // the counts on the left are the visible half of this
+}
+
+/* Rows are dimmed in place rather than removed: seeing a value fade as you pass
+   the month it disappeared is the whole point, and re-rendering the list would
+   make the page jump under the cursor. */
+function applyScrubToRows() {
+  const at = SCRUB.at;
+  document.querySelectorAll('#r2-main .r2-row[data-first]').forEach(row => {
+    if (at == null) { row.classList.remove('scrub-out'); return; }
+    const a = parseInt(row.dataset.first, 10), b = parseInt(row.dataset.last, 10);
+    row.classList.toggle('scrub-out', !(a <= at && at <= b));
+  });
+}
+
 function report2Render() {
   // Sync the view toggle buttons.
   const bc = document.getElementById('r2-vbtn-cats'), ba = document.getElementById('r2-vbtn-activity');
@@ -4534,6 +4699,8 @@ function report2Render() {
   report2RenderSummary();
   report2RenderRail();
   report2RenderMain();
+  renderScrubber();
+  applyScrubToRows();
 }
 
 function report2RenderRail() {
@@ -4576,8 +4743,13 @@ function report2RenderRail() {
   const link = (c) => {
     const on = report2State.openCat === c;
     const all = _r2.byCat.get(c);
-    return `<div class="r2-rlink${on ? ' on' : ''}" role="button" tabindex="0" onclick="report2OpenCat('${c}')" onkeydown="report2RailKey(event,'${c}')">
-      <span>${esc(catLabel(c))}</span><span class="r2-c">${all.length}</span></div>`;
+    const live = SCRUB.at == null ? all.length : all.filter(f => _scrubAlive(f, SCRUB.at)).length;
+    // While scrubbing, a category shows how many of its values existed then,
+    // greyed out entirely when none did. Without this the scrubber only moved
+    // the handful of rows in the open category and the gesture felt inert.
+    const dead = SCRUB.at != null && live === 0;
+    return `<div class="r2-rlink${on ? ' on' : ''}${dead ? ' scrub-empty' : ''}" role="button" tabindex="0" onclick="report2OpenCat('${c}')" onkeydown="report2RailKey(event,'${c}')">
+      <span>${esc(catLabel(c))}</span><span class="r2-c">${live}${SCRUB.at != null && live !== all.length ? `<i class="r2-cwas">/${all.length}</i>` : ''}</span></div>`;
   };
   const emptyLink = (c) => `<div class="r2-rlink zero${report2State.openCat === c ? ' on' : ''}" role="button" tabindex="0" onclick="report2OpenCat('${c}')" onkeydown="report2RailKey(event,'${c}')">
       <span>${esc(catLabel(c))}</span><span class="r2-c">0</span></div>`;
@@ -4643,7 +4815,8 @@ function _r2Rows(list) {
       const chip = coCount > 0
         ? `<button class="r2-cooc-chip${report2State.expandedPage === pid ? ' on' : ''}" title="${escAttr(t('Other findings on the same archived page'))}" onclick="report2ToggleCooc(event, ${pid})">⋯ ${coCount}</button>`
         : '';
-      const row = `<div class="r2-row">
+      const _fa = _r2Month(f.first_seen), _fb = _r2Month(f.last_seen);
+      const row = `<div class="r2-row"${_fa != null && _fb != null ? ` data-first="${_fa}" data-last="${_fb}"` : ''}>
         <span class="r2-val">
           <button class="r2-copy" title="${escAttr(t('Copy') + ': ' + f.value)}" onclick="report2Copy(event)" aria-label="${escAttr(t('Copy'))}">⧉</button>
           <span class="r2-val-text" title="${escAttr(f.value)}">${esc(f.value)}</span>${_r2Chip(f)}${chip}
@@ -5536,7 +5709,7 @@ function _myScansRow(s) {
         .filter(Boolean).map(x => `<span>${esc(x)}</span>`).join('');
   const dur = fmtScanDuration(s.created_at, s.completed_at);
   return `
-    <div class="myscans-row" onclick="location.hash='#/s/${uid}'">
+    <div class="myscans-row" onclick="markTravelling(this.querySelector('.myscans-domain'),'wt-domain');location.hash='#/s/${uid}'">
       <span class="myscans-domain">${esc(s.domain)}</span>
       <span class="myscans-status st-${esc(s.status)}">${esc(t(s.status))}</span>
       ${sharedBadge}
@@ -5783,6 +5956,9 @@ document.addEventListener('keydown', (e) => {
       if (d.version) WT_VERSION = d.version;
       const el = document.getElementById('home-version');
       if (el && d.version) el.textContent = 'v' + d.version;
+      // The version is only known once the API answers, so the mark waits here
+      // rather than guessing from a constant that could drift.
+      try { showVersionMark(d.version); } catch (_) {}
       // The wizard may already be on screen when this resolves.
       if (document.getElementById('setup-ua-preview')) setupOnContact();
     }

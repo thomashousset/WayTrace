@@ -100,6 +100,15 @@
       transition: top .12s var(--ease-out);
     }
     .skip-link:focus { top: 12px; }
+
+    /* The current language, shown on the preferences button. Text, not a flag:
+       a flag names a country and French is spoken well beyond France. */
+    .nav-lang {
+      font-family: var(--mono); font-size: var(--fs-2xs); font-weight: 500;
+      letter-spacing: .06em; color: var(--text-faint); margin-left: 5px;
+    }
+    #pref-btn { width: auto; padding-left: 8px; padding-right: 9px; gap: 0; }
+    #pref-btn:hover .nav-lang, #pref-btn[aria-expanded="true"] .nav-lang { color: var(--text); }
     /* Global focus ring. crisp two-stop, bg-punch then accent halo.
        Form fields and buttons keep their own corner radius so the ring hugs
        their real shape; forcing var(--radius) here used to redraw a 6px
@@ -385,6 +394,7 @@
       padding-bottom: 6vh;
     }
     .home-title {
+      position: relative;
       font-family: var(--font);
       font-size: clamp(52px, 8vw, 88px);
       font-weight: 600; color: var(--text-bright);
@@ -399,6 +409,22 @@
       letter-spacing: -0.03em;
       margin: 0; padding: 0;
     }
+
+    /* The version, set once on the wordmark when someone who already knew
+       WayTrace comes back. Selector is .home-title .home-ver and not .home-ver
+       alone: `.home-title span` above is more specific than a bare class and
+       would paint it accent, which is the colour of the logo and not of a
+       signal. */
+    .home-title .home-ver {
+      position: absolute; top: 2px; right: -2.4em;
+      font-family: var(--mono); font-weight: 500;
+      font-size: .19em; letter-spacing: .02em;
+      color: var(--green);
+      opacity: 0; transform: translateY(6px);
+      animation: homeVerRise .55s var(--ease-out) .4s forwards;
+      pointer-events: none;
+    }
+    @keyframes homeVerRise { to { opacity: 1; transform: translateY(0); } }
 
     /* Hero search: pill form, prominent, copies value to #domain-input
        before startScan. Three states need to harmonise visually because
@@ -872,7 +898,7 @@
     body.wt-export #history-btn,
     body.wt-export #nav-settings-btn,
     body.wt-export #account-btn,
-    body.wt-export .wt-bugfab,
+    body.wt-export .wt-fabs,
     body.wt-export .r2-search-server { display: none; }
 
     /* History and New scan leave the report, which a file on a disk cannot do.
@@ -1986,6 +2012,64 @@
       border: 1px solid var(--border); border-radius: var(--radius-lg);
       background: var(--surface); font-size: var(--fs-sm); line-height: 1.6; color: var(--text-faint);
     }
+    /* ===== DEMO 2.0 (B): time scrubber ===== */
+    .scrub:empty { display: none; }
+    .scrub {
+      border: 0; border-bottom: 1px solid var(--border); background: none;
+      padding: 4px 0 14px; margin: 0 0 14px;
+      container-type: inline-size;
+    }
+    .scrub-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+    .scrub-when {
+      font-family: var(--mono); font-size: 15px; color: var(--text-bright);
+      font-variant-numeric: tabular-nums; min-width: 9ch;
+    }
+    .scrub-count { font-size: 12.5px; color: var(--text-faint); }
+    .scrub-count b { color: var(--accent); font-family: var(--mono); font-size: 13.5px; }
+    .scrub-reset {
+      margin-left: auto; background: none; border: 1px solid var(--border);
+      border-radius: 7px; color: var(--text-dim); cursor: pointer;
+      font: inherit; font-size: 11.5px; padding: 4px 10px;
+    }
+    .scrub-reset:hover { color: var(--text-bright); border-color: var(--border-hover); }
+    .scrub-range { width: 100%; accent-color: var(--accent); cursor: ew-resize; }
+    .scrub-ends {
+      display: flex; justify-content: space-between; margin-top: 4px;
+      font-family: var(--mono); font-size: 10px; color: var(--text-faint);
+    }
+    /* Dimmed, never removed: watching a value fade at the month it vanished is
+       the point, and dropping rows would make the list jump under the cursor. */
+    .r2-row.scrub-out { opacity: .17; filter: saturate(.2); }
+    .r2-rlink.scrub-empty { opacity: .3; }
+    .r2-rlink { transition: opacity .18s var(--ease-out); }
+    .r2-cwas { font-style: normal; color: var(--text-faint); font-size: .85em; }
+    .r2-row { transition: opacity .18s var(--ease-out), filter .18s var(--ease-out); }
+    @media (prefers-reduced-motion: reduce) { .r2-row { transition: none; } }
+
+    /* ===== DEMO 2.0 (A): view transitions ===== */
+    /* The default cross-fade is replaced so the two halves of the page move
+       rather than dissolve: the old view slides out, the new one slides in,
+       and anything carrying a view-transition-name travels between them. */
+    @view-transition { navigation: auto; }
+    ::view-transition-old(root) { animation: wt-out .22s var(--ease-out) both; }
+    ::view-transition-new(root) { animation: wt-in .26s var(--ease-out) both; }
+    @keyframes wt-out { to { opacity: 0; transform: translateY(-6px); } }
+    @keyframes wt-in { from { opacity: 0; transform: translateY(8px); } }
+    /* The travelling element gets a longer, softer curve than the page: it is
+       the thing the eye follows, so it should arrive last. The default
+       cross-fade between the two snapshots stays, because the row and the
+       heading are set very differently and a hard swap reads as an appearance
+       rather than a move. */
+    ::view-transition-group(wt-domain) { animation-duration: .5s; }
+    ::view-transition-old(wt-domain),
+    ::view-transition-new(wt-domain) { animation-duration: .5s; height: 100%; }
+    /* Opacity only, no translation: that is what the preference asks for, and
+       it is better than the page swapping with no transition at all. */
+    .vt-calm::view-transition-old(root) { animation: wt-calm-out .16s linear both; }
+    .vt-calm::view-transition-new(root) { animation: wt-calm-in .18s linear both; }
+    @keyframes wt-calm-out { to { opacity: 0; } }
+    @keyframes wt-calm-in { from { opacity: 0; } }
+
     /* Legal / licence page
        Ten sections in one narrow column with no way in and no way back: the
        reader could not tell how long it was, where they were, or what mattered.
@@ -2596,7 +2680,7 @@
       body { background: #fff; }
 
       /* Controls print as ink and do nothing on paper. */
-      .navbar, .results-actions, .r2-searches, .r2-kbhint,
+      .navbar, .results-actions, .r2-searches, .r2-kbhint, .wt-fabs,
       .wt-tabs, .r2-copycol, .r2-copy, .r2-rall, .r2-emptytoggle,
       .v2-expires-badge, .toast, .kb-overlay, .r2-nav,
       .exp-drawer, .fd-drawer,
