@@ -958,7 +958,7 @@ const I18N = {
     'Report a bug': 'Signaler un bug',
     // Balisage statique : sans data-i18n, rien ne les voyait.
     'Cancel': 'Annuler',
-    'Tell us what went wrong. We capture the current page automatically.':
+    'Tell us what went wrong. The more precise, the more fixable.':
       "Dites-nous ce qui n'a pas marché. Plus c'est précis, plus c'est réparable.",
     'Attach screenshot':
       "Joindre une capture",
