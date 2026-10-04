@@ -563,18 +563,6 @@ const I18N_EN = {
   'adm.confirm_delete_feature': "Delete this suggestion?",
   'cfg.default': '(default)',
   // Auth sentences that carry a number, rebuilt from a key.
-  'auth.rate_signup':
-    "Account creation from your network is temporarily limited to keep the service stable for everyone. Nothing is wrong with your request, please try again in {n}.",
-  'auth.rate_login':
-    "Too many sign-in attempts from your network. To protect accounts, please wait {n} and try again.",
-  'auth.rate_magic':
-    "Several sign-in links were requested recently. Check your inbox (and spam folder), or request a new link in {n}.",
-  'auth.rate_generic':
-    "Too many attempts. Try again in {n}.",
-  'auth.locked':
-    "Too many failed attempts. Locked for {n}s.",
-  'auth.short_password':
-    "Password must be at least {n} characters.",
   // Refusals the API returns, keyed by its machine code.
     'api.per_user_limit':
       "You already have a scan in flight. Track it in My scans; a new one can start once it finishes.",
@@ -976,60 +964,10 @@ const I18N = {
     'Offline copy.': 'Copie hors ligne.',
     // Sign-in and account errors: the auth router answers with a sentence,
     // not a code, so these are keyed by the sentence itself.
-    'auth.rate_signup':
-      "La création de compte depuis votre réseau est temporairement limitée pour garder le service stable pour tout le monde. Votre demande n'a rien d'anormal, réessayez dans {n}.",
-    'auth.rate_login':
-      "Trop de tentatives de connexion depuis votre réseau. Pour protéger les comptes, patientez {n} avant de réessayer.",
-    'auth.rate_magic':
-      "Plusieurs liens de connexion ont été demandés récemment. Vérifiez votre boîte de réception, et les indésirables, ou demandez un nouveau lien dans {n}.",
-    'auth.rate_generic':
-      "Trop de tentatives. Réessayez dans {n}.",
-    'auth.locked':
-      "Trop d'échecs de connexion. Compte bloqué pendant {n} s.",
-    'auth.short_password':
-      "Le mot de passe doit faire au moins {n} caractères.",
     'about {n} minutes':
       "environ {n} minutes",
     '{n}s':
       "{n} s",
-    'Captcha check failed. Please try again.':
-      "La vérification anti-robot a échoué. Réessayez.",
-    'Sign in to save a theme.':
-      "Connectez-vous pour enregistrer un thème.",
-    'Invalid email address.':
-      "Adresse e-mail invalide.",
-    'This email provider is not allowed. Use a real address.':
-      "Ce fournisseur d'e-mail n'est pas accepté. Utilisez une adresse réelle.",
-    'Access denied.':
-      "Accès refusé.",
-    'That email is already registered. Try signing in.':
-      "Cette adresse est déjà enregistrée. Essayez de vous connecter.",
-    'Wrong email or password.':
-      "E-mail ou mot de passe incorrect.",
-    'This sign-in link is invalid or expired.':
-      "Ce lien de connexion est invalide ou expiré.",
-    'This verification link is invalid or expired.':
-      "Ce lien de vérification est invalide ou expiré.",
-    'Account not found.':
-      "Compte introuvable.",
-    'Sign in to see your scans.':
-      "Connectez-vous pour voir vos scans.",
-    '2FA already enabled. Disable it first.':
-      "L'authentification à deux facteurs est déjà active. Désactivez-la d'abord.",
-    'Start setup first.':
-      "Lancez d'abord la configuration.",
-    'Invalid code. Check your authenticator.':
-      "Code invalide. Vérifiez votre application d'authentification.",
-    '2FA is not set up.':
-      "L'authentification à deux facteurs n'est pas configurée.",
-    'Invalid code.':
-      "Code invalide.",
-    'Too many sign-in links requested. Please try again in a few minutes.':
-      "Trop de liens de connexion demandés. Réessayez dans quelques minutes.",
-    'Wrong password for this account.':
-      "Mot de passe incorrect pour ce compte.",
-    'Could not create your account.':
-      "La création du compte a échoué.",
     // Refusals the API returns, keyed by its machine code.
     'api.per_user_limit':
       "Vous avez déjà un scan en cours. Suivez-le dans Mes scans, un nouveau pourra démarrer dès qu'il sera terminé.",
@@ -2256,12 +2194,6 @@ function _waitText(raw) {
 }
 
 const _SENTENCE_PATTERNS = [
-  [/^Account creation from your network .* in (.+)\.$/, 'auth.rate_signup'],
-  [/^Too many sign-in attempts .* wait (.+) and try again\.$/, 'auth.rate_login'],
-  [/^Several sign-in links were requested .* a new link in (.+)\.$/, 'auth.rate_magic'],
-  [/^Too many attempts\. Try again in (.+)\.$/, 'auth.rate_generic'],
-  [/^Too many failed attempts\. Locked for (\d+)s\.$/, 'auth.locked'],
-  [/^Password must be at least (\d+) characters\.$/, 'auth.short_password'],
 ];
 
 function _sentenceText(raw) {
