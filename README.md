@@ -173,6 +173,14 @@ are, not by this tool.
 Use it on domains you own, or within a mandate, or on subjects where the
 public interest is real. Do not use it to profile private individuals.
 
+## Author
+
+Built and maintained by [Thomas Housset](https://thomashousset.com/).
+
+Bugs and ideas are welcome as issues. For anything security related, read
+[SECURITY.md](SECURITY.md) first: testing waytrace.org itself is worth a word
+beforehand, and the reasons are in there.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).

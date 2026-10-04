@@ -179,6 +179,14 @@ Utilisez-le sur des domaines qui vous appartiennent, ou dans le cadre d'un
 mandat, ou sur des sujets où l'intérêt public est réel. Ne l'utilisez pas pour
 profiler des personnes privées.
 
+## Auteur
+
+Écrit et maintenu par [Thomas Housset](https://thomashousset.com/).
+
+Les bugs et les idées sont les bienvenus en issues. Pour tout ce qui touche à
+la sécurité, lisez d'abord [SECURITY.md](SECURITY.md) : tester waytrace.org
+lui-même mérite un mot au préalable, et les raisons y sont expliquées.
+
 ## Licence
 
 MIT. Voir [LICENSE](LICENSE).
