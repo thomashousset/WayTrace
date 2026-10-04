@@ -9,7 +9,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse
+from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, Response
 from loguru import logger
 
 from config import settings, APP_VERSION
@@ -242,10 +242,11 @@ async def serve_manifest():
 @app.get("/robots.txt", include_in_schema=False)
 async def serve_robots():
     robots = FRONTEND_DIR / "robots.txt"
-    if robots.exists():
-        return FileResponse(robots, media_type="text/plain")
-    # Sensible default rather than serving a binary icon as robots.txt.
-    return PlainTextResponse("User-agent: *\nAllow: /\n")
+    body = robots.read_text(encoding="utf-8") if robots.exists() \
+        else "User-agent: *\nAllow: /\n"
+    return PlainTextResponse(body, media_type="text/plain")
+
+
 
 
 # RFC 9116. Built here rather than shipped as a file for two reasons. The
