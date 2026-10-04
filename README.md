@@ -173,10 +173,6 @@ are, not by this tool.
 Use it on domains you own, or within a mandate, or on subjects where the
 public interest is real. Do not use it to profile private individuals.
 
-## Author
-
-Built by [Thomas Housset](https://thomashousset.com/).
-
 ## License
 
 MIT. See [LICENSE](LICENSE).

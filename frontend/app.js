@@ -789,7 +789,6 @@ const I18N = {
     'home.foot.legal': 'Mentions l\u00e9gales',
     'home.foot.source': 'Code source',
     'home.foot.themes': 'Th\u00e8mes',
-    'home.foot.by': 'par Thomas Housset',
     'home.tagline': "Internet <span class=\"dotmark\">n'oublie jamais.</span>",
     'home.sub': "Outil d'OSINT pour chercheurs et professionnels. Révélez ce qu'un domaine a exposé au fil du temps (e-mails, sous-domaines, technos, fuites) depuis les archives de la <a href=\"https://web.archive.org\" target=\"_blank\" rel=\"noopener\">Wayback Machine</a>.",
     'home.scan': 'Analyser',
