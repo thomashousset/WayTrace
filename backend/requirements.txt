@@ -1,15 +1,37 @@
-fastapi>=0.115.0
-uvicorn[standard]>=0.32.0
-pydantic>=2.10.0
-pydantic-settings>=2.7.0
-aiohttp>=3.11.0
-# Held below 1.0: that release removes the Modest backend and makes
-# `from selectolax.parser import HTMLParser` raise on import, which is what all
-# 23 extractor modules do. Lifting this bound means moving them to
-# `selectolax.lexbor`, a different HTML engine whose parse results have to be
-# re-checked against the extractor tests, not a one-line swap.
+# Every dependency is bounded at both ends, and the upper bound is placed at
+# the position that actually breaks rather than at the major by reflex.
+#
+# selectolax 1.0 landed on 2026-10-03 and removed the Modest backend, which is
+# the parser all 23 extractor modules import. `selectolax>=0.3.0` resolved
+# straight to it, so a clone that followed the quick start got 68 collection
+# errors and no tests, and the next production image rebuild would have shipped
+# a container that could not parse a page. Nothing was wrong in production; a
+# deploy would have made it wrong.
+#
+# Half of these are 0.x, and semver puts the breaking change in the MINOR there,
+# not the major. Capping those at <1.0 would read as caution and protect
+# nothing: it is the 0.142 -> 0.143 step that moves under you, and <1.0 waves it
+# through. So the bound sits one step above what production is proven on, at the
+# minor for a 0.x package and at the major for the rest.
+#
+# The cost, stated plainly: a fix released only above a cap does not reach a
+# self-hosted install until the cap moves. Moving it is a deliberate act with
+# the suite behind it, which is the trade being made on purpose.
+#
+# Raising one: bump the bound, `pip install -r requirements.txt`, run the suite.
+
+# 0.x: the minor is the breaking position.
+fastapi>=0.115.0,<0.143
+uvicorn[standard]>=0.32.0,<0.55
+loguru>=0.7.0,<0.8
+httpx>=0.28.0,<0.29
+aiosqlite>=0.20.0,<0.23
+# 1.x+: the major is.
+pydantic>=2.10.0,<3
+pydantic-settings>=2.7.0,<3
+aiohttp>=3.11.0,<4
+PyJWT>=2.8.0,<3
+# Held below 1.0 for the reason at the top of this file. Lifting it means
+# moving 23 modules to `selectolax.lexbor`, a different HTML engine whose parse
+# results have to be re-checked against the extractor tests, not a one-line swap.
 selectolax>=0.3.0,<1.0
-loguru>=0.7.0
-httpx>=0.28.0
-aiosqlite>=0.20.0,<0.23.0
-PyJWT>=2.8.0
