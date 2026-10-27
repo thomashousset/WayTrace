@@ -20,6 +20,7 @@ from loguru import logger
 
 from config import settings
 from services.ids import generate_url_id
+from services.ip_utils import rate_key
 
 # Keep-forever horizon for scans when retention is set to 0 (infinite). Far
 # enough that expires_at > now always holds, so the purge never touches them.
@@ -70,7 +71,9 @@ class JobStore:
         notify_email: str | None = None,
     ) -> dict:
         async with self._lock:
-            if self.per_ip_count.get(client_ip, 0) >= settings.max_active_per_ip:
+            # Counted per /64 for IPv6 (see rate_key): one subscriber, one cap.
+            ip_key = rate_key(client_ip)
+            if self.per_ip_count.get(ip_key, 0) >= settings.max_active_per_ip:
                 raise PerIpLimitError(client_ip)
             if len(self.active) + len(self.waiting) >= settings.max_queue_total:
                 raise QueueFullError()
@@ -97,7 +100,7 @@ class JobStore:
                 "notify_email": notify_email,
             }
             self._url_id_to_job[url_id] = job_id
-            self.per_ip_count[client_ip] = self.per_ip_count.get(client_ip, 0) + 1
+            self.per_ip_count[ip_key] = self.per_ip_count.get(ip_key, 0) + 1
             self.total_scans_run += 1
 
             if len(self.active) < settings.max_active_total:
@@ -206,7 +209,8 @@ class JobStore:
                 "notify_email": row.get("notify_email"),
             }
             self._url_id_to_job[row["url_id"]] = job_id
-            self.per_ip_count[ip] = self.per_ip_count.get(ip, 0) + 1
+            ip_key = rate_key(ip)
+            self.per_ip_count[ip_key] = self.per_ip_count.get(ip_key, 0) + 1
             self.waiting.append(job_id)
             return True
 
@@ -314,7 +318,7 @@ class JobStore:
                 self.waiting.remove(job_id)
             except ValueError:
                 pass
-            ip = job.get("client_ip")
+            ip = rate_key(job.get("client_ip") or "")
             if ip and self.per_ip_count.get(ip, 0) > 0:
                 self.per_ip_count[ip] -= 1
                 if self.per_ip_count[ip] == 0:
@@ -354,7 +358,7 @@ class JobStore:
                 self.waiting.remove(job_id)
             except ValueError:
                 pass
-            ip = job.get("client_ip")
+            ip = rate_key(job.get("client_ip") or "")
             if ip and self.per_ip_count.get(ip, 0) > 0:
                 self.per_ip_count[ip] -= 1
                 if self.per_ip_count[ip] == 0:
