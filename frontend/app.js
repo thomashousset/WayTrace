@@ -27,12 +27,19 @@ let histSortDir = 'desc';
 
 /* ===== HELPERS ===== */
 const $ = id => document.getElementById(id);
-const esc = s => { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; };
-// Attribute-safe escape: esc() only handles & < > (text context); inside a
-// double-quoted attribute a " in the value would end the attribute early, so
-// also entity-escape the quotes. Use for any value interpolated into an
-// attribute (title="...", etc.).
-const escAttr = s => esc(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+// Escapes the quotes too, not only & < >: esc() output also lands inside
+// quoted attributes (value="…", title="…"), where a bare " ended the
+// attribute and let a value add its own onmouseover. In text the entities
+// render exactly like the characters.
+const esc = s => { const d = document.createElement('div'); d.textContent = s; return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;'); };
+const escAttr = esc;
+// A value passed as an argument inside an inline handler (onclick="f(…)").
+// esc() is not enough there: the HTML parser decodes &#39; back to ' before
+// the JavaScript runs, so '${esc(x)}' let an archived URL path or an account
+// email close the string and run code. JSON.stringify makes a real JS string
+// literal (quotes, backslashes, newlines), and escAttr keeps its double
+// quotes from ending the attribute. Use it bare: onclick="f(${jsArg(x)})".
+const jsArg = s => escAttr(JSON.stringify(String(s ?? '')));
 
 function highlightMatch(value, query) {
   // Wrap case-insensitive matches of query in <mark>. Done on the raw string
@@ -871,7 +878,7 @@ const I18N = {
     // Legal page
     'scope.terms': "En lan\u00e7ant un scan, vous acceptez les <a href=\"#/legal\">conditions d'utilisation</a>, y compris ce qui est conserv\u00e9 au sujet du scan.",
     'legal.title': 'Mentions légales, licence et usage acceptable',
-    'legal.updated': 'Dernière mise à jour 2026-09 · WayTrace',
+    'legal.updated': 'Dernière mise à jour 2026-10 · WayTrace',
     'legal.note': "WayTrace est un outil de reconnaissance OSINT. Il lit uniquement ce que l'Internet Archive (Wayback Machine) a <strong>déjà</strong> archivé publiquement. Il n'effectue <strong>aucun scan actif, sondage ou connexion</strong> sur un site cible, n'envoie aucun trafic vers la cible, et n'ajoute rien qui n'était pas déjà public. Cette page est rédigée en langage clair par souci de transparence ; elle ne constitue pas un avis juridique.",
     'legal.accept': "<strong>En accédant à WayTrace ou en l'utilisant, vous acceptez les présentes conditions ainsi que les <a href=\"https://archive.org/about/terms.php\" target=\"_blank\" rel=\"noopener\">conditions d'utilisation de l'Internet Archive</a>, qui régissent les données source.</strong> Si vous n'êtes pas d'accord, n'utilisez pas WayTrace.",
     'legal.h1': '1. Ce que fait WayTrace',
@@ -3283,7 +3290,7 @@ function renderScopeSubList() {
     const on = scopeCheckedSubs.has(s.subdomain);
     const pad = _scopeSubDepth(s.subdomain) * 16;
     return `<label class="scope-item${on ? ' checked' : ''}">
-        <input type="checkbox" ${on ? 'checked' : ''} onchange="onScopeSubToggle('${esc(s.subdomain)}', this.checked)">
+        <input type="checkbox" ${on ? 'checked' : ''} onchange="onScopeSubToggle(${jsArg(s.subdomain)}, this.checked)">
         <div class="scope-item-name"><span class="scope-item-indent" style="width:${pad}px"></span>${esc(s.subdomain)}</div>
         <div class="scope-item-count">${nfmt(s.snapshot_count)} ${
           s.snapshot_count === 1 ? t('snapshot') : t('snapshots')}</div>
@@ -3327,7 +3334,7 @@ function renderScopePaths() {
     const off = scopeExcludedPaths.has(pg.path);
     const pctTxt = pct >= 10 ? pct.toFixed(0) + '%' : pct.toFixed(1) + '%';
     return `<label class="scope-path${off ? ' excluded' : ''}" title="${escAttr(pg.path)} · ${pg.count} snapshots">
-        <input type="checkbox" ${off ? '' : 'checked'} onchange="onScopePathToggle('${esc(pg.path)}', this.checked)">
+        <input type="checkbox" ${off ? '' : 'checked'} onchange="onScopePathToggle(${jsArg(pg.path)}, this.checked)">
         <span class="scope-path-name">${esc(pg.path)}</span>
         <span class="scope-path-share">
           <span class="scope-path-bar ${lvl}"><i style="width:${Math.max(3, pct).toFixed(1)}%"></i></span>
@@ -3369,7 +3376,7 @@ function renderScopeChips() {
   const el = $('scope-excl-chips');
   if (!el) return;
   el.innerHTML = scopeExcludeKeywords.map(k =>
-    `<span class="scope-chip">${esc(k)}<button type="button" aria-label="remove" onclick="removeScopeKeyword('${esc(k)}')">&times;</button></span>`
+    `<span class="scope-chip">${esc(k)}<button type="button" aria-label="remove" onclick="removeScopeKeyword(${jsArg(k)})">&times;</button></span>`
   ).join('');
 }
 function renderScopePresets() {
@@ -3377,7 +3384,7 @@ function renderScopePresets() {
   if (!el) return;
   const avail = SCOPE_EXCL_PRESETS.filter(p => !scopeExcludeKeywords.includes(p));
   el.innerHTML = avail.length
-    ? 'Common: ' + avail.map(p => `<button type="button" onclick="addScopeKeyword('${esc(p)}')">${esc(p)}</button>`).join('')
+    ? 'Common: ' + avail.map(p => `<button type="button" onclick="addScopeKeyword(${jsArg(p)})">${esc(p)}</button>`).join('')
     : '';
 }
 
@@ -4991,7 +4998,7 @@ function renderV2InLegacyView(job) {
       <a class="btn" href="/api/s/${uid}/export.json" download>${t('JSON')}</a>
       <a class="btn" href="/api/s/${uid}/export.csv" download>${t('CSV')}</a>
       ${job.can_publish === false ? '' :
-        `<button class="btn" type="button" onclick="scanMore('${esc(job.domain)}')" title="${escAttr(t('Run a denser scan of this domain, reusing what was already found'))}">${t('Scan more')}</button>`}
+        `<button class="btn" type="button" onclick="scanMore(${jsArg(job.domain)})" title="${escAttr(t('Run a denser scan of this domain, reusing what was already found'))}">${t('Scan more')}</button>`}
       ${shareBtn}
       ${expires}
     `;
@@ -5091,7 +5098,7 @@ function renderExportCategories() {
   list.innerHTML = cats.map(c => `
     <label class="exp-cat-item">
       <input type="checkbox" ${exportSelectedCats.has(c) ? 'checked' : ''}
-             onchange="toggleExportCat('${esc(c)}', this.checked)">
+             onchange="toggleExportCat(${jsArg(c)}, this.checked)">
       <span>${esc(catLabel(c))}</span>
       <span class="exp-cat-item-count">${counts[c]}</span>
     </label>
@@ -5649,7 +5656,7 @@ function _myScansRow(s) {
       </span>
       <span class="ms-rowacts" onclick="event.stopPropagation()">
         <button class="btn-mini" type="button" onclick="copyScanLink('${uid}')">${esc(t('Copy link'))}</button>
-        <button class="btn-mini" type="button" onclick="location.hash='#/scope/'+encodeURIComponent('${escAttr(s.domain)}')">${esc(t('Re-run'))}</button>
+        <button class="btn-mini" type="button" onclick="location.hash='#/scope/'+encodeURIComponent(${jsArg(s.domain)})">${esc(t('Re-run'))}</button>
       </span>
       ${_scanActionsCell(s.url_id, t('Delete scan'))}
     </div>`;
