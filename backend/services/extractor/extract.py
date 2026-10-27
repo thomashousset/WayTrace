@@ -223,8 +223,10 @@ def _record_endpoint(ctx: ExtractionContext, raw: str) -> None:
     # Drop Wayback self-references.
     if link_domain == "web.archive.org" or path.startswith("/web/"):
         return
-    # Only record when path-only or same-domain.
-    if link_domain and not link_domain.endswith(ctx.domain):
+    # Only record when path-only or same-domain. A dot boundary, not a bare
+    # endswith: evilexample.fr is not example.fr, and its /admin/login would
+    # otherwise land in the target's admin endpoints.
+    if link_domain and not (link_domain == ctx.domain or link_domain.endswith("." + ctx.domain)):
         return
     if len(path) > 256:
         return
@@ -977,11 +979,13 @@ def _cat_cloud_buckets(ctx: ExtractionContext) -> None:
 def _api_key_tier(key_type: str, value: str) -> str:
     """Return ``"public"`` for keys safe to embed in a webpage, else
     ``"secret"``. Public keys are PIVOT-grade; secrets are LEAK-grade."""
-    if key_type in ("Google_OAuth_Client", "Mapbox", "Sentry_DSN"):
+    if key_type in ("Google_API", "Google_OAuth_Client", "Mapbox", "Sentry_DSN"):
         # Mapbox pk.* and Sentry DSNs are designed to ship to the
         # browser; the OSINT value is in the org/project they reveal,
-        # not in the key itself. Tag as public so highlights demote
-        # them from LEAK to PIVOT.
+        # not in the key itself. Same for a Google AIza key found in a
+        # page: it is a browser key (Maps, Firebase), restricted by
+        # referrer, and Google documents embedding it. Tag as public so
+        # highlights demote them from LEAK to PIVOT.
         return "public"
     if key_type == "Stripe":
         # pk_test_/pk_live_ are publishable keys. sk_*/rk_* stay secret.
@@ -1002,6 +1006,11 @@ _API_KEY_CONTEXT_REQUIRED = {
 }
 _API_KEY_CONTEXT_WINDOW = 60
 
+# Vendors print sample keys in their docs (AWS: AKIAIOSFODNN7EXAMPLE), and
+# tutorials copied onto a site carry them verbatim. A real key never spells
+# EXAMPLE in capitals, so a match that does is the sample, not a leak.
+_SAMPLE_KEY_MARK = "EXAMPLE"
+
 
 def _cat_api_keys(ctx: ExtractionContext) -> None:
     for key_type, pattern in API_KEY_PATTERNS.items():
@@ -1013,6 +1022,8 @@ def _cat_api_keys(ctx: ExtractionContext) -> None:
                 if not context_re.search(ctx.raw_text[lo:hi]):
                     continue
             secret = match.group(0)
+            if _SAMPLE_KEY_MARK in secret:
+                continue
             tier = _api_key_tier(key_type, secret)
             update_entity(
                 ctx.accum["api_keys"], secret, ctx.month,
