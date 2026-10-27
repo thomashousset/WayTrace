@@ -90,3 +90,52 @@ async def test_migration_v7_idempotent_after_partial_apply(tmp_path):
     ver = (await cur.fetchone())[0]
     await conn.close()
     assert ver == latest
+
+
+# --- a job that keeps bringing the process down is not restarted forever ----
+
+async def _crash_mid_run(url_id):
+    """What a run that dies with the process leaves behind: the row moved to
+    running (one more start counted) and never finished."""
+    await dbmod.update_job_queue_status(url_id, "running")
+
+
+@pytest.mark.asyncio
+async def test_a_job_started_three_times_is_not_restored_a_fourth(tmp_db):
+    s1 = JobStore()
+    job = await s1.create_job("heavy.com", "1.1.1.1")
+    for boot in range(3):
+        await _crash_mid_run(job["url_id"])
+        s = JobStore()
+        restored = await s.restore_pending_jobs()
+        if boot < 2:
+            assert restored == 1, f"boot {boot}: a deploy or a rollback must not cost the scan"
+    assert restored == 0
+    row = await dbmod.get_job_by_url_id(job["url_id"])
+    assert row["status"] == "failed"
+    assert row["meta"]["error"] == "restart_loop"
+    # and it stays out on every later boot
+    assert await JobStore().restore_pending_jobs() == 0
+
+
+@pytest.mark.asyncio
+async def test_queued_jobs_never_started_are_not_counted(tmp_db):
+    s1 = JobStore()
+    await s1.create_job("live.com", "1.1.1.1")
+    waiting = await s1.create_job("waiting.com", "2.2.2.2")
+    for _ in range(5):
+        assert await JobStore().restore_pending_jobs() == 2
+    row = await dbmod.get_job_by_url_id(waiting["url_id"])
+    assert row["status"] == "queued"
+
+
+@pytest.mark.asyncio
+async def test_migration_18_adds_the_counter_to_existing_rows(tmp_db):
+    s1 = JobStore()
+    job = await s1.create_job("old.com", "1.1.1.1")
+    conn = await dbmod.get_db()
+    try:
+        cur = await conn.execute("SELECT start_attempts FROM jobs WHERE url_id = ?", (job["url_id"],))
+        assert (await cur.fetchone())[0] == 0
+    finally:
+        await conn.close()

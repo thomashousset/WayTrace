@@ -26,6 +26,11 @@ from services.ip_utils import rate_key
 # enough that expires_at > now always holds, so the purge never touches them.
 _RETENTION_FOREVER = timedelta(days=365 * 100)
 
+# Starts a restored job may have had before the restore gives up on it. Three
+# leaves room for a deploy plus a rollback interrupting the same scan, and
+# stops a scan that brings the process down from doing it on every boot.
+MAX_START_ATTEMPTS = 3
+
 
 def retention_timedelta() -> timedelta:
     """How long a finished scan is kept. scan_retention_days <= 0 means forever."""
@@ -50,6 +55,9 @@ class JobStore:
         self.active: list[str] = []
         self.waiting: deque[str] = deque()
         self.per_ip_count: dict[str, int] = {}
+        # The task running each started scan, so a cancellation can stop the
+        # work itself and not only relabel it (see cancel_job).
+        self._tasks: dict[str, asyncio.Task] = {}
         self._lock = asyncio.Lock()
         self.total_scans_run: int = 0
         # Moving average of completed scan duration. Used to estimate ETA.
@@ -152,6 +160,18 @@ class JobStore:
             return 0
         restored = 0
         for row in rows:
+            if (row.get("start_attempts") or 0) >= MAX_START_ATTEMPTS:
+                # Started that many times and never finished: whatever stops
+                # it may well be what keeps restarting the process. Stop the
+                # loop here; the person sees why and can run it again.
+                logger.warning("Not restoring job {}: started {} times without finishing",
+                               row.get("url_id"), row.get("start_attempts"))
+                try:
+                    from db import fail_job_row
+                    await fail_job_row(row["url_id"], "restart_loop")
+                except Exception:
+                    logger.exception("could not mark job {} failed", row.get("url_id"))
+                continue
             try:
                 if await self._restore_one(row):
                     restored += 1
@@ -287,6 +307,21 @@ class JobStore:
             jid = self._url_id_to_job.get(url_id)
             return self._jobs.get(jid) if jid else None
 
+    async def mark_running(self, job_id: str, task: asyncio.Task | None) -> bool:
+        """Flip a job to running and remember the task running it, in one step
+        under the lock, so cancel_job can never see "running" without the
+        task. Returns False if the job is gone or was cancelled meanwhile."""
+        async with self._lock:
+            job = self._jobs.get(job_id)
+            if job is None or job.get("status") == "cancelled":
+                return False
+            job["status"] = "running"
+            job["step"] = "Starting scan..."
+            job["updated_at"] = datetime.now(timezone.utc)
+            if task is not None:
+                self._tasks[job_id] = task
+            return True
+
     async def update_job(self, job_id: str, **fields) -> None:
         async with self._lock:
             job = self._jobs.get(job_id)
@@ -334,6 +369,7 @@ class JobStore:
             if duration_seconds is not None and duration_seconds > 0:
                 # Exponential moving average (~10-sample window)
                 self.avg_scan_seconds = 0.9 * self.avg_scan_seconds + 0.1 * duration_seconds
+            self._tasks.pop(job_id, None)
             # Drop the in-memory record; DB is now authoritative
             url_id = job.get("url_id")
             if url_id:
@@ -355,11 +391,22 @@ class JobStore:
                 return False
             if job["status"] not in ("queued", "running"):
                 return False
+            was_running = job["status"] == "running"
             job["status"] = "cancelled"
             job["step"] = "Cancelled"
             if job_id in self.active:
                 # Running (or promoted-but-not-yet-started): let finish_job clean
                 # up so active/per-IP are released exactly once.
+                task = self._tasks.get(job_id)
+                if was_running and task is not None and not task.done():
+                    # Stop the work: before this, a cancelled scan kept
+                    # downloading from archive.org until it ended on its own,
+                    # up to the scan timeout, holding its slot all along.
+                    # run_scan's finally still runs, sees "cancelled", drops
+                    # the row and frees the slot. A job promoted but not yet
+                    # started is left alone: its task has not reached that
+                    # finally, and run_scan's own start check handles it.
+                    task.cancel()
                 return True
             # Waiting and will never start: remove it now, releasing the slot.
             try:
@@ -409,6 +456,7 @@ class JobStore:
             self.active.clear()
             self.waiting.clear()
             self.per_ip_count.clear()
+            self._tasks.clear()
 
 
 store = JobStore()

@@ -17,7 +17,7 @@ from routers.scan import _FAILURE_SIGNATURES
 _APP_JS = Path(__file__).resolve().parents[2] / "frontend" / "app.js"
 
 # Written by classify_failure outside the signature table.
-_EXTRA_CODES = ("scan_timeout", "unexpected")
+_EXTRA_CODES = ("scan_timeout", "unexpected", "restart_loop")
 
 
 def _codes() -> list[str]:

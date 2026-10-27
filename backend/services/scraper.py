@@ -115,8 +115,49 @@ def _orig_response_headers(headers) -> dict:
     return out
 
 
+async def _collect(tasks: list, deadline: float | None, stats: dict | None,
+                   budget: int, job_id: str) -> list[dict]:
+    """Wait for the page tasks, up to `deadline` if one is set, and return the
+    finished pages in snapshot order. Past the deadline the unfinished tasks
+    are cancelled and counted in `stats` as dropped."""
+    results: list[dict] = []
+    if deadline is None:
+        results = list(await asyncio.gather(*tasks))
+    else:
+        pending = set(tasks)
+        while pending:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            done, pending = await asyncio.wait(
+                pending, timeout=remaining, return_when=asyncio.FIRST_COMPLETED
+            )
+            if not done:
+                break  # budget exhausted with nothing newly completed
+        # Back in snapshot order, as gather() returns them: the page index
+        # keeps the first pages of this list, so completion order would
+        # make it depend on which downloads happened to be fast.
+        for t in tasks:
+            if t.done() and not t.cancelled() and t.exception() is None:
+                results.append(t.result())
+        if pending:
+            dropped = len(pending)
+            for t in pending:
+                t.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
+            if stats is not None:
+                stats["budget_exhausted"] = True
+                stats["dropped"] = dropped
+            logger.warning(
+                "Scrape deadline reached for job {} (budget {}s or scan timeout): "
+                "kept {} pages, dropped {} slow/pending", job_id, budget, len(results), dropped,
+            )
+    return results
+
+
 async def scrape_snapshots(
-    snapshots: list[dict], job_id: str, on_page=None, stats: dict | None = None
+    snapshots: list[dict], job_id: str, on_page=None, stats: dict | None = None,
+    deadline: float | None = None,
 ) -> list[dict]:
     """Scrape the selected archived pages.
 
@@ -128,7 +169,12 @@ async def scrape_snapshots(
     `stats`, if given, is filled in with how the scrape ENDED: whether the
     wall-clock budget cut it short and how many pages were dropped. The caller
     needs this to tell the user that a report covers part of the selection,
-    which it cannot infer reliably from the counts alone."""
+    which it cannot infer reliably from the counts alone.
+
+    `deadline`, if given, is a time.monotonic() instant past which the scrape
+    stops the same way the budget does. The pipeline derives it from the scan
+    timeout, so a long scan keeps what it fetched instead of being killed by
+    that timeout with nothing saved. The earlier of the two wins."""
     if stats is not None:
         stats.update({"budget_exhausted": False, "dropped": 0, "requested": len(snapshots)})
     semaphore = asyncio.Semaphore(settings.max_concurrent_scrapes)
@@ -408,41 +454,25 @@ async def scrape_snapshots(
     # budget is spent and keep whatever pages we already have ("fresh"). The
     # pipeline then extracts that subset and the scan completes (partial).
     budget = settings.scrape_budget_seconds
-    deadline = (time.monotonic() + budget) if budget and budget > 0 else None
+    if budget and budget > 0:
+        budget_deadline = time.monotonic() + budget
+        deadline = budget_deadline if deadline is None else min(deadline, budget_deadline)
 
     async with aiohttp.ClientSession(timeout=timeout, connector=connector, headers=headers) as session:
         tasks = [asyncio.ensure_future(fetch_one(session, snap)) for snap in snapshots]
-        results: list[dict] = []
-        if deadline is None:
-            results = list(await asyncio.gather(*tasks))
-        else:
-            pending = set(tasks)
-            while pending:
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    break
-                done, pending = await asyncio.wait(
-                    pending, timeout=remaining, return_when=asyncio.FIRST_COMPLETED
-                )
-                if not done:
-                    break  # budget exhausted with nothing newly completed
-                for t in done:
-                    try:
-                        results.append(t.result())
-                    except Exception:
-                        pass
-            if pending:
-                dropped = len(pending)
-                for t in pending:
-                    t.cancel()
-                await asyncio.gather(*pending, return_exceptions=True)
-                if stats is not None:
-                    stats["budget_exhausted"] = True
-                    stats["dropped"] = dropped
-                logger.warning(
-                    "Scrape budget {}s reached for job {}: kept {} pages, "
-                    "dropped {} slow/pending", budget, job_id, len(results), dropped,
-                )
+        try:
+            results = await _collect(tasks, deadline, stats, budget, job_id)
+        except asyncio.CancelledError:
+            # The scan was cancelled or timed out from above. gather() passed
+            # that on to every page task; the deadline loop does not, so
+            # without this the page tasks outlived the session they use:
+            # each one queued at the semaphore woke up later to a closed
+            # session ("Session is closed", "Task exception was never
+            # retrieved", one per page still in flight).
+            for t in tasks:
+                t.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            raise
 
     success = sum(1 for r in results if r["html"] is not None)
     dropped = total - sum(outcomes.values())

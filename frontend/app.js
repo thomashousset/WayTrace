@@ -594,6 +594,8 @@ const I18N_EN = {
       "The scan ran past the time limit and was stopped.",
     'err.unexpected':
       "The scan failed for a reason we have not identified yet. The details are recorded on our side.",
+    'err.restart_loop':
+      "The scan was interrupted by a server restart several times in a row, so it was not started again. Run it again.",
     'legal.contents': 'Contents',
     'mode.dark': 'Dark',
     'mode.light': 'Light',
@@ -924,6 +926,8 @@ const I18N = {
       "Le scan a dépassé la durée maximale autorisée et a été arrêté.",
     'err.unexpected':
       "Le scan a échoué pour une raison que nous n'avons pas encore identifiée. Les détails sont enregistrés de notre côté.",
+    'err.restart_loop':
+      "Le scan a été interrompu par un redémarrage du serveur plusieurs fois de suite, il n'a donc pas été relancé. Relancez-le.",
     'Try again': 'R\u00e9essayer',
     'archive.org did not answer the index in time': "archive.org n'a pas r\u00e9pondu \u00e0 l'index \u00e0 temps",
     'Postal addresses': 'Adresses postales',

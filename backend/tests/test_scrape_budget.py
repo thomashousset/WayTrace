@@ -138,3 +138,81 @@ async def test_hard_block_bails_out_after_the_semaphore(monkeypatch):
     assert _CountingSession.calls == 0, f"fired {_CountingSession.calls} requests while hard-blocked"
     assert len(results) == 50
     assert all(r.get("error") == "blocked" and r.get("html") is None for r in results)
+
+
+# --- the deadline the pipeline derives from the scan timeout ----------------
+
+@pytest.mark.anyio
+async def test_a_deadline_keeps_what_was_fetched_without_any_budget(monkeypatch):
+    """With SCRAPE_BUDGET_SECONDS off (the default), a scan still downloading
+    at the scan timeout used to be killed with nothing saved. The pipeline now
+    passes a deadline, and the scrape stops there like the budget does."""
+    import time as _t
+    monkeypatch.setattr(settings, "scrape_budget_seconds", 0)
+    snaps = [{"url": f"http://x/{i}", "timestamp": "20200101000000"} for i in range(5)]
+    snaps += [{"url": f"http://slow/{i}", "timestamp": "20200101000000"} for i in range(3)]
+    stats = {}
+    results = await scraper.scrape_snapshots(snaps, "job-deadline", stats=stats,
+                                             deadline=_t.monotonic() + 1)
+    assert len([r for r in results if r.get("html")]) == 5
+    assert stats["budget_exhausted"] is True and stats["dropped"] == 3
+
+
+@pytest.mark.anyio
+async def test_the_earlier_of_budget_and_deadline_wins(monkeypatch):
+    import time as _t
+    monkeypatch.setattr(settings, "scrape_budget_seconds", 1)
+    snaps = [{"url": f"http://slow/{i}", "timestamp": "20200101000000"} for i in range(2)]
+    t0 = _t.monotonic()
+    await scraper.scrape_snapshots(snaps, "job-min", deadline=_t.monotonic() + 600)
+    assert _t.monotonic() - t0 < 5
+
+
+@pytest.mark.anyio
+async def test_results_come_back_in_snapshot_order(monkeypatch):
+    """The page index keeps the first pages of the list: completion order
+    would make it depend on which downloads happened to be fast."""
+    import time as _t
+    monkeypatch.setattr(settings, "scrape_budget_seconds", 0)
+    order = [f"http://x/{i}" for i in range(8)]
+    snaps = [{"url": u, "timestamp": f"2020010{i}000000"} for i, u in enumerate(order)]
+
+    async def jitter_enter(self):
+        await asyncio.sleep(0.05 * (8 - int(self._url.rsplit("/", 1)[1])))
+        return self
+    monkeypatch.setattr(_FakeResp, "__aenter__", jitter_enter)
+    results = await scraper.scrape_snapshots(snaps, "job-order", deadline=_t.monotonic() + 30)
+    assert [r["url"] for r in results] == order
+
+
+def test_scrape_deadline_leaves_room_after_the_download(monkeypatch):
+    import time as _t
+    from routers.scan import _scrape_deadline
+    monkeypatch.setattr(settings, "scan_timeout_seconds", 3600)
+    start = _t.time() - 100          # the CDX phase already took 100 s
+    left = _scrape_deadline(start) - _t.monotonic()
+    assert 3600 - 100 - 300 - 2 < left <= 3600 - 100 - 300
+    monkeypatch.setattr(settings, "scan_timeout_seconds", 60)
+    left = _scrape_deadline(_t.time()) - _t.monotonic()
+    assert 47 < left <= 48           # 20 % reserve on a short timeout
+
+
+@pytest.mark.anyio
+async def test_cancelling_the_scrape_cancels_every_page_task(monkeypatch):
+    """Seen on a real scan deleted mid-download: the deadline loop did not
+    pass the cancellation on, so page tasks outlived the session and woke up
+    to "Session is closed", one "Task exception was never retrieved" each."""
+    import time as _t
+    monkeypatch.setattr(settings, "scrape_budget_seconds", 0)
+    monkeypatch.setattr(settings, "max_concurrent_scrapes", 2)
+    snaps = [{"url": f"http://slow/{i}", "timestamp": "20200101000000"} for i in range(20)]
+    before = set(asyncio.all_tasks())
+    task = asyncio.ensure_future(
+        scraper.scrape_snapshots(snaps, "job-cancel", deadline=_t.monotonic() + 600))
+    await asyncio.sleep(0.2)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    await asyncio.sleep(0)
+    leftovers = [t for t in asyncio.all_tasks() - before if t is not asyncio.current_task()]
+    assert leftovers == [], leftovers

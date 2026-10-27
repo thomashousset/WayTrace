@@ -132,7 +132,11 @@ async def test_a_scan_deleted_while_running_stays_deleted(fresh_db, monkeypatch)
     task = asyncio.create_task(scan_module.run_scan(res["job_id"]))
     await asyncio.sleep(0.05)
     assert await fresh.cancel_job(res["job_id"]) is True
-    await task
+    # cancel_job now stops the task too; either way the row must stay gone.
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
 
     assert await get_job_by_url_id(res["url_id"]) is None
     assert fresh.per_ip_count.get("1.1.1.1", 0) == 0

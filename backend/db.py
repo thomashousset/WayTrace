@@ -125,6 +125,13 @@ MIGRATIONS: list[tuple[int, str]] = [
         CREATE INDEX IF NOT EXISTS idx_archive_events_at ON archive_events(occurred_at);
         CREATE INDEX IF NOT EXISTS idx_archive_events_kind ON archive_events(kind, occurred_at);
     """),
+    # How many times a queued/running job has been started. The restart
+    # restore re-enqueues every in-flight job, so a scan that takes the
+    # process down (out of memory, say) was started again on every boot of a
+    # container set to restart, for as long as its row lived (14 days).
+    (18, """
+        ALTER TABLE jobs ADD COLUMN start_attempts INTEGER NOT NULL DEFAULT 0;
+    """),
 ]
 
 # Migrations whose OperationalError is expected and safe to swallow. v1/v2 ALTER
@@ -139,7 +146,7 @@ _LEGACY_ADHOC_MIGRATIONS: set[int] = {1, 2}
 # "duplicate column name" on the next boot and crash-loop the app). Statements
 # here are only forgiven for the "already applied" errors below, never for a
 # genuine failure.
-_IDEMPOTENT_MIGRATIONS: set[int] = {7, 8, 9, 10, 11, 12, 13, 14, 15}
+_IDEMPOTENT_MIGRATIONS: set[int] = {7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18}
 _ALREADY_APPLIED = ("duplicate column name", "already exists")
 
 _db_path: str | None = None
@@ -425,10 +432,30 @@ async def save_queued_job(
 
 
 async def update_job_queue_status(url_id: str, status: str) -> None:
-    """Best-effort status mirror (queued -> running) for the restart restore."""
+    """Best-effort status mirror (queued -> running) for the restart restore.
+    Moving to running also counts one start (see restore_pending_jobs)."""
     db = await get_db()
     try:
-        await db.execute("UPDATE jobs SET status = ? WHERE url_id = ?", (status, url_id))
+        await db.execute(
+            "UPDATE jobs SET status = ?, "
+            "start_attempts = start_attempts + (CASE WHEN ? = 'running' THEN 1 ELSE 0 END) "
+            "WHERE url_id = ?", (status, status, url_id))
+        await db.commit()
+    finally:
+        await db.close()
+
+
+async def fail_job_row(url_id: str, code: str) -> None:
+    """Mark a persisted queued/running job failed with a reason code, the
+    shape _failure_meta gives a scan that failed while running, so the page
+    explains it instead of showing a scan stuck in flight."""
+    meta = {"error": code,
+            "failed_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
+    db = await get_db()
+    try:
+        await db.execute(
+            "UPDATE jobs SET status = 'failed', meta = ?, completed_at = ? WHERE url_id = ?",
+            (_json.dumps(meta), _iso(datetime.now(timezone.utc)), url_id))
         await db.commit()
     finally:
         await db.close()
@@ -442,7 +469,7 @@ async def load_resumable_jobs() -> list[dict]:
         cur = await db.execute(
             """SELECT url_id, job_id, domain, client_ip, created_at, user_id,
                       config_json, selected_snapshots_json, publish_on_complete,
-                      notify_email
+                      notify_email, start_attempts
                  FROM jobs
                 WHERE status IN ('queued', 'running')
                   AND job_id IS NOT NULL

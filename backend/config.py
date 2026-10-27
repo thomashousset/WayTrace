@@ -135,7 +135,9 @@ class Settings(BaseSettings):
     # rather than let a scan drag on (or hit the hard job timeout and lose
     # everything), once this many seconds elapse we stop scraping, keep the pages
     # already fetched ("fresh"), and let the pipeline extract that subset so the
-    # scan still completes. 0 disables the budget (scrape until done).
+    # scan still completes. 0 disables the budget: the scrape then runs until
+    # done, but never past the scan timeout minus a short reserve
+    # (_scrape_deadline in routers/scan.py), so a timeout keeps what it fetched.
     scrape_budget_seconds: int = 0
     scrape_delay_min: float = 0.5
     scrape_delay_max: float = 1.2

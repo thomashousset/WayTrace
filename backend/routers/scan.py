@@ -188,20 +188,24 @@ async def run_scan(
     if selected_snapshots is None:
         selected_snapshots = job.get("selected_snapshots")
 
-    await store.update_job(job_id, status="running", step="Starting scan...")
-    # Mirror the transition to the persisted row (restart-proof queue): a
-    # restart re-enqueues 'running' rows from zero. Best-effort only.
-    try:
-        from db import update_job_queue_status
-        await update_job_queue_status(job["url_id"], "running")
-    except Exception:
-        pass
-    logger.info("Scan started for job {}", job_id)
-
     domain = job["domain"]
     start = time.time()
-
+    # From here on cancel_job may cancel this task, so the try/finally that
+    # frees the slot must begin with no await in between.
+    if not await store.mark_running(job_id, asyncio.current_task()):
+        logger.info("Job {} was cancelled before start; skipping", job_id)
+        await store.finish_job(job_id)
+        return
     try:
+        # Mirror the transition to the persisted row (restart-proof queue): a
+        # restart re-enqueues 'running' rows from zero. Best-effort only.
+        try:
+            from db import update_job_queue_status
+            await update_job_queue_status(job["url_id"], "running")
+        except Exception:
+            pass
+        logger.info("Scan started for job {}", job_id)
+
         await asyncio.wait_for(
             _scan_pipeline(job_id, domain, start, config, selected_snapshots),
             timeout=settings.scan_timeout_seconds,
@@ -291,6 +295,25 @@ def resolve_categories(config: ScanConfig | None) -> list[str] | None:
     if settings.default_categories:
         return list(settings.default_categories)
     return None
+
+
+# What the scan keeps for itself after the download: draining the extraction
+# queue, finalize, highlights, the page index, the save. Measured well under a
+# minute for 3000 pages; five minutes leaves room on a loaded machine.
+_POST_SCRAPE_RESERVE_SECONDS = 300
+
+
+def _scrape_deadline(start: float) -> float:
+    """time.monotonic() instant at which the download must stop so the scan
+    ends inside scan_timeout_seconds with what it fetched. Without it a scan
+    still downloading at the timeout was killed by wait_for and saved as
+    failed with no results at all; SCRAPE_BUDGET_SECONDS, which avoids that,
+    defaults to off. Counted from the scan start (time.time()), since the
+    CDX phase has already spent part of the time."""
+    timeout = settings.scan_timeout_seconds
+    reserve = min(_POST_SCRAPE_RESERVE_SECONDS, timeout * 0.2)
+    left = start + timeout - reserve - time.time()
+    return time.monotonic() + left
 
 
 async def _scan_pipeline(
@@ -404,7 +427,8 @@ async def _scan_pipeline(
 
         scrape_stats: dict = {}
         scrape_task = asyncio.ensure_future(
-            scrape_snapshots(selected, job_id, on_page=_on_page, stats=scrape_stats)
+            scrape_snapshots(selected, job_id, on_page=_on_page, stats=scrape_stats,
+                             deadline=_scrape_deadline(start))
         )
         scrape_task.add_done_callback(lambda _t: _q.put_nowait(_DONE))
 
