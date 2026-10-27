@@ -6,6 +6,9 @@ let currentDomainId = null;
 let publicScanUrlId = null;
 let _lastScanPayload = null;   // the scan the results view is showing
 let publicScanPollTimer = null;
+// Bumped by every stop. A poll remembers the value it started with and drops
+// its response if it changed meanwhile (see pollPublicScan).
+let publicScanPollGen = 0;
 let publicScanLastStatus = null;
 let v2PublicMode = false;  // set true when a public scan is rendered into view-results
 
@@ -40,35 +43,6 @@ const escAttr = esc;
 // literal (quotes, backslashes, newlines), and escAttr keeps its double
 // quotes from ending the attribute. Use it bare: onclick="f(${jsArg(x)})".
 const jsArg = s => escAttr(JSON.stringify(String(s ?? '')));
-
-function highlightMatch(value, query) {
-  // Wrap case-insensitive matches of query in <mark>. Done on the raw string
-  // (before HTML escaping) to avoid the escape sequences (e.g. &amp;) being
-  // interpreted as part of the search pattern.
-  const raw = String(value || '');
-  if (!query) return esc(raw);
-  const q = String(query).trim();
-  if (!q) return esc(raw);
-
-  const lower = raw.toLowerCase();
-  const qLower = q.toLowerCase();
-  if (!lower.includes(qLower)) return esc(raw);
-
-  // Walk the raw string, emit escaped pieces separated by <mark>…</mark>
-  let out = '';
-  let i = 0;
-  while (i < raw.length) {
-    const idx = lower.indexOf(qLower, i);
-    if (idx === -1) {
-      out += esc(raw.slice(i));
-      break;
-    }
-    out += esc(raw.slice(i, idx));
-    out += '<mark>' + esc(raw.slice(idx, idx + q.length)) + '</mark>';
-    i = idx + q.length;
-  }
-  return out;
-}
 
 function showToast(msg) {
   const el = $('toast');
@@ -872,11 +846,6 @@ const I18N = {
     'Copied': 'Copié',
     'home.ethic': "Conçu pour les chercheurs en sécurité, les équipes, les journalistes et les professionnels curieux. Utilisez ce que vous trouvez de façon responsable : signalez les risques aux personnes qui possèdent les données, jamais contre elles.",
     'home.historybtn': 'Historique des scans',
-    'home.mrp.all': 'Toutes les dates',
-    'mrp.all': 'Tout',
-    'mrp.12m': '12 derniers mois',
-    'mrp.24m': '24 derniers mois',
-    'mrp.ytd': 'Cette année',
     // Legal page
     'scope.terms': "En lan\u00e7ant un scan, vous acceptez les <a href=\"#/legal\">conditions d'utilisation</a>, y compris ce qui est conserv\u00e9 au sujet du scan.",
     'legal.title': 'Mentions légales, licence et usage acceptable',
@@ -1910,21 +1879,6 @@ function navigate(hash) {
   }
 }
 
-/* Send the user to the scope picker (#/scope/{domain}) for fine-grained
-   subdomain selection before kicking off the scan. */
-function goToAdvancedScope() {
-  const raw = (document.querySelector('.home-search-input')?.value
-            || document.getElementById('domain-input')?.value
-            || '').trim().toLowerCase()
-    .replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/+$/, '');
-  if (!raw) {
-    showToast(t('Type a domain first.'));
-    document.querySelector('.home-search-input')?.focus();
-    return;
-  }
-  location.hash = '#/scope/' + encodeURIComponent(raw);
-}
-
 // Carried from the homepage pre-filters into the scope step (loadScope reads it).
 let _pendingScopePrefill = null;
 
@@ -1949,155 +1903,14 @@ function startAdvancedScan() {
   location.hash = '#/scope/' + encodeURIComponent(raw);
 }
 
-/* ===== MONTH-RANGE PICKER (homepage date calendar) ===== */
-let mrpFrom = null;   // "YYYY-MM" | null
-let mrpTo = null;     // "YYYY-MM" | null
-let mrpAnchor = null; // first endpoint while selecting
-let mrpHover = null;  // hovered month for range preview
-let mrpViewYear = null;
-
-function _mrpNow() { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; }
-function _mrpKey(y, m0) { return y + '-' + String(m0 + 1).padStart(2, '0'); }
-function _mrpCurKey() { const n = _mrpNow(); return _mrpKey(n.y, n.m); }
-function _mrpShift(key, months) {
-  const y = parseInt(key.slice(0, 4), 10), m = parseInt(key.slice(5, 7), 10) - 1;
-  const t = y * 12 + m + months;
-  return _mrpKey(Math.floor(t / 12), ((t % 12) + 12) % 12);
-}
-
-function mrpToggle() {
-  const pop = document.getElementById('home-mrp-pop');
-  const field = document.getElementById('home-mrp-field');
-  if (!pop) return;
-  const open = pop.hasAttribute('hidden');
-  if (open) {
-    mrpViewYear = parseInt((mrpTo || mrpFrom || _mrpCurKey()).slice(0, 4), 10);
-    mrpRender();
-    pop.removeAttribute('hidden');
-    field?.setAttribute('aria-expanded', 'true');
-  } else {
-    mrpClose();
-  }
-}
-function mrpClose() {
-  const pop = document.getElementById('home-mrp-pop');
-  if (pop) pop.setAttribute('hidden', '');
-  document.getElementById('home-mrp-field')?.setAttribute('aria-expanded', 'false');
-  mrpAnchor = null; mrpHover = null;
-}
-
-function mrpNudgeYear(delta) { mrpViewYear += delta; mrpRender(); }
-
-function _mrpBounds() {
-  // Returns [lo, hi] keys for highlighting (incl. hover preview), or null.
-  if (mrpAnchor && !mrpTo) {
-    const other = mrpHover || mrpAnchor;
-    return [mrpAnchor < other ? mrpAnchor : other, mrpAnchor < other ? other : mrpAnchor];
-  }
-  if (mrpFrom && mrpTo) return [mrpFrom, mrpTo];
-  if (mrpFrom) return [mrpFrom, mrpFrom];
-  return null;
-}
-
-function mrpRender() {
-  const cal = document.getElementById('home-mrp-cal');
-  if (!cal) return;
-  const cur = _mrpCurKey();
-  const bounds = _mrpBounds();
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  let cells = '';
-  for (let m = 0; m < 12; m++) {
-    const key = _mrpKey(mrpViewYear, m);
-    const future = key > cur;
-    let cls = 'mrp-m';
-    if (future) cls += ' disabled';
-    else if (bounds) {
-      if (key === bounds[0] || key === bounds[1]) cls += ' end';
-      else if (key > bounds[0] && key < bounds[1]) cls += ' in-range';
-    }
-    cells += `<button type="button" class="${cls}" ${future ? 'disabled' : ''}
-        onclick="mrpPickMonth('${key}')" onmouseenter="mrpHoverMonth('${key}')">${months[m]}</button>`;
-  }
-  const nextDisabled = mrpViewYear >= _mrpNow().y ? 'disabled' : '';
-  cal.innerHTML = `
-    <div class="mrp-cal-head">
-      <button type="button" onclick="mrpNudgeYear(-1)" aria-label="Previous year">&#8249;</button>
-      <span class="mrp-cal-year">${mrpViewYear}</span>
-      <button type="button" ${nextDisabled} onclick="mrpNudgeYear(1)" aria-label="Next year">&#8250;</button>
-    </div>
-    <div class="mrp-grid" onmouseleave="mrpHoverMonth(null)">${cells}</div>`;
-}
-
-function mrpHoverMonth(key) {
-  if (mrpAnchor && !mrpTo) { mrpHover = key; mrpRender(); }
-}
-
-function mrpPickMonth(key) {
-  if (key > _mrpCurKey()) return;
-  if (!mrpAnchor || (mrpFrom && mrpTo)) {
-    // Start a fresh selection.
-    mrpAnchor = key; mrpFrom = key; mrpTo = null; mrpHover = key;
-  } else {
-    const lo = key < mrpAnchor ? key : mrpAnchor;
-    const hi = key < mrpAnchor ? mrpAnchor : key;
-    mrpFrom = lo; mrpTo = hi; mrpAnchor = null; mrpHover = null;
-  }
-  mrpSync(); mrpRender();
-}
-
-function mrpPreset(kind) {
-  const cur = _mrpCurKey();
-  if (kind === 'all') { mrpFrom = null; mrpTo = null; }
-  else if (kind === '12m') { mrpFrom = _mrpShift(cur, -11); mrpTo = cur; }
-  else if (kind === '24m') { mrpFrom = _mrpShift(cur, -23); mrpTo = cur; }
-  else if (kind === 'ytd') { mrpFrom = _mrpNow().y + '-01'; mrpTo = cur; }
-  mrpAnchor = null; mrpHover = null;
-  mrpViewYear = parseInt((mrpTo || cur).slice(0, 4), 10);
-  mrpSync(); mrpRender();
-}
-
-const _MRP_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
-function mrpApplyManual() {
-  const f = (document.getElementById('home-mrp-from')?.value || '').trim();
-  const t = (document.getElementById('home-mrp-to')?.value || '').trim();
-  const fv = _MRP_RE.test(f) ? f : null;
-  const tv = _MRP_RE.test(t) ? t : null;
-  if (fv && tv) { mrpFrom = fv < tv ? fv : tv; mrpTo = fv < tv ? tv : fv; }
-  else { mrpFrom = fv; mrpTo = tv; }
-  mrpAnchor = null; mrpHover = null;
-  if (mrpFrom || mrpTo) mrpViewYear = parseInt((mrpTo || mrpFrom).slice(0, 4), 10);
-  mrpSync(); mrpRender();
-}
-
-function mrpLabelText() {
-  if (mrpFrom && mrpTo) return mrpFrom === mrpTo ? mrpFrom : (mrpFrom + ' → ' + mrpTo);
-  if (mrpFrom) return 'from ' + mrpFrom;
-  if (mrpTo) return 'until ' + mrpTo;
-  return 'All dates';
-}
-function mrpSync() {
-  const lab = document.getElementById('home-mrp-label');
-  if (lab) lab.textContent = mrpLabelText();
-  const fi = document.getElementById('home-mrp-from'); if (fi) fi.value = mrpFrom || '';
-  const ti = document.getElementById('home-mrp-to'); if (ti) ti.value = mrpTo || '';
-  const live = document.getElementById('home-mrp-live');
-  if (live) live.textContent = (mrpFrom || mrpTo) ? ('Selected range: ' + mrpLabelText()) : 'No date filter (all archived months).';
-}
-
-// Close the picker on outside click / Escape.
+// Close the scope-step month calendar on outside click / Escape.
 document.addEventListener('click', (e) => {
-  const mrp = document.getElementById('home-mrp');
-  const pop = document.getElementById('home-mrp-pop');
-  if (mrp && pop && !pop.hasAttribute('hidden') && !mrp.contains(e.target)) mrpClose();
-  // Scope-step month calendar: close when clicking outside its wrapper.
   const scalWrap = document.getElementById('scal-field')?.closest('.scal-wrap');
   const scalPop = document.getElementById('scal-pop');
   if (scalWrap && scalPop && !scalPop.hasAttribute('hidden') && !scalWrap.contains(e.target)) scalClose();
 });
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
-    const pop = document.getElementById('home-mrp-pop');
-    if (pop && !pop.hasAttribute('hidden')) mrpClose();
     const scalPop = document.getElementById('scal-pop');
     if (scalPop && !scalPop.hasAttribute('hidden')) scalClose();
   }
@@ -2106,6 +1919,7 @@ document.addEventListener('keydown', (e) => {
 /* ===== v2 PUBLIC FLOW ===== */
 
 function stopPublicScanPolling() {
+  publicScanPollGen++;
   if (publicScanPollTimer) {
     clearTimeout(publicScanPollTimer);
     publicScanPollTimer = null;
@@ -2114,8 +1928,18 @@ function stopPublicScanPolling() {
 
 async function pollPublicScan() {
   if (!publicScanUrlId) return;
+  // Clearing the timer cannot stop a request already in flight. Its answer
+  // used to land after the person had left: leaving a running scan for
+  // #/legal switched the page back to the results once the scan finished,
+  // and going from scan A to scan B left A's chain running, so A's data
+  // could render under B's address. Any answer from an older generation, or
+  // for another scan than the one on screen, is now dropped.
+  const gen = publicScanPollGen;
+  const urlId = publicScanUrlId;
+  const stale = () => gen !== publicScanPollGen || urlId !== publicScanUrlId;
   try {
-    const resp = await fetch(API + '/api/s/' + encodeURIComponent(publicScanUrlId));
+    const resp = await fetch(API + '/api/s/' + encodeURIComponent(urlId));
+    if (stale()) return;
     if (resp.status === 404) { renderPublicScanNotFound(); return; }
     if (resp.status === 410) { renderPublicScanExpired(); return; }
     if (!resp.ok) {
@@ -2127,6 +1951,7 @@ async function pollPublicScan() {
       return;
     }
     const job = await resp.json();
+    if (stale()) return;
     renderPublicScan(job);
     const next = (job.status === 'queued') ? 2000 : (job.status === 'running' ? 1000 : null);
     if (next) {
@@ -2134,6 +1959,7 @@ async function pollPublicScan() {
       return;
     }
   } catch (e) {
+    if (stale()) return;
     // Network blip (lost wifi, sleep/resume, archive.org-driven backend stall).
     // Do not kill the loop: a finished scan would otherwise never show up.
     publicScanPollTimer = setTimeout(pollPublicScan, 3000);
@@ -2680,31 +2506,6 @@ const VERBOSE_CATS = new Set(['endpoints', 'js_urls', 'assets', 'outgoing_links'
 const MERGED_AWAY_CATS = new Set(['analytics_ids']);
 
 
-function wireCatToggles() {
-  // Auto-open the first category if no highlights so the user sees data immediately
-  const cats = document.querySelectorAll('#public-scan-body .pub-cat');
-  if (cats.length && !document.querySelector('#public-scan-body .pub-highlights')) {
-    cats[0].classList.add('open');
-  }
-}
-
-function wireCopyButtons() {
-  document.querySelectorAll('#public-scan-body .pub-copy-btn').forEach(btn => {
-    btn.addEventListener('click', async (ev) => {
-      ev.stopPropagation();
-      const v = btn.getAttribute('data-copy');
-      try {
-        await navigator.clipboard.writeText(v);
-        flashMsg(t('Copied'));
-        btn.textContent = '✓';
-        setTimeout(() => { btn.textContent = '⧉'; }, 1200);
-      } catch (_) {
-        flashMsg(t('Copy failed'));
-      }
-    });
-  });
-}
-
 function flashMsg(msg) {
   const el = document.getElementById('pub-flash');
   if (!el) return;
@@ -2856,16 +2657,6 @@ function fmtScanDuration(startIso, endIso) {
   if (s < 60) return s + 's';
   if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`;
   return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
-}
-
-function relativePastTime(iso) {
-  if (!iso) return '';
-  const ts = new Date(iso.endsWith('Z') ? iso : iso + 'Z').getTime();
-  const diff = (Date.now() - ts) / 1000;
-  if (diff < 60) return 'just now';
-  if (diff < 3600) return Math.floor(diff / 60) + ' min ago';
-  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
-  return Math.floor(diff / 86400) + 'd ago';
 }
 
 function relativeFutureTime(iso) {
@@ -5020,6 +4811,10 @@ function renderV2InLegacyView(job) {
   report2State.presence = 'all';
   report2State.expandedPage = null;
   report2State.view = 'cats';
+  // The scrubber date too: left at another scan's month, it dimmed every row
+  // and zeroed every rail count of a scan whose years do not include it,
+  // under a label naming that foreign month.
+  SCRUB.at = null;
   renderReport2(info, findings, job);
 
   // Switch active view
