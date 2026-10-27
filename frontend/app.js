@@ -1105,6 +1105,8 @@ const I18N = {
     'Searching…': 'Recherche…',
     'Search failed.': 'La recherche a échoué.',
     'No pages matched.': 'Aucune page ne correspond.',
+    'Search covers {n} of the {m} pages fetched, spread over the whole period.': 'La recherche porte sur {n} des {m} pages téléchargées, réparties sur toute la période.',
+    'Search covers only part of the pages of this scan.': 'La recherche ne porte que sur une partie des pages de ce scan.',
     'pivot': 'pivot',
     'Search this favicon on Shodan': 'Chercher ce favicon sur Shodan',
     'Leaks & secrets': 'Fuites et secrets',
@@ -5548,6 +5550,17 @@ function _sanitizeSnippet(s) {
   return esc(String(s || '')).split('&lt;mark&gt;').join('<mark>').split('&lt;/mark&gt;').join('</mark>');
 }
 
+// The index covers a bounded number of pages per scan. Say so when it left
+// some out, so that finding nothing is not read as "this word never appeared".
+function _pageSearchCoverage(d) {
+  if (!d || !d.partial) return '';
+  const msg = (d.pages_indexed != null && d.pages_scraped)
+    ? t('Search covers {n} of the {m} pages fetched, spread over the whole period.')
+        .replace('{n}', _n(d.pages_indexed)).replace('{m}', _n(d.pages_scraped))
+    : t('Search covers only part of the pages of this scan.');
+  return `<div class="ps-note">${esc(msg)}</div>`;
+}
+
 async function runPageSearch() {
   const box = document.getElementById('pagesearch-results');
   const q = (document.getElementById('pagesearch-input').value || '').trim();
@@ -5558,11 +5571,12 @@ async function runPageSearch() {
     const r = await fetch(API + '/api/s/' + encodeURIComponent(publicScanUrlId) + '/search?q=' + encodeURIComponent(q));
     if (!r.ok) { box.innerHTML = `<div class="ps-note">${esc(t('Search failed.'))}</div>`; return; }
     const d = await r.json();
+    const cover = _pageSearchCoverage(d);
     if (!d.results || !d.results.length) {
-      box.innerHTML = `<div class="ps-note">${esc(t('No pages matched.'))}</div>`;
+      box.innerHTML = `<div class="ps-note">${esc(t('No pages matched.'))}</div>` + cover;
       return;
     }
-    const head = `<div class="ps-count">${d.results.length} ${esc(t('pages'))}</div>`;
+    const head = `<div class="ps-count">${d.results.length} ${esc(t('pages'))}</div>` + cover;
     box.innerHTML = head + d.results.map((res) => {
       const ts = String(res.timestamp || '');
       const wb = 'https://web.archive.org/web/' + encodeURIComponent(ts) + '/' + encodeURIComponent(res.url || '');

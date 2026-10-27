@@ -123,3 +123,20 @@ async def test_search_endpoint(client):
 async def test_search_endpoint_unknown_scan_404(client):
     r = await client.get("/api/s/nope/search", params={"q": "x"})
     assert r.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_search_endpoint_says_how_much_it_covers(client):
+    # A scan whose index left pages out: the answer carries that, matches or not.
+    now = datetime.now(timezone.utc)
+    await save_job(
+        url_id="ftscover", domain="x.com", client_ip="1.1.1.1",
+        created_at=now, expires_at=now + timedelta(days=7), status="completed",
+        meta={"pages_scraped": 1291, "pages_indexed": 600, "search_partial": True},
+        results={},
+    )
+    await index_scan_pages("ftscover", PAGES)
+    for q in ("careers", "absentword"):
+        body = (await client.get("/api/s/ftscover/search", params={"q": q})).json()
+        assert body["partial"] is True
+        assert body["pages_indexed"] == 600 and body["pages_scraped"] == 1291

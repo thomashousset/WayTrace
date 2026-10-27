@@ -16,6 +16,7 @@ from fastapi.responses import Response
 from loguru import logger
 from config import settings
 from db import (
+    FTS_MAX_PAGES,
     delete_job,
     find_public_demo_scan,
     get_job_by_url_id,
@@ -159,7 +160,24 @@ async def search_scan(url_id: str, q: str = "", limit: int = 50):
     if _is_expired(persisted.get("expires_at")):
         raise HTTPException(status_code=410, detail="Scan expired")
     results = await search_scan_pages(url_id, q, limit=limit)
-    return {"query": q, "count": len(results), "results": results}
+    return {"query": q, "count": len(results), "results": results,
+            **_search_coverage(persisted.get("meta") or {})}
+
+
+def _search_coverage(meta: dict) -> dict:
+    """How much of the scan the content search covers, so a reader who finds
+    nothing knows whether the word is absent or the page was not indexed.
+
+    Scans from before `search_partial` was recorded indexed their first
+    FTS_MAX_PAGES pages: past that count the search covered a part only.
+    """
+    scraped = meta.get("pages_scraped") or 0
+    indexed = meta.get("pages_indexed")
+    if "search_partial" in meta:
+        partial = bool(meta["search_partial"]) and bool(scraped)
+    else:
+        partial = scraped > FTS_MAX_PAGES
+    return {"pages_indexed": indexed, "pages_scraped": scraped, "partial": partial}
 
 
 @router.get("/example-scan")

@@ -12,7 +12,7 @@ from loguru import logger
 
 from config import settings
 from db import save_job as _save_job_to_db
-from db import index_scan_pages
+from db import FTS_MAX_CHARS_PER_PAGE, FTS_MAX_PAGES, index_scan_pages
 from selectolax.parser import HTMLParser
 from models import (
     DateRange,
@@ -34,7 +34,7 @@ from services.extractor import (
 from services.extractor.finalize import ALL_CATEGORIES, merge_analytics_ids
 from services.favicon_hash import hash_favicons
 from services.filters import (
-    filter_snapshots, _compute_cap, _normalize_path, _score_path,
+    filter_snapshots, _compute_cap, _normalize_path, _score_path, _evenly_spaced,
     _allocate_budget_by_year,
 )
 from services.ip_utils import get_client_ip
@@ -435,6 +435,12 @@ async def _scan_pipeline(
         def _process_batch(batch):
             for p in batch:
                 process_page(p, domain, accum, cat_set, page_seq)
+                # The raw page is not needed past this point: keep only the
+                # visible text the page index stores. The scraper's result
+                # list holds every page until the scan ends, so a 3000-page
+                # scan used to carry all its HTML to the very end.
+                p["text"] = _visible_text(p["html"])[:FTS_MAX_CHARS_PER_PAGE]
+                p["html"] = ""
 
         batch: list = []
         ex_seen = 0
@@ -497,19 +503,26 @@ async def _scan_pipeline(
         # Index the visible text of each scraped page for full-text search
         # (search the archived CONTENT, not just the pivots). Best-effort and
         # capped; never fatal to the scan.
+        pages_indexed = None
+        # Until the index is written, nothing is searchable.
+        search_partial = True
         try:
             live = await store.get_job(job_id)
             _uid = live.get("url_id") if live else None
             if _uid:
-                # _visible_text parses HTML per page (selectolax) — also CPU-bound,
-                # so build the FTS rows off the event loop too.
-                def _build_fts_rows():
-                    return [
-                        (p.get("timestamp", ""), p.get("url", ""), _visible_text(p.get("html")))
-                        for p in pages if p.get("html")
-                    ]
-                fts_rows = await asyncio.to_thread(_build_fts_rows)
-                await index_scan_pages(_uid, fts_rows)
+                # The text was taken from each page as it was extracted.
+                fts_rows = [
+                    (p.get("timestamp", ""), p.get("url", ""), p["text"])
+                    for p in pages if p.get("text")
+                ]
+                # Over the cap, spread the indexed pages across the whole
+                # period. Pages come in date order, and keeping the first
+                # ones meant a long history was searchable only in its
+                # first months.
+                capped = len(fts_rows) > FTS_MAX_PAGES
+                fts_rows = _evenly_spaced(fts_rows, FTS_MAX_PAGES)
+                pages_indexed = await index_scan_pages(_uid, fts_rows)
+                search_partial = capped
         except Exception as exc:
             logger.debug("page-text indexing skipped for job {}: {}", job_id, exc)
 
@@ -539,6 +552,12 @@ async def _scan_pipeline(
             "pages_blocked": pages_blocked,
             "pages_deduped": pages_deduped,
             "pages_attempted": pages_attempted,
+            # How many pages the content search covers, and whether the cap
+            # (FTS_MAX_PAGES) left some out, so the report can say so.
+            # Pages without visible text are never indexed and do not make
+            # the search partial.
+            "pages_indexed": pages_indexed,
+            "search_partial": search_partial,
             "truncated": truncated,
             "truncation_reason": truncation_reason,
             # Combien d'adresses distinctes ce rapport couvre, et si cette

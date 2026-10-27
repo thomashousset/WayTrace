@@ -532,8 +532,8 @@ async def delete_job(url_id: str) -> bool:
 # Cap the text stored per page and the number of pages indexed per scan so the
 # full-text index stays bounded (visible text, not raw HTML). ~40 KB x 600 pages
 # is a few MB per scan, purged on the retention window.
-_FTS_MAX_CHARS_PER_PAGE = 40_000
-_FTS_MAX_PAGES = 600
+FTS_MAX_CHARS_PER_PAGE = 40_000
+FTS_MAX_PAGES = 600
 
 
 async def index_scan_pages(url_id: str, rows: list[tuple[str, str, str]]) -> int:
@@ -548,12 +548,12 @@ async def index_scan_pages(url_id: str, rows: list[tuple[str, str, str]]) -> int
     try:
         await db.execute("DELETE FROM scan_pages_fts WHERE url_id = ?", (url_id,))
         count = 0
-        for ts, url, text in rows[:_FTS_MAX_PAGES]:
+        for ts, url, text in rows[:FTS_MAX_PAGES]:
             if not text:
                 continue
             await db.execute(
                 "INSERT INTO scan_pages_fts (text, url_id, timestamp, url) VALUES (?, ?, ?, ?)",
-                (text[:_FTS_MAX_CHARS_PER_PAGE], url_id, ts or "", url or ""),
+                (text[:FTS_MAX_CHARS_PER_PAGE], url_id, ts or "", url or ""),
             )
             count += 1
         await db.commit()
