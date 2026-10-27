@@ -292,6 +292,14 @@ class JobStore:
             job = self._jobs.get(job_id)
             if job is None:
                 return
+            # Cancelled is final. The pipeline of a scan deleted mid-run keeps
+            # going and ends with update_job(status="completed"); letting that
+            # through hid the cancellation from _persist_and_finish, which then
+            # re-saved the row delete_scan had just removed (and sent the
+            # "scan done" email). Every other field may still move.
+            if job.get("status") == "cancelled":
+                fields.pop("status", None)
+                fields.pop("step", None)
             for key, value in fields.items():
                 if key in job or key == "completed_at":
                     job[key] = value

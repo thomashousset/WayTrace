@@ -109,3 +109,42 @@ async def test_persist_and_finish_skips_cancelled_job(fresh_db, monkeypatch):
     assert await get_job_by_url_id(res["url_id"]) is None
     assert fresh.per_ip_count.get("3.3.3.3", 0) == 0
     assert res["job_id"] not in fresh.active
+
+
+@pytest.mark.asyncio
+async def test_a_scan_deleted_while_running_stays_deleted(fresh_db, monkeypatch):
+    """delete_scan cancels the live job, then the pipeline, still running,
+    finishes with update_job(status="completed"). That write used to replace
+    "cancelled", so _persist_and_finish re-saved the deleted row."""
+    import store as store_module
+    import routers.scan as scan_module
+    fresh = JobStore()
+    monkeypatch.setattr(store_module, "store", fresh)
+    monkeypatch.setattr(scan_module, "store", fresh)
+
+    async def pipeline(job_id, *a, **kw):
+        await asyncio.sleep(0.2)
+        await fresh.update_job(job_id, status="completed", step="Done",
+                               meta={"x": 1}, results={"emails": []})
+    monkeypatch.setattr(scan_module, "_scan_pipeline", pipeline)
+
+    res = await fresh.create_job("example.com", "1.1.1.1")
+    task = asyncio.create_task(scan_module.run_scan(res["job_id"]))
+    await asyncio.sleep(0.05)
+    assert await fresh.cancel_job(res["job_id"]) is True
+    await task
+
+    assert await get_job_by_url_id(res["url_id"]) is None
+    assert fresh.per_ip_count.get("1.1.1.1", 0) == 0
+    assert res["job_id"] not in fresh.active
+
+
+@pytest.mark.asyncio
+async def test_cancelled_is_final_but_other_fields_still_move():
+    s = JobStore()
+    res = await s.create_job("example.com", "1.1.1.1")
+    await s.update_job(res["job_id"], status="running")
+    await s.cancel_job(res["job_id"])
+    await s.update_job(res["job_id"], status="completed", step="Done", progress=100)
+    job = await s.get_job(res["job_id"])
+    assert (job["status"], job["step"], job["progress"]) == ("cancelled", "Cancelled", 100)
