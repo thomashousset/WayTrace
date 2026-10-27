@@ -7,7 +7,13 @@ import re
 # Core patterns
 # ---------------------------------------------------------------------------
 
-EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b")
+# The lookahead caps how far each start position scans for the '@' (64 is the
+# RFC 5321 local-part limit). Unbounded, a long '@'-less run such as a minified
+# SVG path was rescanned from every word boundary: quadratic, seconds per page.
+EMAIL_RE = re.compile(
+    r"\b(?=[A-Za-z0-9._%+\-]{1,64}@)"
+    r"[A-Za-z0-9._%+\-]{1,64}@[A-Za-z0-9.\-]{1,253}\.[A-Za-z]{2,63}\b"
+)
 
 # Cloudflare email protection: the email is XOR'd with the first byte of
 # the hex blob. Seen everywhere WP/Drupal + Cloudflare are combined.
@@ -28,6 +34,9 @@ EMAIL_JS_CONCAT_RE = re.compile(
     r'"([A-Za-z0-9._%+\-]+)"\s*\+\s*"@"\s*\+\s*"([A-Za-z0-9.\-]+\.[A-Za-z]{2,})"'
 )
 
+# Every group repetition is bounded. With an open `+`, a long digit run the
+# trailing lookahead rejects was split every possible way before giving up:
+# exponential, minutes for a 60-digit run followed by a period.
 PHONE_RE = re.compile(
     r"(?<![.\d/@])"
     r"(?:"
@@ -35,10 +44,10 @@ PHONE_RE = re.compile(
     r"\+\d{1,3}[\s\-.]?\(?\d{1,4}\)?(?:[\s\-.]?\d{2,5}){1,4}"
     r"|"
     # Branch 2: parens area code, e.g. (800) 555-1234
-    r"\(\d{2,4}\)[\s\-.]?\d{2,4}(?:[\s\-.]?\d{2,4})+"
+    r"\(\d{2,4}\)[\s\-.]?\d{2,4}(?:[\s\-.]?\d{2,4}){1,5}"
     r"|"
     # Branch 3: separated groups (≥2 separators), e.g. 01 42 68 53 00
-    r"\d{2,4}[\s\-.]\d{2,4}(?:[\s\-.]?\d{2,4})+"
+    r"\d{2,4}[\s\-.]\d{2,4}(?:[\s\-.]?\d{2,4}){1,5}"
     r")"
     r"(?![\d.])"
 )

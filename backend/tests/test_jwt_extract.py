@@ -112,3 +112,30 @@ def test_extract_jwts_deduplicates():
     html = f"token1={token} and again token2={token}"
     results = extract_jwts(html, "http://example.com/", "20200101120000")
     assert len(results) == 1
+
+
+def test_claims_never_carry_a_sensitive_value_in_clear():
+    """`claims` is what the report shows and the exports write. Masking only
+    `sensitive_claims` left the password readable one field over. Identity
+    claims stay in clear: they are the lead, not the leak."""
+    token = _make_token({"sub": "u1", "email": "ceo@acme.fr", "password": "hunter2secret"})
+    claims = extract_jwts(f"t={token}", "http://example.com/", "20200101120000")[0]["claims"]
+    assert claims["sub"] == "u1"
+    assert claims["password"] == "hunt***"
+    assert claims["email"] == "ceo@acme.fr"
+    assert "hunter2secret" not in json.dumps(claims)
+
+
+def test_report_keeps_masked_claims_and_the_algorithm():
+    from services.extractor.finalize import extract_all
+    token = _make_token({"sub": "u1", "password": "hunter2secret"})
+    page = {
+        "url": "http://example.com/", "timestamp": "20200101120000",
+        "html": f'<html><body><script>var t="{token}";</script></body></html>',
+    }
+    result = extract_all([page], "example.com", categories=["jwt_tokens"])
+    [item] = result["jwt_tokens"]
+    assert "hunter2secret" not in json.dumps(result)
+    assert item["sensitive_claims"] == ["password"]
+    # highlights.py prints "alg seen: ..." from this field; it used to read "?".
+    assert item["alg"] == "HS256"

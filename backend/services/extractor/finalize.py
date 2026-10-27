@@ -690,6 +690,7 @@ def process_page(page: dict, domain: str, accum: dict, cat_set: set | None,
                 accum["jwt_tokens"], token, month,
                 {
                     "token": token[:50] + "..." if len(token) > 50 else token,
+                    "alg": jwt_info["alg"],
                     "claims": jwt_info["claims"],
                     "sensitive_claims": list(jwt_info["sensitive_claims"].keys()),
                     "source": jwt_info["source"],

@@ -139,3 +139,13 @@ def test_ignores_nav_text():
     # Navigation links are not author/byline markup.
     html = '<nav><a href="/about">About Us</a><a href="/team">Our Team</a></nav>'
     assert _run(html) == []
+
+
+def test_valueless_author_meta_does_not_drop_the_page():
+    """``<meta name="author" content>`` (attribute present, no value) must not
+    abort the extractor: selectolax hands back None, not the "" default.
+    """
+    html = ('<meta name="author" content>'
+            '<meta property="article:author" content="Bob Marley">')
+    items = _run(html)
+    assert "Bob Marley" in _names(items)

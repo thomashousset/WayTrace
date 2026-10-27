@@ -13,6 +13,8 @@ SENSITIVE_CLAIM_KEYS = {
     "session_id", "secret", "credential", "username", "passwd",
 }
 
+SECRET_CLAIM_KEYS = SENSITIVE_CLAIM_KEYS - {"email", "username"}
+
 INTERESTING_CLAIM_KEYS = {
     "sub", "name", "role", "scope", "iss", "aud", "exp", "iat",
 } | SENSITIVE_CLAIM_KEYS
@@ -75,10 +77,17 @@ def extract_jwts(html: str, page_url: str, timestamp: str) -> list[dict]:
         payload = _decode_jwt_part(parts[1])
         if not isinstance(payload, dict):
             return
-        interesting = {k: v for k, v in payload.items() if k in INTERESTING_CLAIM_KEYS}
         sensitive = {
             k: _mask_sensitive(v) for k, v in payload.items()
             if k in SENSITIVE_CLAIM_KEYS
+        }
+        # `claims` is what the report shows and the exports write, so a
+        # credential is masked there too. Identity claims stay readable: an
+        # email or username in a token is the pivot the investigator is after.
+        interesting = {
+            k: (sensitive[k] if k in SECRET_CLAIM_KEYS else v)
+            for k, v in payload.items()
+            if k in INTERESTING_CLAIM_KEYS
         }
         results.append({
             "token": token,

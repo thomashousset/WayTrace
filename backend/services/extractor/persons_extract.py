@@ -128,7 +128,9 @@ def extract_persons(
 ) -> None:
     for selector in ('meta[name="author"]', 'meta[property="article:author"]'):
         for node in tree.css(selector):
-            name = node.attributes.get("content", "").strip()
+            # selectolax maps a valueless attribute (``<meta ... content>``) to
+            # None, so the "" default never fires: guard before stripping.
+            name = (node.attributes.get("content") or "").strip()
             if name and _is_valid_person(name, domain):
                 update_entity(
                     accum["persons"], name.lower(), month,
