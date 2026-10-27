@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 
-from .patterns import EMAIL_EXCLUDE, EMAIL_PLACEHOLDER_DOMAINS, IMAGE_EXTENSIONS, ASSET_EXTENSIONS, EMAIL_SEMVER_DOMAIN_RE, WAYBACK_TOOLBAR_RE, WAYBACK_SCRIPT_RE, WAYBACK_DIV_RE
+from .patterns import EMAIL_EXCLUDE, EMAIL_EXCLUDE_ANYWHERE, EMAIL_PLACEHOLDER_DOMAINS, IMAGE_EXTENSIONS, ASSET_EXTENSIONS, EMAIL_SEMVER_DOMAIN_RE, WAYBACK_TOOLBAR_RE, WAYBACK_SCRIPT_RE, WAYBACK_DIV_RE
 
 
 def ts_to_month(timestamp: str) -> str:
@@ -31,15 +31,33 @@ def update_entity(
         store[key] = entry
 
 
+_GIT_HOSTS = {"github.com", "gitlab.com", "bitbucket.org", "ssh.dev.azure.com",
+              "vs-ssh.visualstudio.com", "codeberg.org", "git.sr.ht"}
+_HEX_KEY_RE = re.compile(r"[0-9a-f]{16,}")
+
+
 def is_email_excluded(email: str) -> bool:
     email_lower = email.lower()
     local = email_lower.split("@")[0]
     domain = email_lower.split("@")[1] if "@" in email_lower else ""
-    # Exclude placeholder local parts
-    if any(exc in local for exc in EMAIL_EXCLUDE):
+    # Exclude placeholder local parts: whole words for the ambiguous ones,
+    # anywhere for those no real name contains (see EMAIL_EXCLUDE).
+    words = {w for w in re.split(r"[.\-_+0-9]+", local) if w}
+    if words & EMAIL_EXCLUDE:
+        return True
+    squashed = re.sub(r"[.\-_+]", "", local)
+    if any(exc in squashed for exc in EMAIL_EXCLUDE_ANYWHERE):
         return True
     # Exclude placeholder domains
     if domain in EMAIL_PLACEHOLDER_DOMAINS:
+        return True
+    # Not mailboxes, only shaped like them: an SSH remote (git@github.com:org/
+    # repo.git) and an error-tracker DSN, whose "local part" is a hex key
+    # (5f3c1a9b2e…@o12345.ingest.sentry.io). No person has a 16-hex-digit
+    # mailbox name.
+    if local == "git" and domain in _GIT_HOSTS:
+        return True
+    if _HEX_KEY_RE.fullmatch(local):
         return True
     # Exclude image file extensions
     for ext in IMAGE_EXTENSIONS:
@@ -114,3 +132,37 @@ def is_wayback_comment(text: str) -> bool:
         "wayback", "toolbar", "wm-ipp", "begin wayback", "end wayback",
         "_static/", "archive.org",
     ))
+
+
+_BUCKET_SHAPES = (
+    # <bucket>.s3[.-region|-website-region].amazonaws.com/...
+    (re.compile(r"^(?P<b>[a-z0-9][a-z0-9.\-]*?)\.s3[.\-][a-z0-9.\-]*?amazonaws\.com|"
+                r"^(?P<b2>[a-z0-9][a-z0-9.\-]*?)\.s3\.amazonaws\.com"), "s3"),
+    # s3[.-region].amazonaws.com/<bucket>/...
+    (re.compile(r"^s3(?:[.\-][a-z0-9\-]+)*\.amazonaws\.com/(?P<b>[a-z0-9._\-]+)"), "s3"),
+    (re.compile(r"^storage\.googleapis\.com/(?P<b>[a-z0-9._\-]+)"), "gcs"),
+    # <account>.blob.core.windows.net[/<container>]
+    (re.compile(r"^(?P<b>[a-z0-9]+\.blob\.core\.windows\.net(?:/[a-z0-9\-$]+)?)"), "azure"),
+    # <region>.digitaloceanspaces.com/<bucket> (path-style), then virtual-hosted
+    (re.compile(r"^[a-z]{3}\d\.digitaloceanspaces\.com/(?P<b>[a-z0-9.\-]+)"), "do"),
+    (re.compile(r"^(?P<b>[a-z0-9.\-]+?)\.(?:[a-z]{3}\d)\.digitaloceanspaces\.com|"
+                r"^(?P<b2>[a-z0-9.\-]+)\.digitaloceanspaces\.com"), "do"),
+)
+
+
+def bucket_key(value: str) -> str:
+    """The bucket a cloud-storage URL points into, as "provider:name".
+
+    One bucket shows up under many URLs (one per object, virtual-hosted or
+    path-style, with or without a region), and the report counted each URL
+    as a bucket: four images in one bucket read "4 cloud buckets exposed".
+    The entities keep their full URL (the object path is the finding: a
+    backup.sql is not a logo.png); this key is what gets counted."""
+    v = (value or "").lower().split("://", 1)[-1]
+    for pattern, provider in _BUCKET_SHAPES:
+        m = pattern.match(v)
+        if m:
+            name = next(g for g in m.groups() if g)
+            return f"{provider}:{name}"
+    return v
+

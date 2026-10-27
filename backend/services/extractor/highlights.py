@@ -11,6 +11,7 @@ from __future__ import annotations
 import re
 
 from services.extractor.item_values import item_value
+from services.extractor.helpers import bucket_key
 
 
 # Lower integer = higher priority. BACKGROUND is never highlighted.
@@ -100,10 +101,16 @@ def compute_highlights(results: dict, domain: str) -> list[dict]:
 
     cloud_buckets = results.get("cloud_buckets", [])
     if cloud_buckets:
+        # Counted per bucket, not per URL: every object of one bucket is its
+        # own entity (the path matters), and four images used to read "4
+        # cloud buckets". Scans saved before the bucket field parse it here.
+        names = list(dict.fromkeys(
+            (b.get("bucket") or bucket_key(b.get("value", ""))).split(":", 1)[-1]
+            for b in cloud_buckets))
         _add(
             "LEAK", "cloud_buckets",
-            f"{len(cloud_buckets)} cloud bucket(s) exposed",
-            ", ".join(b.get("value", "") for b in cloud_buckets[:5]),
+            f"{len(names)} cloud bucket(s) exposed",
+            ", ".join(names[:5]),
             "Check bucket permissions (aws s3 ls, gsutil ls)",
         )
 

@@ -428,10 +428,19 @@ API_KEY_PATTERNS = {
 
 # --- Constants ---
 
+# Placeholder local parts. Matched as whole words of the local part (split on
+# . - _ + and digits), not as substrings: as substrings "user" dropped
+# j.hauser@, "test" dropped lauren.testard@ and contestation@, "your" dropped
+# sophie.yourcenar@, "sample" dropped anne.lesample@, "email" dropped
+# emailing@, all real mailboxes.
 EMAIL_EXCLUDE = {
-    "noreply", "no-reply", "example", "email", "user", "test",
-    "info@example", "your", "name@", "sample", "placeholder",
-    "changeme", "youremail", "yourname",
+    "example", "email", "user", "test", "your", "name", "sample",
+}
+# Run together, these never occur inside a real name, so they still match
+# anywhere in the local part once separators are removed (noreply-billing@,
+# no.reply@, your-email@).
+EMAIL_EXCLUDE_ANYWHERE = {
+    "noreply", "placeholder", "changeme", "youremail", "yourname",
 }
 
 # Placeholder email patterns (full addresses). covers RFC2606 reserved

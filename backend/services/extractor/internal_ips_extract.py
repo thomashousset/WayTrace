@@ -2,6 +2,7 @@
 """Internal IP address extraction (RFC1918 + localhost)."""
 from __future__ import annotations
 
+import bisect
 import re
 
 from .patterns import INTERNAL_IP_RE
@@ -39,7 +40,7 @@ _DOC_CONTEXT_MARKERS = re.compile(
 _VERSION_LOOKBEHIND = 24
 _VERSION_CONTEXT = re.compile(
     r"(?:version|release|build|rev(?:ision)?|firmware|kernel|update|"
-    r"upgrade|changelog|\bv)\s*$",
+    r"upgrade|changelog|\bv\.?)\s*$",
     re.IGNORECASE,
 )
 
@@ -90,14 +91,54 @@ def _in_documentation_context(html: str, match_start: int, match_end: int) -> bo
     return bool(_DOC_CONTEXT_MARKERS.search(html[start:end]))
 
 
+# SVG geometry is a stream of decimal numbers, and two of them glued
+# together read as an address: d="M10.0.0.5 L192.168.1.1" or
+# points="… 172.16.4.5 …". These ranked LEAK. Matches inside a geometry
+# attribute are skipped, and so is a match glued to a path command letter
+# that stands alone (M, L, C…), which also covers geometry outside an
+# attribute (CSS data: URIs, JS icon strings).
+_SVG_GEOMETRY_ATTR = re.compile(
+    r"""(?is)[\s"'](?:d|points|viewbox|transform)\s*=\s*(["'])(.*?)\1""")
+_SVG_COMMANDS = set("MmLlHhVvCcSsQqTtAaZz")
+_PCT_ESCAPE = re.compile(r"%[0-9A-Fa-f]{2}")
+
+
+def _svg_geometry_spans(html: str) -> tuple[list[int], list[int]]:
+    starts, ends = [], []
+    for m in _SVG_GEOMETRY_ATTR.finditer(html):
+        starts.append(m.start(2))
+        ends.append(m.end(2))
+    return starts, ends
+
+
+def _in_svg_geometry(html: str, pos: int, spans) -> bool:
+    starts, ends = spans
+    i = bisect.bisect_right(starts, pos) - 1
+    if i >= 0 and pos < ends[i]:
+        return True
+    prev = html[pos - 1] if pos >= 1 else ""
+    if prev not in _SVG_COMMANDS:
+        return False
+    before = html[pos - 2] if pos >= 2 else ""
+    # A standalone command letter, or one right after a percent-escape
+    # (%22M10.0.0.5 inside a URL-encoded data: URI).
+    return not before.isalnum() or bool(_PCT_ESCAPE.fullmatch(html[max(0, pos - 4):pos - 1]))
+
+
 def extract_internal_ips(html: str) -> list[dict]:
     seen: set[str] = set()
     results: list[dict] = []
+    spans = None   # computed on the first candidate only: most pages have none
 
     for match in INTERNAL_IP_RE.finditer(html):
         ip = match.group(0)
 
         if not _validate_ip(ip):
+            continue
+
+        if spans is None:
+            spans = _svg_geometry_spans(html)
+        if _in_svg_geometry(html, match.start(), spans):
             continue
 
         if _in_css_color_context(html, match.start()):

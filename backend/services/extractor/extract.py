@@ -24,6 +24,7 @@ from selectolax.parser import HTMLParser
 
 from .helpers import (
     canonicalize_phone_key,
+    bucket_key,
     is_email_excluded,
     normalize_phone,
     phone_display,
@@ -114,8 +115,16 @@ _subdomain_re_cache: dict[str, re.Pattern] = {}
 def _get_subdomain_re(domain: str) -> re.Pattern:
     pat = _subdomain_re_cache.get(domain)
     if pat is None:
+        # Whole host, both ends bounded. One label used to be allowed, so
+        # a.b.example.fr came out as the made-up b.example.fr; and nothing
+        # stopped the match on the right, so shop.example.fr.attacker.net and
+        # blog.example.frites.com came out as shop./blog.example.fr. The left
+        # guard keeps a match from starting inside a longer name; the right
+        # guard refuses a domain that is only the prefix of another one.
         pat = re.compile(
-            rf"([a-zA-Z0-9]([a-zA-Z0-9\-]{{0,61}}[a-zA-Z0-9])?\.{re.escape(domain)})"
+            rf"(?<![a-zA-Z0-9\-.])"
+            rf"((?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{{0,61}}[a-zA-Z0-9])?\.)+{re.escape(domain)})"
+            rf"(?![a-zA-Z0-9\-]|\.[a-zA-Z0-9])"
         )
         _subdomain_re_cache[domain] = pat
     return pat
@@ -961,14 +970,15 @@ def _cat_persons(ctx: ExtractionContext) -> None:
 
 
 def _cat_technologies(ctx: ExtractionContext) -> None:
-    extract_technologies(ctx.tree, ctx.raw_text, ctx.month, ctx.accum)
+    extract_technologies(ctx.tree, ctx.raw_text, ctx.month, ctx.accum, domain=ctx.domain)
 
 
 def _cat_cloud_buckets(ctx: ExtractionContext) -> None:
     for pattern in CLOUD_BUCKET_PATTERNS:
         for match in pattern.finditer(ctx.raw_text):
             bucket = match.group(0).lower()
-            update_entity(ctx.accum["cloud_buckets"], bucket, ctx.month, {"value": bucket})
+            update_entity(ctx.accum["cloud_buckets"], bucket, ctx.month,
+                          {"value": bucket, "bucket": bucket_key(bucket)})
 
 
 # Some "API keys" are designed to be public (frontend SDK keys, OAuth

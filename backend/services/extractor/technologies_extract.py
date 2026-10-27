@@ -9,6 +9,7 @@ Writes to ``accum["technologies"]`` from three sources:
 from __future__ import annotations
 
 import re
+from urllib.parse import urlparse
 
 from selectolax.parser import HTMLParser
 
@@ -26,8 +27,21 @@ _TECH_ALIASES = {
 }
 
 
+def _foreign_link(node, href: str, domain: str) -> bool:
+    """A navigation link to another site. Its /wp-content/ path says the
+    OTHER site runs WordPress (a partner's PDF, a press article), not the
+    target. Assets (src, stylesheet href) still count wherever they are
+    hosted: a WordPress site often serves wp-content from a CDN host."""
+    if not domain or node.tag != "a" or not href:
+        return False
+    host = (urlparse(href.strip()).hostname or "").lower()
+    if not host:
+        return False                      # relative: the target itself
+    return not (host == domain or host.endswith("." + domain))
+
+
 def extract_technologies(
-    tree: HTMLParser, raw_text: str, month: str, accum: dict,
+    tree: HTMLParser, raw_text: str, month: str, accum: dict, domain: str = "",
 ) -> None:
     for node in tree.css('meta[name="generator"], meta[name="powered-by"]'):
         content = (node.attributes.get("content") or "").strip()
@@ -89,11 +103,14 @@ def extract_technologies(
     seen_cms: set[str] = set()
     for node in tree.css("[class], [id], [href], [src]"):
         attrs = node.attributes or {}
+        href = attrs.get("href")
+        if href and _foreign_link(node, href, domain):
+            href = None
         blob = " ".join(
             v for v in (
                 attrs.get("class"),
                 attrs.get("id"),
-                attrs.get("href"),
+                href,
                 attrs.get("src"),
             ) if v
         ).lower()

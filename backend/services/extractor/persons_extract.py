@@ -28,6 +28,34 @@ _PERSON_TOOL_NAMES = {
     "shopify", "google", "site admin", "admin user", "wp admin",
 }
 
+# Words that make a short capitalised phrase a UI label or an organisation,
+# not a person. The author/byline selectors and <meta name="author"> catch
+# "Read More", "Voir le profil", "Agence Web Paris", "Studio Graphique":
+# all shaped like names, all reported as named persons (PIVOT). Kept to words
+# no real first or last name is: short tokens that are (Sa, Le, Da) stay out.
+_NON_PERSON_WORDS = {
+    # interface
+    "read", "more", "lire", "suite", "voir", "view", "profile", "profil",
+    "posts", "articles", "all", "see", "continue", "continuer", "plus",
+    "follow", "suivre", "share", "partager", "comments", "commentaires",
+    # organisations
+    "agence", "agency", "sarl", "sas", "sasu", "eurl", "inc", "ltd", "llc",
+    "gmbh", "plc", "group", "groupe", "company", "société", "societe",
+    "studio", "studios", "consulting", "solutions", "services", "digital",
+    "marketing", "communication", "media", "médias", "web", "design",
+    "rédaction", "redaction", "editorial", "newsroom", "équipe", "equipe",
+}
+
+
+def _reads_as_label_or_org(lower: str) -> bool:
+    words = lower.split()
+    if any(w in _NON_PERSON_WORDS for w in words):
+        return True
+    # "Saint Germain", "Sainte Marie": a place or a church. "Yves Saint
+    # Laurent" and "Saint-Exupéry" (one token) are left alone.
+    return len(words) == 2 and words[0] in ("saint", "sainte", "st.", "ste")
+
+
 # Leading byline connector ("By ", "Par ", "Von ", "By:") to strip before the
 # text is judged as a name, so "By John Smith" yields "John Smith".
 _BYLINE_PREFIX_RE = re.compile(
@@ -72,6 +100,8 @@ def _is_valid_person(name: str, domain: str) -> bool:
     if "/" in lower or "://" in lower or lower.startswith(("http", "www.")):
         return False
     if lower in _PERSON_EXCLUDE or lower in _PERSON_TOOL_NAMES:
+        return False
+    if _reads_as_label_or_org(lower):
         return False
     if " " not in lower and len(lower) < 15:
         return False
