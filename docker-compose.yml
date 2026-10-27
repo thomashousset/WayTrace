@@ -9,6 +9,13 @@ services:
       - "127.0.0.1:8000:8000"
     volumes:
       - waytrace-data:/data
+    # Your settings: .env is kept out of the image (.dockerignore), so compose
+    # has to hand it over. Optional, so a bare `docker compose up` still works.
+    # The two lines under environment win over it: the database must stay on
+    # the /data volume.
+    env_file:
+      - path: .env
+        required: false
     environment:
       - LOG_LEVEL=INFO
       - DATABASE_URL=/data/waytrace.db

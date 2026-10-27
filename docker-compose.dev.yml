@@ -1,12 +1,17 @@
 services:
   waytrace:
     build: .
+    # Loopback only, like docker-compose.yml: on a LAN, 0.0.0.0 would open
+    # the scan endpoint to every machine on it.
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - waytrace-data:/data
       - ./backend:/app/backend
       - ./frontend:/app/frontend
+    env_file:
+      - path: .env
+        required: false
     environment:
       - LOG_LEVEL=DEBUG
       - DATABASE_URL=/data/waytrace.db
