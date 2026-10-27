@@ -353,6 +353,29 @@ def _decode_cloudflare_email(hex_str: str) -> str | None:
 _EMAIL_JSON_ESCAPE_LEAK_RE = re.compile(r"^u00[0-9a-f]{2}", re.IGNORECASE)
 
 
+_LOCAL_PART_CHARS = frozenset(
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._%+-"
+)
+
+
+def _whole_emails(txt: str):
+    """EMAIL_RE matches, minus the tails of over-long local parts.
+
+    EMAIL_RE caps the local part at 64 characters so it cannot rescan long
+    runs. On a longer local part it then starts later, inside the run, and
+    returns a plausible-looking address made of its last words, one nobody
+    ever wrote. Such a match is preceded, within the same run, by a word
+    character; a genuine one is preceded only by punctuation (`--foo@x.com`).
+    """
+    for m in EMAIL_RE.finditer(txt):
+        start = j = m.start()
+        while j > 0 and txt[j - 1] in _LOCAL_PART_CHARS:
+            j -= 1
+        if any(c.isalnum() or c == "_" for c in txt[j:start]):
+            continue
+        yield m
+
+
 def _cat_emails(ctx: ExtractionContext) -> None:
     """Extract emails from raw HTML + three obfuscation variants commonly
     seen on WP/Drupal/Cloudflare pages.
@@ -382,7 +405,7 @@ def _cat_emails(ctx: ExtractionContext) -> None:
 
     # 1 + 2: plain + entity-decoded pass
     for txt in (ctx.raw_text, _html_unescape.unescape(ctx.raw_text)):
-        for m in EMAIL_RE.finditer(txt):
+        for m in _whole_emails(txt):
             _emit(m.group())
     # 3: Cloudflare
     for m in CF_EMAIL_RE.finditer(ctx.raw_text):

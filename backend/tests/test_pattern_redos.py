@@ -68,3 +68,13 @@ def test_email_matches_still_found():
         ("--marie_x@example.org--", "marie_x@example.org"),
     ]:
         assert [m.group(0) for m in EMAIL_RE.finditer(text)] == [want], text
+
+
+def test_an_over_long_local_part_yields_nothing_rather_than_its_tail():
+    """The 64-character cap must not turn an address nobody could send to into
+    a shorter, plausible one made of its last words."""
+    from services.extractor.extract import _whole_emails
+    long_local = ".".join(["jean.dupont"] * 7) + "@example.com"
+    assert len(long_local.split("@")[0]) > 64
+    assert [m.group() for m in _whole_emails(f" {long_local} ")] == []
+    assert [m.group() for m in _whole_emails("--marie_x@example.org")] == ["marie_x@example.org"]

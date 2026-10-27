@@ -34,9 +34,20 @@ EMAIL_JS_CONCAT_RE = re.compile(
     r'"([A-Za-z0-9._%+\-]+)"\s*\+\s*"@"\s*\+\s*"([A-Za-z0-9.\-]+\.[A-Za-z]{2,})"'
 )
 
-# Every group repetition is bounded. With an open `+`, a long digit run the
-# trailing lookahead rejects was split every possible way before giving up:
-# exponential, minutes for a 60-digit run followed by a period.
+# After the first group, branches 2 and 3 used to read (?:[\s\-.]?\d{2,4})+:
+# with the separator optional, an unbroken digit run could be cut into 2-4
+# digit chunks in exponentially many ways, and the engine tried them all
+# before the trailing lookahead could reject it (minutes for 60 digits and a
+# period). _RUNS matches exactly the same strings, runs of 2+ digits joined by
+# single separators, at least two chunks in all, but takes each run whole
+# (possessive), so there is only one way to read it. Bounding the repeat
+# instead was tried and rejected: it cut long digit runs into pieces short
+# enough to pass the 7-15 digit filter downstream, i.e. new false positives.
+_RUNS = (
+    r"(?:\d{4,}+(?:[\s\-.]\d{2,}+)*"
+    r"|\d{2,3}+(?:[\s\-.]\d{2,}+)+)"
+)
+
 PHONE_RE = re.compile(
     r"(?<![.\d/@])"
     r"(?:"
@@ -44,10 +55,10 @@ PHONE_RE = re.compile(
     r"\+\d{1,3}[\s\-.]?\(?\d{1,4}\)?(?:[\s\-.]?\d{2,5}){1,4}"
     r"|"
     # Branch 2: parens area code, e.g. (800) 555-1234
-    r"\(\d{2,4}\)[\s\-.]?\d{2,4}(?:[\s\-.]?\d{2,4}){1,5}"
+    r"\(\d{2,4}\)[\s\-.]?" + _RUNS +
     r"|"
     # Branch 3: separated groups (≥2 separators), e.g. 01 42 68 53 00
-    r"\d{2,4}[\s\-.]\d{2,4}(?:[\s\-.]?\d{2,4}){1,5}"
+    r"\d{2,4}[\s\-.]" + _RUNS +
     r")"
     r"(?![\d.])"
 )
