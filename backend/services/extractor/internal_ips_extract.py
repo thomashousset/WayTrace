@@ -40,14 +40,20 @@ _DOC_CONTEXT_MARKERS = re.compile(
 _VERSION_LOOKBEHIND = 24
 _VERSION_CONTEXT = re.compile(
     r"(?:version|release|build|rev(?:ision)?|firmware|kernel|update|"
-    r"upgrade|changelog|\bv\.?)\s*$",
+    r"upgrade|changelog|\bv)\s*$",
     re.IGNORECASE,
 )
+# "v. 10.0.0.1" is a version, but "NAS v. 192.168.0.20" is an address:
+# no software version starts at 192, 172 or 127, so "v." only counts
+# before a 10.x match.
+_V_DOT_CONTEXT = re.compile(r"\bv\.\s*$", re.IGNORECASE)
 
 
 def _in_version_context(html: str, match_start: int) -> bool:
     look = html[max(0, match_start - _VERSION_LOOKBEHIND):match_start]
-    return bool(_VERSION_CONTEXT.search(look))
+    if _VERSION_CONTEXT.search(look):
+        return True
+    return html.startswith("10.", match_start) and bool(_V_DOT_CONTEXT.search(look))
 
 
 # A CIDR suffix glued directly to the IP ("10.0.0.0/8") turns the match
@@ -94,24 +100,31 @@ def _in_documentation_context(html: str, match_start: int, match_end: int) -> bo
 # SVG geometry is a stream of decimal numbers, and two of them glued
 # together read as an address: d="M10.0.0.5 L192.168.1.1" or
 # points="… 172.16.4.5 …". These ranked LEAK. Matches inside a geometry
-# attribute are skipped, and so is a match glued to a path command letter
-# that stands alone (M, L, C…), which also covers geometry outside an
-# attribute (CSS data: URIs, JS icon strings).
+# attribute of a tag are skipped (only in a tag: a script's var d = "…"
+# is a variable), and so is a match glued to a path command letter that
+# stands alone (M, L, C…) inside a run of numbers, which also covers
+# geometry outside an attribute (CSS data: URIs, JS icon strings).
+_TAG = re.compile(r"<[a-zA-Z][^<>]*>")
 _SVG_GEOMETRY_ATTR = re.compile(
     r"""(?is)[\s"'](?:d|points|viewbox|transform)\s*=\s*(["'])(.*?)\1""")
 _SVG_COMMANDS = set("MmLlHhVvCcSsQqTtAaZz")
 _PCT_ESCAPE = re.compile(r"%[0-9A-Fa-f]{2}")
+# Path data around the match: a number or another command after it, or a
+# number before the command letter.
+_PATH_AFTER = re.compile(r"[\s,]*(?:[-\d.]|[MmLlHhVvCcSsQqTtAaZz][\s,]*[-\d.])")
+_PATH_BEFORE = re.compile(r"[\d.][\s,]*$")
 
 
 def _svg_geometry_spans(html: str) -> tuple[list[int], list[int]]:
     starts, ends = [], []
-    for m in _SVG_GEOMETRY_ATTR.finditer(html):
-        starts.append(m.start(2))
-        ends.append(m.end(2))
+    for tag in _TAG.finditer(html):
+        for m in _SVG_GEOMETRY_ATTR.finditer(html, tag.start(), tag.end()):
+            starts.append(m.start(2))
+            ends.append(m.end(2))
     return starts, ends
 
 
-def _in_svg_geometry(html: str, pos: int, spans) -> bool:
+def _in_svg_geometry(html: str, pos: int, end: int, spans) -> bool:
     starts, ends = spans
     i = bisect.bisect_right(starts, pos) - 1
     if i >= 0 and pos < ends[i]:
@@ -120,9 +133,15 @@ def _in_svg_geometry(html: str, pos: int, spans) -> bool:
     if prev not in _SVG_COMMANDS:
         return False
     before = html[pos - 2] if pos >= 2 else ""
-    # A standalone command letter, or one right after a percent-escape
-    # (%22M10.0.0.5 inside a URL-encoded data: URI).
-    return not before.isalnum() or bool(_PCT_ESCAPE.fullmatch(html[max(0, pos - 4):pos - 1]))
+    # A command letter right after a percent-escape (%22M10.0.0.5 inside a
+    # URL-encoded data: URI), or a standalone one with path data around it.
+    # A lone capital in prose ("via L2TP: L10.2.3.4") is not geometry.
+    if _PCT_ESCAPE.fullmatch(html[max(0, pos - 4):pos - 1]):
+        return True
+    if before.isalnum():
+        return False
+    return bool(_PATH_AFTER.match(html, end, end + 8)
+                or _PATH_BEFORE.search(html, max(0, pos - 9), pos - 1))
 
 
 def extract_internal_ips(html: str) -> list[dict]:
@@ -138,7 +157,7 @@ def extract_internal_ips(html: str) -> list[dict]:
 
         if spans is None:
             spans = _svg_geometry_spans(html)
-        if _in_svg_geometry(html, match.start(), spans):
+        if _in_svg_geometry(html, match.start(), match.end(), spans):
             continue
 
         if _in_css_color_context(html, match.start()):

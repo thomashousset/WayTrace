@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 
-from .patterns import EMAIL_EXCLUDE, EMAIL_EXCLUDE_ANYWHERE, EMAIL_PLACEHOLDER_DOMAINS, IMAGE_EXTENSIONS, ASSET_EXTENSIONS, EMAIL_SEMVER_DOMAIN_RE, WAYBACK_TOOLBAR_RE, WAYBACK_SCRIPT_RE, WAYBACK_DIV_RE
+from .patterns import EMAIL_EXCLUDE, EMAIL_EXCLUDE_ANYWHERE, EMAIL_EXCLUDE_WHOLE, EMAIL_PLACEHOLDER_DOMAINS, IMAGE_EXTENSIONS, ASSET_EXTENSIONS, EMAIL_SEMVER_DOMAIN_RE, WAYBACK_TOOLBAR_RE, WAYBACK_SCRIPT_RE, WAYBACK_DIV_RE
 
 
 def ts_to_month(timestamp: str) -> str:
@@ -33,7 +33,33 @@ def update_entity(
 
 _GIT_HOSTS = {"github.com", "gitlab.com", "bitbucket.org", "ssh.dev.azure.com",
               "vs-ssh.visualstudio.com", "codeberg.org", "git.sr.ht"}
-_HEX_KEY_RE = re.compile(r"[0-9a-f]{16,}")
+# 32 hex digits is a Sentry DSN key. Shorter runs are left alone: a
+# 16-digit local part is also a numeric mailbox (Facebook ids, fax gateways).
+_HEX_KEY_RE = re.compile(r"[0-9a-f]{32,}")
+_LOCAL_SEP_RE = re.compile(r"[.\-_+]")
+
+
+def _hits_word_start(local: str, word: str) -> bool:
+    """``word`` in ``local`` as a plain substring, or across separators
+    when it starts where a word of ``local`` starts."""
+    if word in local:
+        return True
+    starts, squashed, at_start = set(), [], True
+    for ch in local:
+        if _LOCAL_SEP_RE.match(ch):
+            at_start = True
+            continue
+        if at_start:
+            starts.add(len(squashed))
+            at_start = False
+        squashed.append(ch)
+    squashed = "".join(squashed)
+    i = squashed.find(word)
+    while i != -1:
+        if i in starts:
+            return True
+        i = squashed.find(word, i + 1)
+    return False
 
 
 def is_email_excluded(email: str) -> bool:
@@ -45,8 +71,9 @@ def is_email_excluded(email: str) -> bool:
     words = {w for w in re.split(r"[.\-_+0-9]+", local) if w}
     if words & EMAIL_EXCLUDE:
         return True
-    squashed = re.sub(r"[.\-_+]", "", local)
-    if any(exc in squashed for exc in EMAIL_EXCLUDE_ANYWHERE):
+    if local.rstrip("0123456789") in EMAIL_EXCLUDE_WHOLE:
+        return True
+    if any(_hits_word_start(local, exc) for exc in EMAIL_EXCLUDE_ANYWHERE):
         return True
     # Exclude placeholder domains
     if domain in EMAIL_PLACEHOLDER_DOMAINS:
@@ -135,9 +162,11 @@ def is_wayback_comment(text: str) -> bool:
 
 
 _BUCKET_SHAPES = (
-    # <bucket>.s3[.-region|-website-region].amazonaws.com/...
-    (re.compile(r"^(?P<b>[a-z0-9][a-z0-9.\-]*?)\.s3[.\-][a-z0-9.\-]*?amazonaws\.com|"
-                r"^(?P<b2>[a-z0-9][a-z0-9.\-]*?)\.s3\.amazonaws\.com"), "s3"),
+    # <bucket>.s3[.-region|-website-region].amazonaws.com/...  The name is
+    # taken up to the LAST ".s3" of the host: acme.s3-backup is a bucket of
+    # its own, not acme. Region pieces carry no inner hyphen, so they cannot
+    # split a run two ways.
+    (re.compile(r"^(?P<b>[a-z0-9][a-z0-9.\-]*)\.s3(?:[.\-][a-z0-9]+)*\.amazonaws\.com(?:[/:?#]|$)"), "s3"),
     # s3[.-region].amazonaws.com/<bucket>/...
     (re.compile(r"^s3(?:[.\-][a-z0-9\-]+)*\.amazonaws\.com/(?P<b>[a-z0-9._\-]+)"), "s3"),
     (re.compile(r"^storage\.googleapis\.com/(?P<b>[a-z0-9._\-]+)"), "gcs"),

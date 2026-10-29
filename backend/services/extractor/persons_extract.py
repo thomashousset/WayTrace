@@ -31,15 +31,21 @@ _PERSON_TOOL_NAMES = {
 # Words that make a short capitalised phrase a UI label or an organisation,
 # not a person. The author/byline selectors and <meta name="author"> catch
 # "Read More", "Voir le profil", "Agence Web Paris", "Studio Graphique":
-# all shaped like names, all reported as named persons (PIVOT). Kept to words
-# no real first or last name is: short tokens that are (Sa, Le, Da) stay out.
-_NON_PERSON_WORDS = {
-    # interface
+# all shaped like names, all reported as named persons (PIVOT).
+#
+# Interface words are also real names (Mark Read, Hannah More, See Kok
+# Leong), so a phrase is a label only when every word is one of them or a
+# function word. Organisation words drop the phrase wherever they are; they
+# are kept to words that are not names (Sa, Le, Da stay out), and "SAS"
+# counts only in capitals, since Sas is a surname.
+_UI_WORDS = {
     "read", "more", "lire", "suite", "voir", "view", "profile", "profil",
     "posts", "articles", "all", "see", "continue", "continuer", "plus",
     "follow", "suivre", "share", "partager", "comments", "commentaires",
-    # organisations
-    "agence", "agency", "sarl", "sas", "sasu", "eurl", "inc", "ltd", "llc",
+    "reading", "la", "le", "les", "the", "de", "du", "des", "my", "mon",
+}
+_ORG_WORDS = {
+    "agence", "agency", "sarl", "sasu", "eurl", "inc", "ltd", "llc",
     "gmbh", "plc", "group", "groupe", "company", "société", "societe",
     "studio", "studios", "consulting", "solutions", "services", "digital",
     "marketing", "communication", "media", "médias", "web", "design",
@@ -47,13 +53,31 @@ _NON_PERSON_WORDS = {
 }
 
 
-def _reads_as_label_or_org(lower: str) -> bool:
-    words = lower.split()
-    if any(w in _NON_PERSON_WORDS for w in words):
+def _reads_as_label_or_org(name: str) -> bool:
+    tokens = name.split()
+    words = [t.lower() for t in tokens]
+    if all(w in _UI_WORDS for w in words):
+        return True
+    if any(w in _ORG_WORDS for w in words) or "SAS" in tokens:
         return True
     # "Saint Germain", "Sainte Marie": a place or a church. "Yves Saint
     # Laurent" and "Saint-Exupéry" (one token) are left alone.
     return len(words) == 2 and words[0] in ("saint", "sainte", "st.", "ste")
+
+
+# A role or a team after the name: "Sophie Martin - Consulting",
+# "Pierre Lefèvre, Directeur Marketing", "Claire Dubois | Rédaction". The
+# name in front is the finding. Kept whole, as before, when every part
+# reads as a name ("Jean Dupont, Marie Durand") or the front is a single
+# word ("Dupont, Jean").
+_ROLE_SEPARATOR_RE = re.compile(r"\s+[-–—|·]\s+|\s*,\s+")
+
+
+def _name_before_role(text: str, domain: str) -> str:
+    parts = [p.strip() for p in _ROLE_SEPARATOR_RE.split(text)]
+    if len(parts) < 2 or all(_looks_like_name(p) and _is_valid_person(p, domain) for p in parts):
+        return text
+    return parts[0] if _looks_like_name(parts[0]) else text
 
 
 # Leading byline connector ("By ", "Par ", "Von ", "By:") to strip before the
@@ -101,7 +125,7 @@ def _is_valid_person(name: str, domain: str) -> bool:
         return False
     if lower in _PERSON_EXCLUDE or lower in _PERSON_TOOL_NAMES:
         return False
-    if _reads_as_label_or_org(lower):
+    if _reads_as_label_or_org(name.strip()):
         return False
     if " " not in lower and len(lower) < 15:
         return False
@@ -139,7 +163,7 @@ def _walk_jsonld_authors(data, month: str, accum: dict, domain: str = "") -> Non
                 )
         author = data.get("author")
         if isinstance(author, str) and author.strip():
-            text = author.strip()
+            text = _name_before_role(author.strip(), domain)
             if _is_valid_person(text, domain):
                 update_entity(
                     accum["persons"], text.lower(), month,
@@ -160,7 +184,7 @@ def extract_persons(
         for node in tree.css(selector):
             # selectolax maps a valueless attribute (``<meta ... content>``) to
             # None, so the "" default never fires: guard before stripping.
-            name = (node.attributes.get("content") or "").strip()
+            name = _name_before_role((node.attributes.get("content") or "").strip(), domain)
             if name and _is_valid_person(name, domain):
                 update_entity(
                     accum["persons"], name.lower(), month,

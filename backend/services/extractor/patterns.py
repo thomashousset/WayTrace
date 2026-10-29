@@ -434,11 +434,15 @@ API_KEY_PATTERNS = {
 # sophie.yourcenar@, "sample" dropped anne.lesample@, "email" dropped
 # emailing@, all real mailboxes.
 EMAIL_EXCLUDE = {
-    "example", "email", "user", "test", "your", "name", "sample",
+    "example", "email", "user", "test", "your", "sample",
 }
-# Run together, these never occur inside a real name, so they still match
-# anywhere in the local part once separators are removed (noreply-billing@,
-# no.reply@, your-email@).
+# Refused only as the whole local part (name@, name2@): as a word it drops
+# domain-name@, brand.name@ and name.service@.
+EMAIL_EXCLUDE_WHOLE = {"name"}
+# Run together, these never occur inside a real name. They match as a plain
+# substring, or across separators when they start on a word of the local
+# part (no.reply@, noreply-billing@, your-email@), not in mid-word:
+# exchange-members@ squashes to "exchangemembers", which holds "changeme".
 EMAIL_EXCLUDE_ANYWHERE = {
     "noreply", "placeholder", "changeme", "youremail", "yourname",
 }

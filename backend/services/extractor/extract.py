@@ -111,6 +111,14 @@ class ExtractionContext:
 # Subdomain regex cache (per-domain, lazy)
 _subdomain_re_cache: dict[str, re.Pattern] = {}
 
+# Origin hostnames built from a customer host kept whole: Akamai, Cloudflare
+# origin names and S3 virtual-host buckets. The S3 region part has no hyphen
+# inside a piece, so it cannot be split two ways.
+_ORIGIN_SUFFIX = (
+    r"\.(?:edgesuite\.net|edgekey\.net|akamaized\.net|cdn\.cloudflare\.net"
+    r"|s3(?:[.\-][a-z0-9]+)*\.amazonaws\.com)(?![a-zA-Z0-9\-]|\.[a-zA-Z0-9])"
+)
+
 
 def _get_subdomain_re(domain: str) -> re.Pattern:
     pat = _subdomain_re_cache.get(domain)
@@ -121,10 +129,17 @@ def _get_subdomain_re(domain: str) -> re.Pattern:
         # blog.example.frites.com came out as shop./blog.example.fr. The left
         # guard keeps a match from starting inside a longer name; the right
         # guard refuses a domain that is only the prefix of another one.
+        #
+        # A dot or hyphen just before is still fine when nothing label-like
+        # precedes it: *.api.example.fr (CSP, certificate), "...vpn." or a
+        # "-staging." list item. A dot just after is fine before a capital
+        # (a sentence glued on: "extranet.example.fr.Pour") and before the
+        # CDN/S3 origin names that carry the host whole
+        # (static.example.fr.edgesuite.net, assets.example.fr.s3.amazonaws.com).
         pat = re.compile(
-            rf"(?<![a-zA-Z0-9\-.])"
+            rf"(?:(?<![a-zA-Z0-9\-.])|(?<=(?<![a-zA-Z0-9\-])[.\-]))"
             rf"((?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{{0,61}}[a-zA-Z0-9])?\.)+{re.escape(domain)})"
-            rf"(?![a-zA-Z0-9\-]|\.[a-zA-Z0-9])"
+            rf"(?:(?![a-zA-Z0-9\-]|\.[a-z0-9])|(?={_ORIGIN_SUFFIX}))"
         )
         _subdomain_re_cache[domain] = pat
     return pat
@@ -766,7 +781,10 @@ def _cat_subdomains(ctx: ExtractionContext) -> None:
         # 'api', 'cdn', 'dev', 'fr' would all get amputated to 'pi', 'dn',
         # 'v', 'r'.
         prev = raw_text[idx - 1] if idx >= 1 else ""
-        if prev == "\\" or (prev and prev.lower() in "0123456789abcdef"):
+        # A doubled backslash opens a Windows share (\\fs01.ad.acme.fr),
+        # whose first label is a name, not an escape tail.
+        unc = raw_text[idx - 2:idx] == "\\\\"
+        if not unc and (prev == "\\" or (prev and prev.lower() in "0123456789abcdef")):
             if re.match(r"^[0-9a-f]{1,2}[a-z]", sub):
                 clean = re.sub(r"^[0-9a-f]{1,2}", "", sub)
                 if clean and clean[0] != ".":
@@ -1021,6 +1039,16 @@ _API_KEY_CONTEXT_WINDOW = 60
 # EXAMPLE in capitals, so a match that does is the sample, not a leak.
 _SAMPLE_KEY_MARK = "EXAMPLE"
 
+# The Gemini API key has the same AIza shape as a Maps or Firebase browser
+# key, but it is billed per call and never meant for a page. Next to the
+# Gemini endpoint or SDK it is a secret, whatever the default tier says.
+_GEMINI_CONTEXT_RE = re.compile(
+    r"generativelanguage\.googleapis|gemini|generatecontent|googlegenerativeai|"
+    r"aistudio\.google",
+    re.IGNORECASE,
+)
+_GEMINI_CONTEXT_WINDOW = 200
+
 
 def _cat_api_keys(ctx: ExtractionContext) -> None:
     for key_type, pattern in API_KEY_PATTERNS.items():
@@ -1035,6 +1063,11 @@ def _cat_api_keys(ctx: ExtractionContext) -> None:
             if _SAMPLE_KEY_MARK in secret:
                 continue
             tier = _api_key_tier(key_type, secret)
+            if key_type == "Google_API":
+                lo = max(0, match.start() - _GEMINI_CONTEXT_WINDOW)
+                hi = min(len(ctx.raw_text), match.end() + _GEMINI_CONTEXT_WINDOW)
+                if _GEMINI_CONTEXT_RE.search(ctx.raw_text, lo, hi):
+                    tier = "secret"
             update_entity(
                 ctx.accum["api_keys"], secret, ctx.month,
                 {"type": key_type, "value": secret, "tier": tier},

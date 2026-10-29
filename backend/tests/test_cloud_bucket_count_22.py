@@ -23,6 +23,10 @@ from services.extractor.highlights import compute_highlights
     ("s3-eu-west-1.amazonaws.com/mybucket/x", "s3:mybucket"),
     ("mybucket.s3-website-us-east-1.amazonaws.com/", "s3:mybucket"),
     ("my.dotted.bucket.s3.amazonaws.com/k", "s3:my.dotted.bucket"),
+    # A bucket whose own name holds ".s3" is not the bucket before it.
+    ("acme.s3-backup.s3.amazonaws.com/a.png", "s3:acme.s3-backup"),
+    ("acme.s3-backup.s3.eu-west-3.amazonaws.com/a.png", "s3:acme.s3-backup"),
+    ("assets.acme.fr.s3-website-eu-west-1.amazonaws.com/", "s3:assets.acme.fr"),
     ("storage.googleapis.com/my-bucket", "gcs:my-bucket"),
     ("myaccount.blob.core.windows.net/container/blob", "azure:myaccount.blob.core.windows.net/container"),
     ("myspace.nyc3.digitaloceanspaces.com/file", "do:myspace"),
