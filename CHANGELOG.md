@@ -1,5 +1,74 @@
 # Changelog
 
+## v2.4.0
+
+This release also carries the 2.2 series, which was never published on its
+own. There is no public 2.3: that version only concerned the hosted service.
+
+**Update if you run your own instance: an archived path could run code in
+the page.** The scope page listed archived URL paths inside inline `onclick`
+handlers, escaped for HTML but not for JavaScript. Anyone who got archive.org
+to capture a path containing a quote could run script in the browser of
+whoever opened the scope step for that domain and unticked the path. Such
+values are now written as real JavaScript string literals (`jsArg()`), and
+`esc()` escapes quotes too. A password embedded in a JWT was also printed in
+clear in the report; it is masked now.
+
+**"Disappeared" claimed removals nobody had seen.** Every value whose last
+sighting came before the scan's last month was called disappeared: on a test
+scan, 34 values out of 46, among them a mailbox still on its page two months
+before the end, a page that had simply not been archived again. A value is
+now marked **Removed** only when every page that carried it was archived
+again later and read without it. The tabs read *Seen in* and *Not seen in*
+the scan's last month, which is what the archive actually shows, and a scan
+made before this release never shows "Removed".
+
+**Scans keep what they did.** A scan that reaches its time limit keeps the
+pages it downloaded instead of ending empty. Cancelling a running scan stops
+its downloads and frees its slot; a scan deleted while running no longer
+comes back when it ends; a scan that keeps taking the process down is no
+longer restarted on every boot. Each page's HTML is dropped as soon as it is
+extracted, so a long scan no longer holds all its raw HTML until the end. The page search covers
+the whole period and says when its index is partial.
+
+**Extraction is more precise, and finds what it had lost.** No more
+lookalike domains counted as the target, SVG path data read as internal IPs,
+"Read More" or an agency name taken for a person, a link to someone else's
+WordPress making the target WordPress, or a regex pinning a worker for
+minutes on a long digit run. Recovered: wildcard and CDN-origin subdomains,
+numeric and hyphenated mailboxes, internal IPs after a script variable,
+people named before their role, stock Joomla and "powered by Drupal" sites,
+Google keys used for Gemini ranked as leaks.
+
+**The report filter searches the whole report.** It used to search the open
+category only and answer "nothing matches" while thirty values matched
+elsewhere; the rail now counts matches per category. Five categories
+(support chat, email marketing, payment, mobile apps, CDN accounts) rendered
+rows with a count and no value, and now show it. The period slider no longer
+drops the drag after one step, a shortened value always ends with an
+ellipsis, outgoing links can be listed one row per linked site, and keyboard
+focus stays where it was put.
+
+**Typing something that is not a website says so before scanning.** About
+200 platforms (webmail, social networks, chat apps, link shorteners, very
+large sites, hosting platforms, archives) get one sentence explaining what
+their archive can and cannot tell you, with a way to scan anyway. A site
+hosted on a platform, such as `name.github.io`, goes through as usual.
+
+**A first scan is one click.** The scope page opens on the recommended
+settings, with the details behind Customise, and the estimate is a range
+with the number of scans waiting ahead.
+
+**Self-hosted Docker now reads `.env`.** The README says to copy
+`.env.example` to `.env`, but neither compose file passed it to the
+container, so every setting written there was silently ignored. Both
+compose files load it now, optionally, so `docker compose up` without one
+still starts.
+
+Also: a changelog page and a version badge with the three main changes of
+the release, French names for the five newer categories, and a few strings
+that stayed in English in the French interface.
+
 ## v2.1.0
 
 **Ten highlight types announced a count and named nothing.** `_add` drops

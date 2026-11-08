@@ -122,9 +122,11 @@ background, **BACKGROUND** for everything listed but never highlighted.
 ![Activity over time](docs/screenshots/activity.png)
 
 The Activity view puts categories on a shared time axis and marks the month
-each value appeared and the month it stopped. **Still present** means a value
-reached the most recent archived snapshot this scan looked at, which is not
-the same as being live on the site today.
+each value appeared and the month it stopped. **Seen in** the scan's last
+month means a value reached the most recent archived snapshot this scan
+looked at, which is not the same as being live on the site today. **Removed**
+is stronger: every page that carried the value was archived again later, and
+read without it. A value that was simply not seen again carries no such claim.
 
 ## How it works
 

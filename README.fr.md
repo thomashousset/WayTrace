@@ -127,9 +127,12 @@ listé sans jamais être mis en avant.
 ![Activité dans le temps](docs/screenshots/activity.png)
 
 La vue Activité place les catégories sur un axe de temps commun et marque le
-mois où chaque valeur est apparue et celui où elle a cessé. **Still present**
-signifie qu'une valeur atteint la capture la plus récente que ce scan a
-regardée, ce qui n'est pas la même chose qu'être en ligne aujourd'hui.
+mois où chaque valeur est apparue et celui où elle a cessé. **Vu en** (le
+dernier mois du scan) signifie qu'une valeur atteint la capture la plus
+récente que ce scan a regardée, ce qui n'est pas la même chose qu'être en
+ligne aujourd'hui. **Retiré** est plus fort : chaque page qui portait la
+valeur a été archivée de nouveau plus tard, et lue sans elle. Une valeur
+simplement plus revue n'emporte pas cette affirmation.
 
 ## Fonctionnement
 
