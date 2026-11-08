@@ -46,8 +46,6 @@ class QueueFullError(Exception):
     """Raised when the global active+waiting queue is at its hard cap."""
 
 
-
-
 class JobStore:
     def __init__(self) -> None:
         self._jobs: dict[str, dict] = {}

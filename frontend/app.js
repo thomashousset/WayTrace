@@ -394,7 +394,6 @@ function setThemePref(pref, opts) {
   if (!(opts && opts.localOnly) && typeof _syncThemeToServer === 'function') _syncThemeToServer(pref);
 }
 
-
 /* --- Instance defaults (self-host) ---
    The server injects window.__WT_DEFAULTS__ = {theme, name} before paint when
    an instance name / default theme is set. The theme is handled by the boot
@@ -2916,7 +2915,6 @@ function flashMsg(msg) {
   el._t = setTimeout(() => el.classList.remove('show'), 1400);
 }
 
-
 /* Empty-page icons for error / expired states. SVG inline so they tint with
    the surrounding text color and don't require an extra round-trip. */
 const _PUB_ERROR_ICON = `
@@ -3069,7 +3067,6 @@ function relativeFutureTime(iso) {
   if (diff < 86400) return t('in {n}h').replace('{n}', Math.floor(diff / 3600));
   return t('in {n}d').replace('{n}', Math.floor(diff / 86400));
 }
-
 
 /* DEMO 2.0 (A). The View Transitions API animates between two DOM states the
    browser has captured itself, so a shared element can travel across a route

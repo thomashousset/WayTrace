@@ -75,8 +75,6 @@ def _configure_logging() -> None:
 _configure_logging()
 
 
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("WayTrace starting up")
@@ -247,8 +245,6 @@ async def serve_robots():
     body = robots.read_text(encoding="utf-8") if robots.exists() \
         else "User-agent: *\nAllow: /\n"
     return PlainTextResponse(body, media_type="text/plain")
-
-
 
 
 # RFC 9116. Built here rather than shipped as a file for two reasons. The

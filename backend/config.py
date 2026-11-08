@@ -158,7 +158,6 @@ class Settings(BaseSettings):
     # runs, where /data is not creatable, so it lands at the repo root.
     database_url: str = str(_REPO_ROOT / "waytrace.db")
 
-
     @field_validator("max_concurrent_scrapes")
     @classmethod
     def _scrapes_bounds(cls, v: int) -> int:
@@ -176,7 +175,6 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
-
 
 
 settings = Settings(_env_file=ENV_FILES)

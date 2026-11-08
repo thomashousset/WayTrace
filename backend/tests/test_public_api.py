@@ -160,8 +160,6 @@ async def test_export_json_404_unknown(client):
     assert r.status_code == 404
 
 
-
-
 @pytest.mark.anyio
 async def test_local_scans_lists_all_published_and_private():
     # Solo/self-hosted "My scans" must list EVERY scan, not just published ones.

@@ -279,7 +279,6 @@ async def _persist_and_finish(job_id: str, start: float) -> None:
     except Exception:
         logger.exception("Failed to persist job {} to DB", job_id)
 
-
     duration = time.time() - start
     await store.finish_job(job_id, duration_seconds=duration)
 

@@ -2264,7 +2264,6 @@
     }
     .legal-page a.legal-back:hover { color: var(--accent-text); }
 
-
     /* My scans (account-backed history view) */
     /* One line of text where five cards used to be. A tool states its counts;
        it does not frame each one. */
@@ -2405,7 +2404,6 @@
     .myscans-state { font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .06em; color: var(--text); white-space: nowrap; }
     .myscans-eta { font-size: var(--fs-sm); color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
     @keyframes wt-live-pulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
-
 
 
 
@@ -2823,7 +2821,6 @@
       .r2-bar { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     }
 
-
     /* ===================================================================
        REPORT 2.0 — two-view master-detail results page
        =================================================================== */
@@ -3118,7 +3115,6 @@
     .r2-favm b { color: var(--text); display: block; }
     .r2-favarr { color: var(--text-faint); }
     .r2-empty-compose { padding: 22px 16px; color: var(--text-faint); font-size: var(--fs-sm); text-align: center; }
-
 
     /* ===== Themes page (Appearance) ===== */
     .themes-page { max-width: 880px; margin: 0 auto; padding: 56px 24px 96px; }

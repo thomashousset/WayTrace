@@ -142,7 +142,6 @@ async def test_save_overwrite_preserves_published_flag(db_ready):
     assert job["meta"]["new"] is True
 
 
-
 @pytest.mark.asyncio
 async def test_a_finished_scan_records_how_many_findings_it_produced(db_ready):
     """meta['total_findings'] was read by the admin listing but never written."""
