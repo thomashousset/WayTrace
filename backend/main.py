@@ -75,6 +75,8 @@ def _configure_logging() -> None:
 _configure_logging()
 
 
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("WayTrace starting up")

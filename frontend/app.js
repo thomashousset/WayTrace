@@ -82,6 +82,7 @@ window.addEventListener('unhandledrejection', (e) => _reportClientError(e.reason
 // reason, at the moment the person acts, which is where that belongs.
 let _statusNetFailStreak = 0;
 let _lastSvc = null;          // last /api/service-status service object
+let _lastArc = null;          // and its archive object, to redraw the status line on a language switch
 let _setupRedirected = false; // one-shot guard for the first-run wizard gate
 async function checkServiceStatus() {
   const el = $('archive-banner');
@@ -108,6 +109,7 @@ async function checkServiceStatus() {
   const svc = (d && d.service) || {};
   const arc = (d && d.archive) || {};
   _lastSvc = svc;
+  _lastArc = arc;
   // First-run gate (self-host only): a fresh instance with the config panel on
   // and setup not yet completed lands the operator in the wizard once. The
   // guard makes this a one-shot so a later manual navigation never bounces.
@@ -398,6 +400,20 @@ function setThemePref(pref, opts) {
    an instance name / default theme is set. The theme is handled by the boot
    script (mode) + applyThemeVars() (full vars); here we apply the name and
    expose small helpers reused by the setup wizard. */
+function _defaultTitle() {
+  try {
+    const d = (typeof window.__WT_DEFAULTS__ === 'object' && window.__WT_DEFAULTS__) || null;
+    document.title = (d && (d.name || '').trim()) ? d.name.trim()
+      : t('WayTrace · OSINT recon through the Wayback Machine');
+  } catch (_) {}
+}
+
+// A scan takes minutes and people switch tabs: the tab itself says where it
+// is ("42% · example.com"), and goes back to normal once it ends.
+function _scanTabTitle(prefix, domain) {
+  document.title = prefix + ' · ' + (domain || '') + ' · WayTrace';
+}
+
 function setInstanceName(name) {
   const brand = document.querySelector('.nav-brand');
   const n = (name || '').trim();
@@ -580,10 +596,151 @@ const I18N_EN = {
     'ms.findings': 'findings',
     'ms.pages': 'pages',
     'ms.shared': 'Shared',
+  // 2.4 quality-of-life pass.
+  'pres.live_t': 'In the latest capture.',
+  'pres.gone_t': 'Not in the latest captures, with no proof of removal.',
+  'pres.removed_t': 'Gone from its page in a later capture.',
+  'feed.more': 'Show the {n} earlier events',
+  'cut.t': 'Full value: {v}',
+  'scope.customise': 'Customise',
+  'scope.fold': 'Hide the settings',
+  'scope.go_reco': 'Scan with recommended settings',
+  'est.range': '{a} to {b} min',
+  'est.queue': '{n} scans ahead of yours.',
+  'est.queue1': '1 scan ahead of yours.',
+  'filter.all': '{n} results for “{q}”',
+  'fd.title': 'Finding',
+  'out.mode': 'Show outgoing links',
+  'out.links': 'Links',
+  'out.links_col': 'links',
+  'out.domains': 'Domains',
+  'out.domain': 'domain',
+  'out.n_link': '1 link',
+  'out.n_links': '{n} links',
+  'star.ask': 'Enjoying WayTrace? <a href="https://github.com/thomashousset/WayTrace" target="_blank" rel="noopener">★ Star it on GitHub</a>',
+  'home.hint_touch': 'Tap <b>Scan</b> to choose subdomains, dates and density before launching.',
+  'ver.current': 'current',
+  'ver.all': 'Full changelog',
+  'ver.more_n': '{n} more changes',
+  'ver.see_more': 'Show {n} more',
+  'ver.see_less': 'See less',
+  'ver.new_in': 'New in v{v}',
+  'wait.p': 'Your scan will start by itself when the countdown ends, with every choice on this page. Keep this tab open.',
+  'wait.full_h': 'Every scan slot is taken right now.',
+  'wait.paused_h': 'archive.org asked us to slow down.',
+  'ms.empty': 'Every scan you run lands here, private to your account, with its report, its exports and a link you can hand to a colleague.',
+  'fab.bug_d': 'Something broken or wrong in a report',
+  'fab.idea_d': 'Something missing from your investigations',
+  'fab.tst_d': 'Tell us what WayTrace helped you find',
+  'fab.feedback': 'Feedback',
+  'guide.anyway': 'Scan it anyway',
+  'guide.mail_h': '{d} is a webmail.',
+  'guide.mail': 'Its archive holds no mailbox.',
+  'guide.social_h': '{d} is a social network.',
+  'guide.social': 'Its archive says nothing about a given account.',
+  'guide.chat_h': '{d} is a messaging app.',
+  'guide.chat': 'Conversations are not archived.',
+  'guide.giant_h': '{d} is too large.',
+  'guide.giant': 'A scan would read only a tiny part of it.',
+  'guide.host_h': '{d} hosts other sites.',
+  'guide.host': 'Scan the site itself instead, for example name.{d}.',
+  'guide.short_h': '{d} is a link shortener.',
+  'guide.short': 'Scan the site the link redirects to instead.',
+  'guide.archive_h': '{d} is an archive.',
+  'guide.archive': 'Enter the domain you are looking for directly.',
+  'guide.handle': 'WayTrace scans a domain name, for example example.com.',
+  'guide.handle_h': 'That looks like a name or a username.',
+  'guide.scan_d': 'Scan {d} instead',
+  'guide.webmail': 'No site of its own to scan.',
+  'guide.email': 'WayTrace scans a website, not a mailbox.',
+  'guide.email_h': 'That is an email address.',
+  'export.csv_d': 'One row per finding, for a spreadsheet',
+  'export.json_d': 'Every finding, for your own tools',
+  'export.html_d': 'Readable report, opens offline',
 };
 
 const I18N = {
   fr: {
+    // 2.4 quality-of-life pass.
+    'Seen in {m}': 'Vu en {m}',
+    'Not seen in {m}': 'Pas vu en {m}',
+    'Removed': 'Retiré',
+    'removed': 'retiré',
+    'none removed': 'rien de retiré',
+    'nothing in this tab': 'rien dans cet onglet',
+    'Show fewer events': 'Afficher moins d\'événements',
+    'pres.live_t': 'Présent dans la dernière capture.',
+    'pres.gone_t': 'Absent des dernières captures, sans preuve de retrait.',
+    'pres.removed_t': 'Absent de sa page lors d’une capture ultérieure.',
+    'feed.more': 'Afficher les {n} événements plus anciens',
+    'cut.t': 'Valeur complète : {v}',
+    'scope.customise': 'Personnaliser',
+    'scope.fold': 'Masquer les réglages',
+    'scope.go_reco': 'Analyser avec les réglages conseillés',
+    'est.range': '{a} à {b} min',
+    'est.queue': '{n} scans en attente avant le vôtre.',
+    'est.queue1': '1 scan en attente avant le vôtre.',
+    'filter.all': '{n} résultats pour « {q} »',
+    'Chat & support widgets': 'Chat et support',
+    'Marketing & CRM': 'Marketing et CRM',
+    'Payment & commerce': 'Paiement et commerce',
+    'Mobile apps': 'Applications mobiles',
+    'Media & content CDNs': 'CDN de médias et contenus',
+    'fd.title': 'Résultat',
+    'out.mode': 'Afficher les liens sortants',
+    'out.links': 'Liens',
+    'out.links_col': 'liens',
+    'out.domains': 'Domaines',
+    'out.domain': 'domaine',
+    'out.n_link': '1 lien',
+    'out.n_links': '{n} liens',
+    'star.ask': 'Vous aimez WayTrace ? <a href="https://github.com/thomashousset/WayTrace" target="_blank" rel="noopener">★ Mettez une étoile sur GitHub</a>',
+    'home.hint_touch': 'Touchez <b>Analyser</b> pour choisir les sous-domaines, les dates et la densité avant de lancer.',
+    'home.foot.changelog': 'Nouveautés',
+    'ver.page_sub': "Les changements de chaque version, de la plus récente à la plus ancienne.",
+    'ver.page_h': 'Ce qui a changé',
+    'ver.pop': 'Nouveautés',
+    'ver.more_n': '{n} autres nouveautés',
+    'ver.see_more': 'Voir les {n} autres',
+    'ver.see_less': 'Voir moins',
+    'ver.badge': 'Nouveautés',
+    'ver.current': 'actuelle',
+    'ver.all': 'Toutes les nouveautés',
+    'ver.new_in': 'Nouveautés de la v{v}',
+    'wait.p': 'Votre scan démarrera tout seul à la fin du compte à rebours, avec tous les choix de cette page. Gardez cet onglet ouvert.',
+    'wait.full_h': "Toutes les places de scan sont prises pour l'instant.",
+    'wait.paused_h': 'archive.org nous demande de ralentir.',
+    'ms.empty': 'Chaque scan que vous lancez arrive ici, privé à votre compte, avec son rapport, ses exports et un lien à transmettre à un collègue.',
+    'fab.bug_d': 'Quelque chose de cassé ou de faux dans un rapport',
+    'fab.idea_d': 'Ce qui manque à vos enquêtes',
+    'fab.tst_d': 'Racontez ce que WayTrace vous a aidé à trouver',
+    'fab.feedback': 'Votre avis',
+    'guide.anyway': "L'analyser quand même",
+    'guide.mail_h': '{d} est une messagerie.',
+    'guide.mail': 'Son archive ne contient aucune boîte e-mail.',
+    'guide.social_h': '{d} est un réseau social.',
+    'guide.social': 'Son archive ne dit rien sur un compte en particulier.',
+    'guide.chat_h': '{d} est une messagerie instantanée.',
+    'guide.chat': 'Les conversations ne sont pas archivées.',
+    'guide.giant_h': '{d} est un site trop vaste.',
+    'guide.giant': "Un scan n'en lirait qu'une infime partie.",
+    'guide.host_h': "{d} héberge d'autres sites.",
+    'guide.host': "Analysez plutôt l'adresse du site visé, par exemple nom.{d}.",
+    'guide.short_h': '{d} est un raccourcisseur de liens.',
+    'guide.short': 'Analysez plutôt le site vers lequel le lien redirige.',
+    'guide.archive_h': '{d} est une archive.',
+    'guide.archive': 'Saisissez directement le domaine recherché.',
+    'guide.handle': 'WayTrace analyse un nom de domaine, par exemple example.com.',
+    'guide.handle_h': 'On dirait un nom ou un pseudo.',
+    'guide.scan_d': 'Analyser {d} à la place',
+    'guide.webmail': 'Pas de site propre à analyser.',
+    'guide.email': 'WayTrace analyse un site, pas une boîte mail.',
+    'guide.email_h': "C'est une adresse e-mail.",
+    'same page': 'même page',
+    'export.csv_d': 'Une ligne par résultat, pour un tableur',
+    'export.json_d': 'Tous les résultats, pour vos outils',
+    'export.html_d': "Rapport lisible, s'ouvre hors ligne",
+    'kept until {d}': "conservé jusqu'au {d}",
     'adm.tab.features': "Idées",
     'adm.features': "Idées proposées",
     'adm.no_features': "aucune idée pour l'instant",
@@ -806,10 +963,7 @@ const I18N = {
     'No findings': 'Aucun résultat',
     'Filter by presence': 'Filtrer par présence',
     'All': 'Tout',
-    'Still present': 'Encore présent',
-    'Disappeared': 'Disparu',
     'none still present': 'rien n\'est encore présent',
-    'none disappeared': 'rien n\'a disparu',
     'nothing matches the filter': 'rien ne correspond au filtre',
     'Other findings on the same archived page': 'Autres résultats sur la même page archivée',
     'Seen together on the same archived page': 'Vus ensemble sur la même page archivée',
@@ -1093,7 +1247,7 @@ const I18N = {
     'Maintenance in progress. WayTrace will be back shortly.': 'Maintenance en cours. WayTrace revient très vite.',
     'WayTrace is a victim of its own success right now. New scans are queued and start as soon as a slot frees up.': "WayTrace est victime de son succès en ce moment. Les nouveaux scans sont mis en file et démarrent dès qu'une place se libère.",
     'This domain is being scanned right now. Attaching you to the live scan.': 'Ce domaine est déjà en cours de scan. Vous rejoignez le scan en direct.',
-    'Already scanned recently. Scans are kept {n} days, so the results open instantly. Use Scan more for a fresh scan.': "Déjà scanné récemment. Les scans sont conservés {n} jours, les résultats s'ouvrent donc instantanément. Utilisez Scan more pour un scan frais.",
+    'Already scanned recently. Scans are kept {n} days, so the results open instantly. Use Scan more for a fresh scan.': "Déjà scanné récemment. Les scans sont conservés {n} jours, les résultats s'ouvrent donc instantanément. Utilisez « Scanner plus » pour un scan frais.",
     'You already have a scan in flight. Find it in My scans.': 'Vous avez déjà un scan en cours. Retrouvez-le dans Mes scans.',
     'Running': 'En cours',
 
@@ -1128,7 +1282,6 @@ const I18N = {
     'type a word, press Enter, e.g. blog': 'tapez un mot, Entrée, ex. blog',
     'Add': 'Ajouter',
     'Launch scan': 'Lancer le scan',
-    'Tune the scan before launching it.': 'Réglez le scan avant de le lancer.',
     'Querying archive.org for subdomains...': 'Interrogation d’archive.org pour les sous-domaines...',
     'Delete scan': 'Supprimer le scan',
     'Delete this scan permanently? This cannot be undone.': 'Supprimer définitivement ce scan ? Cette action est irréversible.',
@@ -1290,9 +1443,19 @@ function applyI18n() {
   _i18nApplyAttr('data-i18n-html', 'innerHTML');
   _i18nApplyAttr('data-i18n-ph', 'placeholder');
   _i18nApplyAttr('data-i18n-title', 'title');
+  _i18nApplyAttr('data-i18n-aria', 'aria-label');
   // The contents rail copies the heading text, so it has to be rebuilt after a
   // language switch or it keeps the previous language.
   if (document.getElementById('view-legal')?.classList.contains('active')) buildLegalToc();
+  if (document.getElementById('view-changelog')?.classList.contains('active')) renderChangelogPage();
+  // The status line under the home page is written by renderHomeStatus, not by
+  // a data-i18n attribute, so it kept the previous language until the next poll.
+  if (_lastSvc) { try { renderHomeStatus(_lastSvc, _lastArc || {}); } catch (_) {} }
+  // On a touch screen there is no Enter key to press.
+  const _hh = document.querySelector('.home-hint');
+  if (_hh && window.matchMedia && matchMedia('(hover: none) and (pointer: coarse)').matches) _hh.innerHTML = t('home.hint_touch');
+  const _hv = document.getElementById('home-ver');
+  if (_hv && !_hv.hidden) _renderVerPop((_hv.querySelector('.home-ver-n').textContent || '').replace(/^v/, ''));
 }
 
 function setLang(l) {
@@ -1319,17 +1482,13 @@ function setLang(l) {
   } catch (_) {}
   // The browser tab kept its English title in a French interface. An instance
   // that set its own name owns the title, so only touch the default one.
-  try {
-    const d = (typeof window.__WT_DEFAULTS__ === 'object' && window.__WT_DEFAULTS__) || null;
-    if (!(d && (d.name || '').trim())) {
-      document.title = t('WayTrace · OSINT recon through the Wayback Machine');
-    }
-  } catch (_) {}
+  _defaultTitle();
   // Re-render the few dynamic strings that JS sets directly.
   try {
     const adv = document.getElementById('scope-adv');
     if (adv && adv.style.display !== 'none' && typeof onScopeDensity === 'function') {
       onScopeDensity();        // density label/hint + estimate
+      setScopeCustom(_scopeCustomOpen(), false);
     }
   } catch (_) {}
   // Category pickers carry JS-built labels + count summaries: refresh them so
@@ -1840,12 +1999,12 @@ function navigate(hash) {
   const parts = (hash || '#/').replace('#/', '').split('/').filter(Boolean);
   // v2 public scan route: #/s/{url_id}
   let view = parts[0] === 's' ? 'scan-public' : (parts[0] || 'home');
-  const valid = new Set(['home', 'scope', 'history', 'scan-public', 'legal', 'themes', 'config', 'setup']);
+  const valid = new Set(['home', 'scope', 'history', 'scan-public', 'legal', 'themes', 'config', 'setup', 'changelog']);
   if (!valid.has(view)) view = 'notfound';
   // 'results' stays here (not in `valid`): the public flow reuses view-results,
   // so navigate() must still deactivate it when leaving, even though there is no
   // longer a /#/results route.
-  const views = ['home', 'scope', 'results', 'history', 'scan-public', 'legal', 'themes', 'config', 'setup', 'notfound'];
+  const views = ['home', 'scope', 'results', 'history', 'scan-public', 'legal', 'themes', 'config', 'setup', 'changelog', 'notfound'];
 
   views.forEach(v => {
     const el = $('view-' + v);
@@ -1858,7 +2017,11 @@ function navigate(hash) {
   if (view !== 'scan-public') v2PublicMode = false;
 
   if (view === 'home') {
-    $('domain-input').focus();
+    // Not while a dialog is open over the page: the sign-in wall sends people
+    // home and opens at the same time, and this focus landed after the
+    // dialog's, so the first letters of an email went into the search box
+    // behind it.
+    if (!document.querySelector('.auth-overlay:not([hidden]), [role="dialog"][aria-modal="true"]:not([hidden]) .auth-card')) $('domain-input').focus();
     checkServiceStatus();   // refresh the status strip on every return home
   } else if (view === 'scan-public' && parts[1]) {
     const newUrlId = decodeURIComponent(parts[1]);
@@ -1874,6 +2037,8 @@ function navigate(hash) {
     buildLegalToc();
   } else if (view === 'themes') {
     renderThemesPage();
+  } else if (view === 'changelog') {
+    renderChangelogPage();
   } else if (view === 'config') {
     renderConfigPage();
   } else if (view === 'setup') {
@@ -1887,6 +2052,118 @@ let _pendingScopePrefill = null;
 /* Homepage Scan: every scan now goes through the scope step (preflight ->
    subdomains + density + dates) instead of launching blind. The homepage
    pre-filters (exclude keywords + date range) are carried over as defaults. */
+/* What people type that is not a website. In production about one scan in
+   ten targeted gmail.com, instagram.com or x.com, and many more submissions
+   were an email address or a handle: the visitor wanted to look up a person.
+   Say what WayTrace does before they spend a scan on it, and offer the domain
+   when there is one to offer. */
+const _HOME_PLATFORMS = {
+  // Public mailboxes: their archive is a login page, never a mailbox.
+  mail: ['gmail.com', 'googlemail.com', 'mail.google.com', 'mail.yahoo.com', 'outlook.live.com', 'yahoo.com', 'yahoo.fr', 'ymail.com', 'hotmail.com', 'hotmail.fr',
+    'outlook.com', 'outlook.fr', 'live.com', 'live.fr', 'msn.com', 'icloud.com', 'me.com', 'mac.com', 'aol.com',
+    'proton.me', 'protonmail.com', 'pm.me', 'tutanota.com', 'tuta.io', 'gmx.com', 'gmx.de', 'gmx.fr', 'gmx.net',
+    'web.de', 'mail.com', 'mail.ru', 'yandex.ru', 'yandex.com', 'zoho.com', 'orange.fr', 'wanadoo.fr', 'free.fr',
+    'sfr.fr', 'laposte.net', 'bbox.fr', 'neuf.fr', 'qq.com', '163.com', '126.com', 'naver.com', 'rambler.ru',
+    'seznam.cz', 'libero.it', 'virgilio.it', 'interia.pl', 'wp.pl', 'o2.pl', 'onet.pl', 't-online.de'],
+  // Social networks and video platforms: one account is a speck in their archive.
+  social: ['facebook.com', 'fb.com', 'instagram.com', 'twitter.com', 'x.com', 'tiktok.com', 'linkedin.com',
+    'snapchat.com', 'pinterest.com', 'pinterest.fr', 'reddit.com', 'vk.com', 'ok.ru', 'threads.net',
+    'bsky.app', 'mastodon.social', 'quora.com', 'weibo.com', 'twitch.tv', 'youtube.com', 'youtu.be', 'vimeo.com',
+    'dailymotion.com', 'flickr.com', 'onlyfans.com', 'patreon.com', 'soundcloud.com', 'spotify.com', 'deviantart.com',
+    'tinder.com', 'badoo.com', 'meetup.com', 'strava.com', 'goodreads.com', 'letterboxd.com', '9gag.com'],
+  // Chat apps: conversations never reach the archived web.
+  chat: ['t.me', 'telegram.org', 'telegram.me', 'whatsapp.com', 'wa.me', 'discord.com', 'discord.gg', 'signal.org',
+    'messenger.com', 'skype.com', 'slack.com', 'viber.com', 'line.me', 'wechat.com', 'kik.com', 'element.io'],
+  // Sites too large for a scan to say anything: a sample of a few thousand pages out of millions.
+  giant: ['google.com', 'google.fr', 'bing.com', 'duckduckgo.com', 'baidu.com', 'yahoo.co.jp', 'amazon.com',
+    'amazon.fr', 'amazon.de', 'amazon.co.uk', 'ebay.com', 'ebay.fr', 'aliexpress.com', 'alibaba.com', 'apple.com',
+    'microsoft.com', 'wikipedia.org', 'wikimedia.org', 'wikidata.org', 'netflix.com', 'paypal.com', 'cloudflare.com',
+    'leboncoin.fr', 'craigslist.org', 'booking.com', 'airbnb.com', 'tripadvisor.com', 'imdb.com', 'nytimes.com',
+    'bbc.co.uk', 'bbc.com', 'cnn.com', 'lemonde.fr', 'gouv.fr', 'service-public.fr', 'europa.eu', 'un.org'],
+  // Hosts of other people's sites: the site to scan is a subdomain of them, so
+  // only the bare platform is caught and name.github.io still goes through.
+  host: ['github.com', 'github.io', 'gitlab.com', 'gitlab.io', 'bitbucket.org', 'blogspot.com', 'blogger.com',
+    'wordpress.com', 'wix.com', 'wixsite.com', 'squarespace.com', 'weebly.com', 'jimdo.com', 'webflow.io',
+    'netlify.app', 'vercel.app', 'pages.dev', 'herokuapp.com', 'medium.com', 'substack.com', 'over-blog.com',
+    'canalblog.com', 'tumblr.com', 'sites.google.com', 'carrd.co', 'notion.site', 'linktr.ee', 'about.me', 'dropbox.com',
+    'drive.google.com', 'docs.google.com', 'pastebin.com', 'scribd.com', 'issuu.com'],
+  // Link shorteners: the real site is behind the redirect.
+  short: ['bit.ly', 'tinyurl.com', 't.co', 'goo.gl', 'ow.ly', 'buff.ly', 'is.gd', 'cutt.ly', 'rebrand.ly',
+    'shorturl.at', 'tiny.cc', 'lnkd.in', 'fb.me', 'amzn.to', 'rb.gy', 'bl.ink'],
+  // Archives themselves: WayTrace already reads them.
+  archive: ['web.archive.org', 'archive.org', 'archive.ph', 'archive.today', 'archive.is', 'archive.li',
+    'webcache.googleusercontent.com', 'cachedview.nl', 'arquivo.pt'],
+};
+const _PLATFORM_KIND = new Map(Object.entries(_HOME_PLATFORMS).flatMap(([k, list]) => list.map(d => [d, k])));
+// Kinds whose subdomains are still the platform (m.facebook.com, fr.linkedin.com,
+// t.me's mirrors). Everywhere else a subdomain can be a real site in its own
+// right: impots.gouv.fr is not gouv.fr, monsite.free.fr is somebody's pages,
+// name.github.io is somebody's project. Those only match exactly.
+const _PLATFORM_SUFFIX_KINDS = new Set(['social', 'chat', 'short', 'archive']);
+// The kind of platform a typed domain is, or null for an ordinary site.
+function _platformKind(d) {
+  if (_PLATFORM_KIND.has(d)) return _PLATFORM_KIND.get(d);
+  const parts = d.split('.');
+  for (let i = 1; i < parts.length - 1; i++) {
+    const k = _PLATFORM_KIND.get(parts.slice(i).join('.'));
+    if (k && _PLATFORM_SUFFIX_KINDS.has(k)) return k;
+  }
+  return null;
+}
+
+// Something that is not a website to scan (an address, a name, a platform),
+// typed into either search box from any page: the explanation lives on the
+// home page, so the visitor is taken there and it is shown. True when handled.
+function _guideFromAnywhere(raw) {
+  if (_homeGuideAck === raw) return false;
+  if (!(raw.includes('@') || !raw.includes('.') || /\s/.test(raw) || _platformKind(raw))) return false;
+  if (document.getElementById('view-home')?.classList.contains('active')) return homeGuide(raw);
+  location.hash = '#/';
+  setTimeout(() => {
+    const inp = document.querySelector('.home-search-input');
+    if (inp) inp.value = raw;
+    homeGuide(raw);
+  }, 60);
+  return true;
+}
+let _homeGuideAck = '';   // a platform the visitor chose to scan anyway
+
+function homeGuideClear() {
+  const g = document.getElementById('home-guide');
+  if (g && !g.hidden) { g.hidden = true; g.innerHTML = ''; }
+}
+
+function homeGuide(raw) {
+  const g = document.getElementById('home-guide');
+  if (!g) return false;
+  const say = (html) => { g.innerHTML = html; g.hidden = false; return true; };
+  const go = (d, label) => `<button type="button" class="home-guide-btn" onclick="homeGuideUse(${jsArg(d)})">${esc(label)}</button>`;
+  if (raw.includes('@')) {
+    const dom = raw.split('@').pop().replace(/[^a-z0-9.-]/g, '');
+    const own = dom.includes('.') && !_platformKind(dom);
+    return say(`<b>${esc(t('guide.email_h'))}</b> ${esc(t('guide.email'))}`
+      + (own ? ' ' + go(dom, t('guide.scan_d').replace('{d}', dom)) : ` ${esc(t('guide.webmail'))}`));
+  }
+  if (!raw.includes('.') || /\s/.test(raw)) {
+    return say(`<b>${esc(t('guide.handle_h'))}</b> ${esc(t('guide.handle'))}`);
+  }
+  const kind = _platformKind(raw);
+  if (kind && _homeGuideAck !== raw) {
+    return say(`<b>${esc(t('guide.' + kind + '_h').replace('{d}', raw))}</b> ${esc(t('guide.' + kind).replace(/\{d\}/g, raw))} `
+      + `<button type="button" class="home-guide-link" onclick="homeGuideAnyway(${jsArg(raw)})">${esc(t('guide.anyway'))}</button>`);
+  }
+  return false;
+}
+
+function homeGuideUse(d) {
+  const inp = document.querySelector('.home-search-input');
+  if (inp) inp.value = d;
+  homeGuideClear();
+  startAdvancedScan();
+}
+
+function homeGuideAnyway(d) { _homeGuideAck = d; homeGuideUse(d); }
+
 function startAdvancedScan() {
   const raw = (document.querySelector('.home-search-input')?.value
             || document.getElementById('domain-input')?.value
@@ -1897,6 +2174,7 @@ function startAdvancedScan() {
     document.querySelector('.home-search-input')?.focus();
     return;
   }
+  if (_guideFromAnywhere(raw)) return;
   // Minimalist homepage: no pre-filters here. Subdomains, pages, exact dates
   // and density are all set on the next (scope) step, which keeps its own
   // defaults.
@@ -2121,20 +2399,136 @@ document.addEventListener('keydown', (e) => {
 }, true);
 
 
-/* The version, on the wordmark, permanently.
+/* The version, on the wordmark, permanently, and the way into what changed.
 
-   It was a one-time announcement at first, shown once per browser and never to
-   a first-time visitor. It reads better as a fixture: the logo says which
-   version you are looking at, the way a masthead carries an edition. The text
-   comes from the API rather than a constant, so it cannot drift the way the
-   hand-written footer version once did. */
+   It reads like the splash line of an old game title screen: tilted, warm,
+   breathing slowly, so a new version is noticed without a banner. Hovering it
+   (or a tap, on a phone) opens the notes of that version, and the changelog
+   page holds the rest. The number comes from the API rather than a constant,
+   so it cannot drift from what is deployed; the notes below are written for
+   the people using the site, the technical CHANGELOG.md stays for the code. */
 function showVersionMark(version) {
   const el = document.getElementById('home-ver');
   if (!el || !version) return;
-  el.textContent = version.split('.').slice(0, 2).join('.');
+  const short = version.split('.').slice(0, 2).join('.');
+  el.querySelector('.home-ver-n').textContent = 'v' + short;
   el.hidden = false;
+  _renderVerPop(short);
 }
 
+// User-facing release notes, newest first. `hosted` notes concern the hosted
+// service only (accounts, testimonials) and are cut from the self-hosted build.
+const CHANGELOG_NOTES = [
+  { v: '2.4', date: '2026-11', fr: [
+      "Rapport : un résultat n'est marqué « Retiré » que si sa page a été archivée à nouveau sans lui.",
+      "Si archive.org demande de ralentir, le scan patiente puis repart tout seul.",
+      "Un scan se lance en un clic avec les réglages recommandés, et la durée estimée est donnée sous forme de fourchette.",
+      "Le filtre du rapport cherche dans toutes les catégories.",
+      "Liens sortants : nouvelle vue regroupée par domaine.",
+      "Si vous saisissez un e-mail, un pseudo ou un site comme gmail.com, WayTrace explique ce qu'il peut analyser.",
+      "Les catégories chat, marketing, paiement, applications et CDN affichent maintenant leur valeur.",
+      "Rapport : menu Exporter et date de conservation affichée.",
+      "Mes scans : export, lien et « Réessayer » sur chaque ligne.",
+      "Un seul bouton « Votre avis » pour proposer une idée ou signaler un bug.",
+      "Nouvelle page Nouveautés.",
+    ], en: [
+      "Report: a finding is marked \"Removed\" only when its page was archived again without it.",
+      "When archive.org asks to slow down, the scan waits and resumes by itself.",
+      "A scan starts in one click with the recommended settings, and the estimated duration is shown as a range.",
+      "The report filter searches every category.",
+      "Outgoing links: new view grouped by domain.",
+      "If you type an email, a handle or a site like gmail.com, WayTrace explains what it can scan.",
+      "The chat, marketing, payment, app and CDN categories now show their value.",
+      "Report: Export menu and retention date shown.",
+      "My scans: export, link and Try again on every row.",
+      "A single Feedback button to suggest an idea or report a bug.",
+      "New changelog page.",
+    ] },
+  { v: '2.2', date: '2026-10', fr: [
+      "Annuler un scan arrête vraiment son téléchargement, et un scan supprimé ne réapparaît plus.",
+      "Un scan qui atteint sa limite de temps conserve les pages déjà récupérées.",
+      "La recherche dans les pages archivées couvre toute la période et indique quand elle est partielle.",
+      "Extraction plus précise : moins de faux résultats, et des résultats retrouvés (sous-domaines, IP internes, Joomla, Drupal).",
+      "Sécurité renforcée, notamment sur l'affichage des pages archivées.",
+    ], en: [
+      "Cancelling a scan really stops its download, and a deleted scan no longer reappears.",
+      "A scan that reaches its time limit keeps the pages already fetched.",
+      "Search in the archived pages covers the whole period and says when it is partial.",
+      "More accurate extraction: fewer false findings, and recovered ones (subdomains, internal IPs, Joomla, Drupal).",
+      "Security hardening, notably in how archived pages are displayed.",
+    ] },
+  { v: '2.1', date: '2026-10', fr: [
+      "Les points clés d'un rapport indiquent précisément ce qu'ils ont trouvé.",
+      "Thème, palette et langue ont chacun leur bouton.",
+      "Le numéro de version s'affiche à côté du logo.",
+    ], en: [
+      "A report's highlights say exactly what they found.",
+      "Mode, palette and language each have their own button.",
+      "The version number shows next to the logo.",
+    ] },
+  { v: '2.0', date: '2026-09', fr: [
+      "Nouveau rapport : catégories, activité dans le temps et curseur de période.",
+      "Export HTML lisible hors ligne.",
+      "Interface entièrement en français et en anglais.",
+      "Possibilité de suggérer une idée, en plus de signaler un bug.",
+    ], en: [
+      "New report: categories, activity over time and a period slider.",
+      "HTML export readable offline.",
+      "Full interface in French and English.",
+      "Suggest an idea, in addition to reporting a bug.",
+    ] },
+];
+
+function _verNotes(n) { return n[LANG === 'fr' ? 'fr' : 'en'] || []; }
+
+// A version shows its first few notes; the rest wait behind "See more", so
+// the page reads as a list of versions rather than one long wall of text.
+const CL_SHOWN = 3;
+
+function _renderVerPop(short) {
+  const pop = document.getElementById('home-ver-pop');
+  if (!pop) return;
+  const cur = CHANGELOG_NOTES.find(n => n.v === short) || CHANGELOG_NOTES[0];
+  const notes = _verNotes(cur), more = notes.length - CL_SHOWN;
+  pop.innerHTML = `<p class="hv-k">${esc(t('ver.new_in').replace('{v}', cur.v))}</p>`
+    + `<ul>${notes.slice(0, CL_SHOWN).map(x => `<li>${esc(x)}</li>`).join('')}</ul>`
+    + `<a class="hv-all" href="#/changelog">${esc(more > 0 ? t('ver.more_n').replace('{n}', more) : t('ver.all'))} <span aria-hidden="true">→</span></a>`;
+}
+
+function toggleVerPop(ev) {
+  const el = document.getElementById('home-ver');
+  if (!el) return;
+  ev && ev.stopPropagation();
+  el.classList.toggle('open');
+  el.querySelector('.home-ver-btn').setAttribute('aria-expanded', el.classList.contains('open'));
+}
+document.addEventListener('click', (e) => {
+  const el = document.getElementById('home-ver');
+  if (el && el.classList.contains('open') && !el.contains(e.target)) toggleVerPop();
+});
+
+function renderChangelogPage() {
+  const host = document.getElementById('changelog-list');
+  if (!host) return;
+  host.innerHTML = CHANGELOG_NOTES.map((n, i) => {
+    const notes = _verNotes(n), more = notes.length - CL_SHOWN;
+    const li = (x, k) => `<li${k >= CL_SHOWN ? ' class="cl-extra"' : ''}>${esc(x)}</li>`;
+    return `
+    <section class="cl-ver${i === 0 ? ' cl-cur' : ''}">
+      <div class="cl-side"><h2>v${esc(n.v)}</h2><span class="cl-date">${esc(n.date)}</span>
+        ${i === 0 ? `<span class="cl-now">${esc(t('ver.current'))}</span>` : ''}</div>
+      <div><ul class="cl-notes" id="cl-notes-${i}">${notes.map(li).join('')}</ul>
+        ${more > 0 ? `<button type="button" class="cl-more" aria-expanded="false" aria-controls="cl-notes-${i}" data-n="${more}" onclick="clToggle(this)">${esc(t('ver.see_more').replace('{n}', more))}</button>` : ''}</div>
+    </section>`;
+  }).join('');
+}
+
+function clToggle(btn) {
+  const open = btn.getAttribute('aria-expanded') !== 'true';
+  btn.setAttribute('aria-expanded', String(open));
+  document.getElementById(btn.getAttribute('aria-controls'))?.classList.toggle('open', open);
+  btn.textContent = open ? t('ver.see_less') : t('ver.see_more').replace('{n}', btn.dataset.n);
+}
 
 function _scanPhaseIndex(step) {
   const s = (step || '').toLowerCase();
@@ -2195,6 +2589,8 @@ function renderPublicScan(job) {
   const body = $('public-scan-body');
   const actions = $('public-scan-actions');
   if (status !== 'running') _runStats = null;   // reset between phases / scans
+  if (status === 'queued') _scanTabTitle(t('In queue'), job.domain);
+  else if (status !== 'running') _defaultTitle();
 
   if (status === 'queued') {
     actions.style.display = 'none';
@@ -2209,6 +2605,7 @@ function renderPublicScan(job) {
         <div class="pub-state-eta">${eta ? esc(t('Estimated wait:')) + ' ' + esc(formatEta(eta)) : esc(t('Starting shortly…'))}</div>
         <div class="pub-run-bar indeterminate"><div class="pub-run-bar-fill"></div></div>
         <button class="btn" style="margin-top: 28px;" onclick="cancelPublicScan()">${esc(t('Cancel my spot'))}</button>
+        ${typeof _closeTabLine === 'function' ? _closeTabLine() : ''}
       </div>
       ${typeof renderPrivacyCard === 'function' ? renderPrivacyCard(job) : ''}
     `;
@@ -2275,6 +2672,7 @@ function renderPublicScan(job) {
           <div class="pub-run-eta"></div>
           <div class="pub-live"></div>
           <div class="pub-run-wb"><span>${esc(t('Pages read from'))}</span> <img class="wb-logo" src="/icons/wayback.svg" alt="Wayback Machine"></div>
+          ${typeof _closeTabLine === 'function' ? _closeTabLine() : ''}
         </div>
         ${typeof renderPrivacyCard === 'function' ? renderPrivacyCard(job) : ''}
       `;
@@ -2288,6 +2686,7 @@ function renderPublicScan(job) {
     const etaEl  = live.querySelector('.pub-run-eta');
     _updatePhases(live, phaseIdx);
     stepEl.textContent = stepTxt;
+    _scanTabTitle(pctTxt || t('Running'), job.domain);
     pctEl.textContent = pctTxt;  pctEl.style.display = pctTxt ? '' : 'none';
     etaEl.textContent = etaTxt;  etaEl.style.display = etaTxt ? '' : 'none';
     const liveEl = live.querySelector('.pub-live');
@@ -2809,6 +3208,7 @@ async function startScan() {
     .split('/')[0].split('?')[0].split('#')[0].split(':')[0]
     .replace(/^www\./, '');
   if (!raw) { showToast(t('Type a domain first.')); return; }
+  if (_guideFromAnywhere(raw)) return;
   location.hash = '#/scope/' + encodeURIComponent(raw);
 }
 
@@ -2925,7 +3325,7 @@ async function loadScope(domain) {
   // launch would otherwise persist and make the button inert on the next scan.
   $('scope-launch-btn').disabled = false;
   $('scope-launch-btn').classList.remove('is-blocked');
-  $('scope-sub').textContent = t('Tune the scan before launching it.');
+  $('scope-sub').textContent = '';
   { const intro = document.querySelector('.scope-intro'); if (intro) intro.style.display = ''; }
   { const fb = $('scope-fallback-actions'); if (fb) { fb.hidden = true; fb.innerHTML = ''; } }
   $('scope-loading').style.display = '';
@@ -2958,9 +3358,10 @@ async function loadScope(domain) {
     }
 
     scopeCheckedSubs = new Set(subs.map(s => s.subdomain));
-    const subsTmpl = LANG === 'fr'
-      ? '{n} snapshots archivés sur {k} sous-domaine(s). Choisissez ci-dessous ce qu’il faut analyser.'
-      : '{n} archived snapshots across {k} subdomain(s). Pick what to scan below.';
+    const subsTmpl = (LANG === 'fr'
+      ? '{n} snapshots archivés sur {k} sous-domaine(s).'
+      : '{n} archived snapshots across {k} subdomain(s).');
+    setScopeCustom(_scopeCustomPref(), false);
     $('scope-sub').textContent = subsTmpl
       .replace('{n}', data.html_snapshots).replace('{k}', subs.length);
     $('scope-loading').style.display = 'none';
@@ -3034,6 +3435,7 @@ function showFallbackScopeUI(domain, detailMsg) {
   scopeFallback = true;
   scopeSubdomains = [];
   _scopePathGroups = [];
+  setScopeCustom(_scopeCustomPref(), false);
   $('scope-loading').style.display = 'none';
   $('scope-adv').style.display = '';
   if ($('scope-card-subs')) $('scope-card-subs').style.display = 'none';
@@ -3561,6 +3963,25 @@ function onScopeDensity() {
   updateScopeEstimate();
 }
 
+/* The scope page opens folded: the recommended selection is already made, so
+   the first thing offered is to launch it. Someone who opened the details once
+   finds them open next time. */
+function _scopeCustomOpen() { const b = $('scope-custom'); return !!b && !b.hidden; }
+function setScopeCustom(open, remember) {
+  const box = $('scope-custom'), tg = $('scope-custom-toggle');
+  if (!box) return;
+  box.hidden = !open;
+  if (tg) { tg.setAttribute('aria-expanded', String(open)); tg.textContent = open ? t('scope.fold') : t('scope.customise'); }
+  _scopeLaunchLabel();
+  if (remember) { try { localStorage.setItem('wt_scope_custom', open ? '1' : '0'); } catch (_) {} }
+}
+function toggleScopeCustom() { setScopeCustom(!_scopeCustomOpen(), true); }
+function _scopeLaunchLabel() {
+  const b = $('scope-launch-btn');
+  if (b) b.textContent = (_scopeCustomOpen() || scopeFallback) ? t('Launch scan') : t('scope.go_reco');
+}
+function _scopeCustomPref() { try { return localStorage.getItem('wt_scope_custom') === '1'; } catch (_) { return false; } }
+
 function updateScopeEstimate() {
   const el = $('scope-estimate');
   if (!el || scopeFallback) return;
@@ -3570,7 +3991,12 @@ function updateScopeEstimate() {
   // (~10 in prod) with a polite delay, so wall-clock is roughly per-page / fan-out.
   // ~0.36s per snapshot at 10-way concurrency + fixed CDX/extract overhead.
   const secs = Math.round(n * 0.36 + 15);
-  const etaTxt = secs < 90 ? `~${secs}s` : `~${Math.round(secs / 60)} min`;
+  // A range, not a figure: archive.org's speed swings through the day, and a
+  // "~2 min" that turned into twenty was a promise broken in the first scan.
+  const lo = Math.max(1, Math.round(secs / 60)), hi = Math.max(lo + 2, Math.round(secs * 2.5 / 60));
+  const etaTxt = t('est.range').replace('{a}', lo).replace('{b}', hi);
+  const waiting = Math.max(0, parseInt((_lastSvc || {}).waiting, 10) || 0);
+  const queueTxt = waiting ? ' ' + t(waiting === 1 ? 'est.queue1' : 'est.queue').replace('{n}', waiting) : '';
   const rangeTxt = (scopeDayFrom || scopeDayTo)
     ? `${_fmtDay(scopeDayFrom)} → ${_fmtDay(scopeDayTo || scopeDayFrom)}`
     : (t('all dates') || 'all dates');
@@ -3594,7 +4020,7 @@ function updateScopeEstimate() {
     + (over ? '' : ` <span class="scope-est-sep">·</span> ${estW} <strong class="scope-est-t">${etaTxt}</strong>`)
     + `</span>`
     + `<span class="scope-est-sub">${cap1(densPhrase)}, ${rangeTxt}. ${cap1(lvlLabel)}.`
-    + (over ? '' : ' ' + t('More density = more snapshots = longer scan.')) + `</span>`;
+    + (over ? '' : ' ' + t('More density = more snapshots = longer scan.')) + queueTxt + `</span>`;
 
   // The launch button is the honest place to refuse: greyed out, with the two
   // levers named and one of them a single click away.
@@ -3603,6 +4029,8 @@ function updateScopeEstimate() {
     btn.disabled = over;
     btn.classList.toggle('is-blocked', over);
   }
+  // Over the ceiling, the way out is in the cards: show them.
+  if (over && !_scopeCustomOpen()) setScopeCustom(true, false);
   const note = $('scope-cap-note');
   if (note) {
     note.hidden = false;
@@ -3678,6 +4106,15 @@ async function launchScopedScan() {
     }
     if (resp.status === 503) {
       const d = await resp.json().catch(() => ({}));
+      // archive.org asked us to slow down. Half of the scan requests in
+      // production met this refusal and got a red line telling them to come
+      // back later. Wait for them instead, visibly, and launch on our own
+      // when the pause ends, as long as they stay on this page.
+      if (d.detail && (d.detail.error === 'archive_paused' || d.detail.error === 'service_full')) {
+        const wait = Math.max(15, Math.min(1800, Number(d.detail.retry_after || d.detail.eta_seconds) || 60));
+        scopeWaitStart(wait, d.detail.error);
+        return;
+      }
       throw new Error(_apiErrorText(d.detail));
     }
     if (!resp.ok) {
@@ -3701,6 +4138,41 @@ async function launchScopedScan() {
     // navigates away, errors stay on the scope view for a retry).
     $('scope-launch-btn').disabled = false;
   }
+}
+
+/* Waiting out an archive.org pause on the scope page: a countdown, then the
+   same launch again. The domain and every choice made on the page are still
+   in place, so the relaunch sends exactly what the person asked for. Leaving
+   the page or pressing Cancel stops it. */
+let _scopeWait = null;
+function scopeWaitStart(seconds, why) {
+  scopeWaitStop();
+  const el = $('scope-wait');
+  if (!el) return;
+  const until = Date.now() + seconds * 1000;
+  const domain = scopeDomain;
+  const tick = () => {
+    if (!document.getElementById('view-scope')?.classList.contains('active') || scopeDomain !== domain) {
+      scopeWaitStop(); return;
+    }
+    const left = Math.max(0, Math.round((until - Date.now()) / 1000));
+    const mm = Math.floor(left / 60), ss = String(left % 60).padStart(2, '0');
+    el.querySelector('.scope-wait-t').textContent = mm + ':' + ss;
+    el.querySelector('.scope-wait-bar i').style.width = (100 - (left / seconds) * 100).toFixed(1) + '%';
+    if (left <= 0) { scopeWaitStop(); launchScopedScan(); }
+  };
+  el.querySelector('.scope-wait-h').textContent = t(why === 'service_full' ? 'wait.full_h' : 'wait.paused_h');
+  el.hidden = false;
+  $('scope-launch-btn').disabled = true;
+  _scopeWait = setInterval(tick, 1000);
+  tick();
+}
+function scopeWaitStop() {
+  if (_scopeWait) { clearInterval(_scopeWait); _scopeWait = null; }
+  const el = $('scope-wait');
+  if (el) el.hidden = true;
+  const b = $('scope-launch-btn');
+  if (b) b.disabled = false;
 }
 
 // Hard reset of every cross-scan piece of state. Called when the user
@@ -3963,6 +4435,14 @@ function _v2ItemValue(cat, it) {
     }
     case 'sitemaps_and_robots':    return it.url || v || '';
     case 'pgp_keys':               return it.identifier || it.pivot_url || v || '';
+    // The five SaaS-tenant categories keep their pivot under an id field and
+    // carry no `value`, so the default below rendered them as empty rows.
+    // Same shape as item_value() on the server.
+    case 'support_chat':           return it.tenant_id ? (it.vendor || '') + ':' + it.tenant_id : (it.vendor || v || '');
+    case 'email_marketing':        return it.account_id ? (it.platform || '') + ':' + it.account_id : (it.platform || v || '');
+    case 'payment_processors':     return it.merchant_id ? (it.processor || '') + ':' + it.merchant_id : (it.processor || v || '');
+    case 'mobile_apps':            return it.pivot_url || ((it.store || '') + ':' + (it.app_id || ''));
+    case 'cdn_accounts':           return it.account_id ? (it.vendor || '') + ':' + it.account_id : (it.vendor || v || '');
     default:                       return v || it.url || it.name || it.provider || '';
   }
 }
@@ -4078,8 +4558,10 @@ let report2State = {
   checkedCats: null,   // Activity view: Set of category keys shown as lanes
   checkedPivots: null, // Activity view: Set of "cat::value" pivots shown as lanes
   pivotFilter: '',     // Activity view: search box over the pivot list
-  presence: 'all',     // findings filter: 'all' | 'live' (still present) | 'gone'
-  expandedPage: null,  // source_page_id whose co-occurrence panel is open, or null
+  presence: 'all',     // findings filter: 'all' | 'live' (in the latest capture) | 'gone' (not in it) | 'removed' (server-confirmed)
+  expandedPage: null,
+  feedAll: false,      // change feed: list every event instead of the newest few
+  outByDomain: false,  // outgoing links: one row per linked site instead of per URL  // source_page_id whose co-occurrence panel is open, or null
 };
 let _r2 = { findings: [], info: null, byCat: new Map(), found: [], empty: [], job: null, lo: 0, hi: 0 };
 
@@ -4147,7 +4629,7 @@ function _r2Lane(label, first, last, opts) {
   if (a == null) return '';
   const left = _r2Pct(a), right = _r2Pct(b != null ? b : a);
   const w = Math.max(1.5, right - left);
-  const disappeared = (b != null && b < _r2.hi);
+  const disappeared = !!opts.removed;
   const cls = opts.pivot ? 'pivot' : '';
   const tag = opts.pivot ? '<span class="r2-pvtag">pivot</span>' : '';
   return `<div class="r2-lane">
@@ -4170,30 +4652,90 @@ function _r2Years() {
 }
 
 /* Dated change feed for a set of findings: an "appeared" event at first_seen,
-   and a "disappeared" event at last_seen when it stopped before the archive's
-   end. Sorted newest-relevant first, capped. Neutral wording. */
+   and a "removed" event at last_seen for a value the server confirmed was
+   dropped from its pages. Newest last, capped, and the cap says so: events
+   left out are counted on a button that lists them all. */
 function _r2Feed(findings, cap) {
   const ev = [];
   for (const f of findings) {
     const a = _r2Month(f.first_seen), b = _r2Month(f.last_seen);
     if (a != null) ev.push({ mi: a, kind: 'up', f });
-    if (b != null && b < _r2.hi) ev.push({ mi: b, kind: 'down', f });
+    if (b != null && _r2IsRemoved(f)) ev.push({ mi: b, kind: 'down', f });
   }
   ev.sort((x, y) => x.mi - y.mi);
-  const pick = ev.slice(-(cap || 8));
+  const lim = report2State.feedAll ? ev.length : (cap || 8);
+  const pick = ev.slice(-lim);
   if (!pick.length) return '';
+  const hidden = ev.length - pick.length;
+  const toggle = hidden > 0
+    ? `<button class="r2-feedmore" onclick="report2FeedAll(true)">${esc(t('feed.more').replace('{n}', hidden))}</button>`
+    : (report2State.feedAll && ev.length > (cap || 8) ? `<button class="r2-feedmore" onclick="report2FeedAll(false)">${esc(t('Show fewer events'))}</button>` : '');
   const rows = pick.map(e => {
     const when = (e.kind === 'up' ? e.f.first_seen : e.f.last_seen) || '';
-    const verb = e.kind === 'up' ? t('appeared') : t('disappeared');
+    const verb = e.kind === 'up' ? t('appeared') : t('removed');
     const src = (e.kind === 'down' && e.f.metadata && e.f.metadata.source_url)
       ? ` <a href="${escAttr(e.f.metadata.source_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${t('last capture')} ↗</a>` : '';
     return `<div class="r2-ev ${e.kind}"><span class="r2-when">${esc(when)}</span><span class="r2-mk"></span>
-      <span class="r2-txt"><span class="r2-k">${esc(String(e.f.value).slice(0, 42))}</span> ${verb}
+      <span class="r2-txt">${_r2Cut(e.f.value, 42)} ${verb}
       <span class="r2-sub">${esc(catLabel(e.f.category))}${e.f.occurrences ? ' · ' + e.f.occurrences + '×' : ''}</span>${src}</span></div>`;
   }).join('');
   return `<div class="r2-feed">
-    <div class="r2-evleg"><span><i class="up"></i> ${t('appeared')}</span><span><i class="down"></i> ${t('disappeared')}</span></div>
-    ${rows}</div>`;
+    <div class="r2-evleg"><span><i class="up"></i> ${t('appeared')}</span><span><i class="down"></i> ${t('removed')}</span></div>
+    ${toggle}${rows}</div>`;
+}
+
+// A value shortened for a narrow place always says it was: an ellipsis, and the
+// whole value on hover. A key cut silently at 42 characters looked complete.
+function _r2Cut(v, n, cls) {
+  const s = String(v), c = cls || 'r2-k';
+  if (s.length <= n) return `<span class="${c}">${esc(s)}</span>`;
+  return `<span class="${c}" title="${escAttr(t('cut.t').replace('{v}', s))}">${esc(s.slice(0, n - 1))}…</span>`;
+}
+
+/* Outgoing links grouped by the site they point to: a user asked for it, and a
+   list of every URL hides that forty of them go to the same two partners. The
+   grouping is by host without "www.", which is what a reader means by a site. */
+function _r2OutHost(f) {
+  const m = f.metadata || {};
+  let h = m.domain || '';
+  if (!h) { try { h = new URL(f.value).hostname; } catch (_) { h = ''; } }
+  return h.toLowerCase().replace(/^www\./, '');
+}
+function _r2OutDomains(list) {
+  const by = new Map();
+  for (const f of list) {
+    const h = _r2OutHost(f);
+    if (!h) continue;
+    const g = by.get(h) || { host: h, links: 0, occ: 0, first: null, last: null };
+    g.links += 1; g.occ += f.occurrences || 1;
+    if (f.first_seen && (!g.first || f.first_seen < g.first)) g.first = f.first_seen;
+    if (f.last_seen && (!g.last || f.last_seen > g.last)) g.last = f.last_seen;
+    by.set(h, g);
+  }
+  return [...by.values()].sort((a, b) => b.links - a.links || b.occ - a.occ || a.host.localeCompare(b.host));
+}
+function _r2DomainRows(list) {
+  const groups = _r2OutDomains(list);
+  return `<div class="r2-colhead"><span>${t('out.domain')}</span><span class="r">${t('occ.')}</span><span>${t('seen')}</span><span class="r r2-srch">${t('out.links_col')}</span></div>`
+    + groups.map(g => `<div class="r2-row">
+        <span class="r2-val"><button class="r2-copy" title="${escAttr(t('Copy') + ': ' + g.host)}" onclick="report2Copy(event)" aria-label="${escAttr(t('Copy'))}">⧉</button>
+          <span class="r2-val-text">${esc(g.host)}</span></span>
+        <span class="r2-occ"><b>${g.occ}</b></span>
+        <span class="r2-span">${esc(g.first || '?')} <span class="r2-arw">→</span> <span class="r2-end">${esc(g.last || '?')}</span></span>
+        <span class="r2-src"><button type="button" class="r2-outlinks" data-host="${escAttr(g.host)}" onclick="report2OutShow(this.dataset.host)">${esc(t(g.links === 1 ? 'out.n_link' : 'out.n_links').replace('{n}', g.links))}</button></span>
+      </div>`).join('');
+}
+function report2OutByDomain(on) { report2State.outByDomain = !!on; report2RenderMain(); }
+// From a domain back to its links: the per-link view, filtered on that host.
+function report2OutShow(host) {
+  report2State.outByDomain = false;
+  report2State.filter = host;
+  const fi = document.getElementById('r2-filter');
+  if (fi) fi.value = host;
+  report2RenderMain(); report2RenderRail();
+}
+
+function report2FeedAll(on) { report2State.feedAll = !!on; report2Render();
 }
 
 /* ---- entry point, called from renderV2InLegacyView ---- */
@@ -4283,7 +4825,7 @@ function _r2Pivots() {
 // Keyboard nav in the category rail: Enter/Space opens, Up/Down move focus to the
 // adjacent category link (keeps the rail operable without a mouse).
 function report2RailKey(ev, cat) {
-  if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); report2OpenCat(cat); return; }
+  if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); report2OpenCat(cat, true); return; }
   if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
     ev.preventDefault();
     const links = Array.from(document.querySelectorAll('#r2-rail .r2-rlink'));
@@ -4297,9 +4839,15 @@ function report2KeyActivate(ev) {
   if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); ev.currentTarget.click(); }
 }
 function report2SetView(v) { report2State.view = v; report2Render(); }
-function report2OpenCat(c) { report2State.openCat = c; report2State.filter = ''; report2State.view = 'cats'; report2Render(); }
+function report2OpenCat(c, fromRail) {
+  report2State.openCat = c; report2State.filter = ''; report2State.view = 'cats'; report2Render();
+  // The rail is rebuilt on every render; without this the keyboard user who
+  // just chose a category landed back at the top of the page.
+  if (fromRail) document.querySelector('#r2-rail .r2-rlink.on, #r2-rail .r2-rall.on')?.focus();
+}
 function report2ToggleEmpty() { report2State.showEmpty = !report2State.showEmpty; report2Render(); }
-function report2Filter(v) { report2State.filter = v || ''; report2RenderMain(); }
+function report2Filter(v) { report2State.filter = v || ''; report2RenderMain(); report2RenderRail(); }
+function _r2Query() { return (report2State.filter || '').trim().toLowerCase(); }
 function report2ToggleCat(c) {
   const s = report2State.checkedCats;
   if (s.has(c)) {
@@ -4323,9 +4871,15 @@ function report2PivotFilter(v) {
 // "Still present" = the value's last_seen reaches the archive's latest month; a
 // finding that stopped earlier has "disappeared".
 function _r2IsLive(f) { const b = _r2Month(f.last_seen); return b != null && b >= _r2.globalHi; }
+// Removed is the server's word, not a date comparison: every page that carried
+// the value was archived again later without it (finalize.resolve_presence).
+// A value that is merely absent from the latest month carries no such claim,
+// and scans made before that check never say "removed" at all.
+function _r2IsRemoved(f) { return !!(f.metadata && f.metadata.presence === 'removed'); }
 function _r2ApplyPresence(list) {
   if (report2State.presence === 'live') return list.filter(_r2IsLive);
   if (report2State.presence === 'gone') return list.filter(f => !_r2IsLive(f));
+  if (report2State.presence === 'removed') return list.filter(_r2IsRemoved);
   return list;
 }
 
@@ -4338,10 +4892,13 @@ function report2RenderSummary() {
   const nc = _r2.found.length;
   const live = _r2.findings.filter(_r2IsLive).length;
   const gone = nf - live;
+  const removed = _r2.findings.filter(_r2IsRemoved).length;
+  const endM = firstMonthStr(_r2.globalHi);
   const stat = (n, label) => `<span class="r2-sum-stat"><b>${n}</b> ${esc(label)}</span>`;
   const p = report2State.presence;
-  const seg = (key, label, count) =>
+  const seg = (key, label, count, title) =>
     `<button class="wt-tab${p === key ? ' on' : ''}" aria-pressed="${p === key}"`
+    + (title ? ` title="${escAttr(title)}"` : '')
     + ` ${count ? '' : 'disabled'} onclick="report2SetPresence('${key}')">${esc(label)}`
     + `<span class="wt-tabn">${count}</span></button>`;
   const nfmt2 = (v) => Number(v || 0).toLocaleString(LANG === 'fr' ? 'fr-FR' : 'en-US');
@@ -4352,10 +4909,24 @@ function report2RenderSummary() {
     + `</div>`
     + `<div class="wt-tabs" role="group" aria-label="${esc(t('Filter by presence'))}">`
     + seg('all', t('All'), nf)
-    + seg('live', t('Still present'), live)
-    + seg('gone', t('Disappeared'), gone)
+    + seg('live', t('Seen in {m}').replace('{m}', endM), live, t('pres.live_t'))
+    + seg('gone', t('Not seen in {m}').replace('{m}', endM), gone, t('pres.gone_t'))
+    + seg('removed', t('Removed'), removed, t('pres.removed_t'))
     + `</div>`;
 }
+// An open menu (<details class="wt-menu">) closes on Escape, on an outside
+// click and once one of its items is chosen.
+function wtMenuDismiss(ev) {
+  document.querySelectorAll('details.wt-menu[open]').forEach(d => {
+    if (ev.type === 'keydown' ? ev.key === 'Escape' : (!d.contains(ev.target) || ev.target.closest('.wt-menu-pop a'))) {
+      d.open = false;
+      if (ev.type === 'keydown') d.querySelector('summary')?.focus();
+    }
+  });
+}
+document.addEventListener('click', wtMenuDismiss);
+document.addEventListener('keydown', wtMenuDismiss);
+
 function report2SetPresence(v) { report2State.presence = v; report2Render(); }
 
 /* DEMO 2.0 (B). Every finding already carries first_seen and last_seen as month
@@ -4390,21 +4961,39 @@ function renderScrubber() {
   host.innerHTML = `
     <div class="scrub-head">
       <span class="scrub-when">${isAll ? esc(t('All time')) : esc(_scrubLabel(at))}</span>
-      <span class="scrub-count">${isAll
+      <span class="scrub-count" aria-live="polite">${isAll
         ? esc(t('every finding in this report'))
         : `<b>${alive}</b> ${esc(t('of the report\'s'))} ${all} ${esc(t('findings were live then'))}`}</span>
       <button class="scrub-reset" type="button" onclick="setScrub(null)">${esc(t('All time'))}</button>
     </div>
     <input class="scrub-range" type="range" min="${lo}" max="${hi}" step="1" value="${at}"
-           aria-label="${escAttr(t('Point in time'))}" oninput="setScrub(this.value)">
+           aria-label="${escAttr(t('Point in time'))}" aria-valuetext="${escAttr(isAll ? t('All time') : _scrubLabel(at))}" oninput="setScrub(this.value)">
     <div class="scrub-ends"><span>${esc(_scrubLabel(lo))}</span><span>${esc(_scrubLabel(hi))}</span></div>`;
 }
 
 function setScrub(v) {
   SCRUB.at = (v === null || v === 'null') ? null : parseInt(v, 10);
-  renderScrubber();
+  // Dragging must not rebuild the slider under the pointer: that dropped the
+  // drag after one step and threw keyboard focus to the top of the page. Only
+  // the reset button, which is not the slider, redraws the whole block.
+  const range = document.querySelector('#r2-scrub .scrub-range');
+  if (range && v !== null && v !== 'null') _scrubText();
+  else renderScrubber();
   applyScrubToRows();
   report2RenderRail();   // the counts on the left are the visible half of this
+}
+
+function _scrubText() {
+  const host = document.getElementById('r2-scrub');
+  if (!host) return;
+  const at = SCRUB.at == null ? _r2.globalHi : SCRUB.at;
+  const alive = _r2.findings.filter(f => _scrubAlive(f, at)).length;
+  const label = SCRUB.at == null ? t('All time') : _scrubLabel(at);
+  host.querySelector('.scrub-when').textContent = label;
+  host.querySelector('.scrub-count').innerHTML = SCRUB.at == null
+    ? esc(t('every finding in this report'))
+    : `<b>${alive}</b> ${esc(t('of the report\'s'))} ${_r2.findings.length} ${esc(t('findings were live then'))}`;
+  host.querySelector('.scrub-range').setAttribute('aria-valuetext', label);
 }
 
 /* Rows are dimmed in place rather than removed: seeing a value fade as you pass
@@ -4481,7 +5070,15 @@ function report2RenderRail() {
     // greyed out entirely when none did. Without this the scrubber only moved
     // the handful of rows in the open category and the gesture felt inert.
     const dead = SCRUB.at != null && live === 0;
-    return `<div class="r2-rlink${on ? ' on' : ''}${dead ? ' scrub-empty' : ''}" role="button" tabindex="0" onclick="report2OpenCat('${c}')" onkeydown="report2RailKey(event,'${c}')">
+    // While the filter has text it searches every category, so the rail says
+    // how many values match in each instead of pointing at one.
+    const q = _r2Query();
+    if (q) {
+      const hit = all.filter(f => f.value.toLowerCase().includes(q)).length;
+      return `<div class="r2-rlink${hit ? '' : ' scrub-empty'}" role="button" tabindex="0" onclick="report2OpenCat('${c}', true)" onkeydown="report2RailKey(event,'${c}')">
+      <span>${esc(catLabel(c))}</span><span class="r2-c">${hit}</span></div>`;
+    }
+    return `<div class="r2-rlink${on ? ' on' : ''}${dead ? ' scrub-empty' : ''}" role="button" tabindex="0"${on ? ' aria-current="true"' : ''} onclick="report2OpenCat('${c}', true)" onkeydown="report2RailKey(event,'${c}')">
       <span>${esc(catLabel(c))}</span><span class="r2-c">${live}${SCRUB.at != null && live !== all.length ? `<i class="r2-cwas">/${all.length}</i>` : ''}</span></div>`;
   };
   const emptyLink = (c) => `<div class="r2-rlink zero${report2State.openCat === c ? ' on' : ''}" role="button" tabindex="0" onclick="report2OpenCat('${c}')" onkeydown="report2RailKey(event,'${c}')">
@@ -4489,7 +5086,7 @@ function report2RenderRail() {
   rail.innerHTML =
     `<div class="r2-rt"><span>${t('Found')}</span><span>${_r2.found.length}</span></div>` +
     _r2.found.map(link).join('') +
-    `<div role="button" tabindex="0" onkeydown="report2KeyActivate(event)" class="r2-rall${report2State.openCat === '__all__' ? ' on' : ''}" onclick="report2OpenCat('__all__')"><span class="i">▦</span> ${t('Show all')}</div>` +
+    `<div role="button" tabindex="0" onkeydown="report2KeyActivate(event)" class="r2-rall${report2State.openCat === '__all__' && !_r2Query() ? ' on' : ''}" onclick="report2OpenCat('__all__', true)"><span class="i">▦</span> ${t('Show all')}</div>` +
     `<div role="button" tabindex="0" onkeydown="report2KeyActivate(event)" class="r2-emptytoggle" onclick="report2ToggleEmpty()"><span>${report2State.showEmpty ? '▾' : '▸'}</span> ${_r2.empty.length} ${t('empty categories (searched)')}</div>` +
     (report2State.showEmpty ? `<div class="r2-emptylist">${_r2.empty.map(emptyLink).join('')}</div>` : '') +
     `<div class="r2-rt2">${t('Views')}</div>
@@ -4515,6 +5112,20 @@ function report2RenderMain() {
     return;
   }
 
+  // A filter searches the whole report. It used to search only the open
+  // category, so "acme" typed on API keys answered "nothing matches" while
+  // some thirty values matched elsewhere.
+  const q = _r2Query();
+  if (q) {
+    const hits = _r2.found.filter(c => _r2ApplyPresence(_r2.byCat.get(c)).some(f => f.value.toLowerCase().includes(q)));
+    const n = hits.reduce((k, c) => k + _r2ApplyPresence(_r2.byCat.get(c)).filter(f => f.value.toLowerCase().includes(q)).length, 0);
+    const line = `<p class="r2-filterall" role="status">${esc(t('filter.all').replace('{n}', n).replace('{q}', report2State.filter.trim()))}</p>`;
+    main.innerHTML = line + (hits.length
+      ? hits.map(c => report2CatBlock(c, false)).join('')
+      : `<div class="r2-emptystate">${t('nothing matches the filter')}</div>`);
+    applyScrubToRows();
+    return;
+  }
   const cat = report2State.openCat;
   if (cat === '__all__') {
     main.innerHTML = _r2.found.map(c => report2CatBlock(c, false)).join('');
@@ -4535,10 +5146,11 @@ function _r2Fade(main) {
 }
 
 function _r2Rows(list) {
-  return `<div class="r2-colhead"><span>${t('value')}</span><span class="r">${t('occ.')}</span><span class="r">${t('seen')}</span><span class="r r2-srch">${t('source')}</span></div>` +
+  return `<div class="r2-colhead"><span>${t('value')}</span><span class="r">${t('occ.')}</span><span>${t('seen')}</span><span class="r r2-srch">${t('source')}</span></div>` +
     list.map(f => {
       const span = (f.first_seen || f.last_seen)
-        ? `${esc(f.first_seen || '?')} <span class="r2-arw">→</span> ${_r2IsLive(f) ? `<span class="r2-now">${esc(f.last_seen)}</span>` : `<span class="r2-end">${esc(f.last_seen || '?')}</span>`}`
+        ? `${esc(f.first_seen || '?')} <span class="r2-arw">→</span> ${_r2IsLive(f) ? `<span class="r2-now" title="${escAttr(t('pres.live_t'))}">${esc(f.last_seen)}</span>` : `<span class="r2-end">${esc(f.last_seen || '?')}</span>`}`
+          + (_r2IsRemoved(f) ? `<span class="r2-rm" title="${escAttr(t('pres.removed_t'))}">${esc(t('removed'))}</span>` : '')
         : '<span class="r2-end">·</span>';
       // Co-occurrence: an optional chip revealing other findings from the same
       // archived page. Purely opt-in — clicking the value copies; only this chip
@@ -4546,7 +5158,7 @@ function _r2Rows(list) {
       const pid = f.metadata && f.metadata.source_page_id;
       const coCount = pid != null && _r2.byPage.has(pid) ? _r2.byPage.get(pid).length - 1 : 0;
       const chip = coCount > 0
-        ? `<button class="r2-cooc-chip${report2State.expandedPage === pid ? ' on' : ''}" title="${escAttr(t('Other findings on the same archived page'))}" onclick="report2ToggleCooc(event, ${pid})">⋯ ${coCount}</button>`
+        ? `<button class="r2-cooc-chip${report2State.expandedPage === pid ? ' on' : ''}" title="${escAttr(t('Other findings on the same archived page'))}" onclick="report2ToggleCooc(event, ${pid})">+${coCount} ${esc(t('same page'))}</button>`
         : '';
       const _fa = _r2Month(f.first_seen), _fb = _r2Month(f.last_seen);
       const row = `<div class="r2-row"${_fa != null && _fb != null ? ` data-first="${_fa}" data-last="${_fb}"` : ''}>
@@ -4573,7 +5185,7 @@ function _r2CoocPanel(pid, self) {
   for (const p of peers) { if (!byCat.has(p.category)) byCat.set(p.category, []); byCat.get(p.category).push(p); }
   const groups = [...byCat.entries()].map(([c, arr]) =>
     `<div class="r2-cooc-grp"><span class="r2-cooc-cat">${esc(catLabel(c))}</span>`
-    + arr.slice(0, 8).map(p => `<span class="r2-cooc-val">${esc(String(p.value).slice(0, 60))}</span>`).join('')
+    + arr.slice(0, 8).map(p => _r2Cut(p.value, 60, 'r2-cooc-val')).join('')
     + (arr.length > 8 ? `<span class="r2-cooc-more">+${arr.length - 8}</span>` : '')
     + `</div>`).join('');
   return `<div class="r2-cooc-panel">
@@ -4597,7 +5209,11 @@ function report2CatBlock(cat, withActivity, isEmpty) {
     ? `<span class="r2-filtered">${list.length} ${t('shown')}</span>` : '';
   const head = `<div class="r2-dhead"><span class="r2-name">${esc(catLabel(cat))}</span><span class="r2-cnt">${total.length}</span>${filtered}
     <span role="button" tabindex="0" onkeydown="report2KeyActivate(event)" class="r2-copycol" onclick="report2CopyCol('${cat}', event)">${t('copy column')}</span></div>
-    ${desc ? `<p class="r2-ddesc">${esc(desc)}</p>` : ''}`;
+    ${desc ? `<p class="r2-ddesc">${esc(desc)}</p>` : ''}
+    ${cat === 'outgoing_links' && total.length ? `<div class="wt-tabs r2-outmode" role="group" aria-label="${escAttr(t('out.mode'))}">
+      <button class="wt-tab${report2State.outByDomain ? '' : ' on'}" aria-pressed="${!report2State.outByDomain}" onclick="report2OutByDomain(false)">${esc(t('out.links'))}</button>
+      <button class="wt-tab${report2State.outByDomain ? ' on' : ''}" aria-pressed="${!!report2State.outByDomain}" onclick="report2OutByDomain(true)">${esc(t('out.domains'))}<span class="wt-tabn">${_r2OutDomains(total).length}</span></button>
+    </div>` : ''}`;
 
   if (isEmpty) {
     return head + `<div class="r2-emptystate">${t('Searched across every snapshot, found nothing in this category.')}</div>`;
@@ -4605,11 +5221,12 @@ function report2CatBlock(cat, withActivity, isEmpty) {
   if (!list.length) {
     // The category has findings, but none match the active presence/text filter.
     const why = report2State.presence === 'live' ? t('none still present')
-      : report2State.presence === 'gone' ? t('none disappeared') : t('nothing matches the filter');
+      : report2State.presence === 'removed' ? t('none removed')
+      : report2State.presence === 'gone' ? t('nothing in this tab') : t('nothing matches the filter');
     return `<div class="r2-catblock">${head}<div class="r2-emptystate">${why}</div></div>`;
   }
   const CAP = 200;
-  const rows = _r2Rows(list.slice(0, CAP));
+  const rows = (cat === 'outgoing_links' && report2State.outByDomain) ? _r2DomainRows(list) : _r2Rows(list.slice(0, CAP));
   const more = list.length > CAP ? `<div class="r2-more">${t('Showing first')} ${CAP} ${t('of')} ${list.length}</div>` : '';
   const act = withActivity ? report2CatActivity(cat, all) : '';
   return `<div class="r2-catblock">${head}${rows}${more}${act}</div>`;
@@ -4620,7 +5237,7 @@ function report2CatActivity(cat, list) {
   // are faded based on the global archive end (not this local axis), so a value
   // that stopped before the archive's latest month reads as disappeared.
   _r2SetBoundsFrom(list);
-  const lanes = list.slice(0, 24).map(f => _r2Lane(f.value, f.first_seen, f.last_seen, { faded: !_r2IsLive(f) })).join('');
+  const lanes = list.slice(0, 24).map(f => _r2Lane(f.value, f.first_seen, f.last_seen, { faded: !_r2IsLive(f), removed: _r2IsRemoved(f) })).join('');
   if (!lanes.trim()) return '';
   return `<div class="r2-act">
     <div class="r2-ah"><span class="i">▚</span> ${t('Activity of')} <b>${esc(catLabel(cat))}</b> · ${t('when each value was visible')}</div>
@@ -4651,7 +5268,7 @@ function report2ActivityHTML() {
   const pivots = _r2Pivots();
   for (const p of pivots) {
     if (!report2State.checkedPivots.has(p.key)) continue;
-    lanes.push({ label: p.label, first: p.f.first_seen, last: p.f.last_seen, pivot: true });
+    lanes.push({ label: p.label, first: p.f.first_seen, last: p.f.last_seen, pivot: true, removed: _r2IsRemoved(p.f) });
     shownFindings.push(p.f);
   }
 
@@ -4672,11 +5289,11 @@ function report2ActivityHTML() {
     if (feedSeen.has(k)) return false;
     feedSeen.add(k); return true;
   });
-  const laneHTML = lanes.map(l => _r2Lane(l.label, l.first, l.last, { pivot: l.pivot })).join('');
+  const laneHTML = lanes.map(l => _r2Lane(l.label, l.first, l.last, { pivot: l.pivot, removed: l.removed })).join('');
   return `<div class="r2-composer">
     <div class="r2-ch"><span class="i">▚</span> <b>${t('Composed activity')}</b> · ${nCat} ${t('categories')} + ${nPv} ${t('pivots')}<span class="r2-hint">${t('untick to remove a lane')}</span></div>
     <div class="r2-tl"><div class="r2-years">${_r2Years()}</div>${laneHTML}</div>
-    <div class="r2-evleg"><span><i class="up"></i> ${t('category')}</span><span><i class="pv"></i> ${t('pivot')}</span><span><i class="down"></i> ${t('disappeared')}</span></div>
+    <div class="r2-evleg"><span><i class="up"></i> ${t('category')}</span><span><i class="pv"></i> ${t('pivot')}</span><span><i class="down"></i> ${t('removed')}</span></div>
     ${report2Favicons()}
     ${_r2Feed(feedFindings, 8)}
   </div>`;
@@ -4786,14 +5403,29 @@ function renderV2InLegacyView(job) {
       + `${taken ? esc(t('This scan was taken on {d} and nothing in this file updates.')
                         .replace('{d}', taken)) : esc(t('Nothing in this file updates.'))}</div>`;
   } else if (actions) {
-    const expires = job.expires_at ? ` <span class="v2-expires-badge">${t('expires')} ${relativeFutureTime(job.expires_at)}</span>` : '';
+    // A date the reader can plan around ("kept until 21 Nov"), with the
+    // countdown on hover. "expires in 3649d" asked them to do the sum.
+    let expires = '';
+    if (job.expires_at) {
+      const d = new Date(job.expires_at.endsWith('Z') ? job.expires_at : job.expires_at + 'Z');
+      const sameYear = d.getFullYear() === new Date().getFullYear();
+      const day = d.toLocaleDateString(LANG === 'fr' ? 'fr-FR' : 'en-GB',
+        sameYear ? { day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', year: 'numeric' });
+      expires = ` <span class="v2-expires-badge" title="${escAttr(t('expires') + ' ' + relativeFutureTime(job.expires_at))}">${esc(t('kept until {d}').replace('{d}', day))}</span>`;
+    }
     const uid = encodeURIComponent(job.url_id);
     let shareBtn = '';
+    // One Export button with the three formats behind it, each saying what it
+    // is for: three bare acronyms in a row read as equal and unexplained.
     actions.innerHTML = `
-      <a class="btn btn-accent" id="v2-download-btn"
-         href="/api/s/${uid}/export.html" download>${t('Download HTML')}</a>
-      <a class="btn" href="/api/s/${uid}/export.json" download>${t('JSON')}</a>
-      <a class="btn" href="/api/s/${uid}/export.csv" download>${t('CSV')}</a>
+      <details class="wt-menu" id="v2-export-menu">
+        <summary class="btn btn-accent" id="v2-download-btn">${t('Export')} <span class="wt-menu-caret" aria-hidden="true">▾</span></summary>
+        <div class="wt-menu-pop" role="menu">
+          <a role="menuitem" href="/api/s/${uid}/export.html" download><b>HTML</b><span>${esc(t('export.html_d'))}</span></a>
+          <a role="menuitem" href="/api/s/${uid}/export.json" download><b>JSON</b><span>${esc(t('export.json_d'))}</span></a>
+          <a role="menuitem" href="/api/s/${uid}/export.csv" download><b>CSV</b><span>${esc(t('export.csv_d'))}</span></a>
+        </div>
+      </details>
       ${job.can_publish === false ? '' :
         `<button class="btn" type="button" onclick="scanMore(${jsArg(job.domain)})" title="${escAttr(t('Run a denser scan of this domain, reusing what was already found'))}">${t('Scan more')}</button>`}
       ${shareBtn}
@@ -4857,6 +5489,7 @@ function openExportDrawer() {
   const drawer = document.getElementById('export-drawer');
   drawer.classList.add('open');
   drawer.setAttribute('aria-hidden', 'false');
+  drawer.inert = false;
   renderExportCategories();
   renderExportFiltersHint();
   _trapFocus(drawer);
@@ -4870,6 +5503,7 @@ function closeExportDrawer() {
   const drawer = document.getElementById('export-drawer');
   drawer.classList.remove('open');
   drawer.setAttribute('aria-hidden', 'true');
+  drawer.inert = true;
   _releaseFocusTrap(drawer);
   restoreFocus();
 }
@@ -5171,6 +5805,7 @@ function openFindingDrawer(findingId) {
   const drawer = document.getElementById('finding-drawer');
   drawer.classList.add('open');
   drawer.setAttribute('aria-hidden', 'false');
+  drawer.inert = false;
   document.getElementById('fd-backdrop')?.classList.add('open');
   _trapFocus(drawer);
   setTimeout(() => {
@@ -5183,6 +5818,7 @@ function closeFindingDrawer() {
   const drawer = document.getElementById('finding-drawer');
   drawer.classList.remove('open');
   drawer.setAttribute('aria-hidden', 'true');
+  drawer.inert = true;
   document.getElementById('fd-backdrop')?.classList.remove('open');
   _releaseFocusTrap(drawer);
   restoreFocus();
@@ -5358,6 +5994,8 @@ function _myScansControls() {
     failed: rows.filter(s => s.status === 'failed').length,
     shared: rows.filter(s => s.is_published).length,
   };
+  // No "Shared" tab any more: the public feed is gone, a scan is shared by
+  // handing out its link, so the tab only ever said 0.
   const states = [['all', t('ms.all')], ['completed', t('ms.completed')], ['failed', t('ms.failed')]];
   const tabs = states.map(([k, lab]) => {
     const c = n[k] || 0;
@@ -5455,9 +6093,10 @@ function _myScansRow(s) {
         <span class="myscans-when">${esc(fmtScanStamp(s.created_at))}</span>
         ${dur ? `<span class="myscans-dur">${esc(t('took'))} ${esc(dur)}</span>` : ''}
       </span>
-      <span class="ms-rowacts" onclick="event.stopPropagation()">
-        <button class="btn-mini" type="button" onclick="copyScanLink('${uid}')">${esc(t('Copy link'))}</button>
-        <button class="btn-mini" type="button" onclick="location.hash='#/scope/'+encodeURIComponent(${jsArg(s.domain)})">${esc(t('Re-run'))}</button>
+      <span class="ms-rowacts${s.status === 'failed' ? ' ms-rowacts-on' : ''}" onclick="event.stopPropagation()">
+        ${s.status === 'completed' ? `<a class="btn-mini" href="/api/s/${uid}/export.html" download title="${escAttr(t('export.html_d'))}">${esc(t('Export'))}</a>
+        <button class="btn-mini" type="button" onclick="copyScanLink('${uid}')">${esc(t('Copy link'))}</button>` : ''}
+        <button class="btn-mini${s.status === 'failed' ? ' btn-mini-accent' : ''}" type="button" onclick="location.hash='#/scope/'+encodeURIComponent(${jsArg(s.domain)})">${esc(t(s.status === 'failed' ? 'Try again' : 'Re-run'))}</button>
       </span>
       ${_scanActionsCell(s.url_id, t('Delete scan'))}
     </div>`;
@@ -5477,8 +6116,9 @@ async function renderMyScans() {
   let items = [];
   try { const r = await fetch(API + '/api/local-scans?limit=50'); const d = await r.json(); items = d.scans || []; } catch (_) {}
   if (!items.length) {
-    host.innerHTML = '<div class="myscans-note">' + t('No scans yet.')
-      + '<div><button class="btn btn-accent" onclick="location.hash=\'#/\';document.getElementById(\'domain-input\').focus()">' + t('Run a scan') + '</button></div></div>';
+    host.innerHTML = '<div class="myscans-note ms-empty"><b>' + esc(t('No scans yet.')) + '</b>'
+      + '<p>' + esc(t('ms.empty')) + '</p>'
+      + '<div><button class="btn btn-accent" onclick="location.hash=\'#/\';setTimeout(()=>document.querySelector(\'.home-search-input\')?.focus(),50)">' + t('Run a scan') + '</button></div></div>';
     return;
   }
   host.innerHTML = '<div class="myscans-list">' + items.map(s => `

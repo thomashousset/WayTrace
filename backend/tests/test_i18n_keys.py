@@ -131,3 +131,16 @@ def test_the_retention_intro_states_no_count():
     intro = html[i:html.index("</p>", i)]
     nombres = re.findall(r"\b(one|two|three|four|five|un|deux|trois|quatre|cinq)\b", intro, re.I)
     assert nombres == [], f"the intro names a count the build can change: {nombres}"
+
+
+def test_every_category_name_has_a_french_name():
+    """The five categories added in August showed their English names
+    ("Chat & support widgets", "Mobile apps") in the French report, the rail
+    and the export drawer: catLabel() translates through the dictionary and
+    nobody had added them to it."""
+    src = APP_JS.read_text(encoding="utf-8")
+    start = src.index("const CAT_LABELS")
+    labels = re.findall(r"^  [a-z_]+: '((?:[^'\\]|\\.)*)'", src[start:src.index("\n};", start)], re.M)
+    fr = {k for k, _ in _PAIR.findall(_fr_block())}
+    missing = [lab for lab in labels if lab not in fr]
+    assert not missing, missing

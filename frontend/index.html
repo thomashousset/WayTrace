@@ -98,17 +98,32 @@
 <main id="wt-main">
 <div id="view-home" class="view">
   <div class="home-hero">
-    <h1 class="home-title">Way<span>Trace</span><span class="home-ver" id="home-ver" hidden aria-hidden="true"></span></h1>
+    <div class="home-title-wrap">
+      <h1 class="home-title">Way<span>Trace</span></h1>
+      <!-- The version, tilted like a title-screen splash. Hover or tap opens
+           what is new in it; the changelog page holds the rest. -->
+      <div class="home-ver" id="home-ver" hidden onmouseenter="this.classList.add('open')" onmouseleave="this.classList.remove('open')">
+        <button type="button" class="home-ver-btn" onclick="toggleVerPop(event)" aria-expanded="false" aria-controls="home-ver-pop">
+          <span class="home-ver-n"></span><span class="home-ver-new" data-i18n="ver.badge">What's new</span>
+        </button>
+        <div class="home-ver-pop" id="home-ver-pop" role="region" aria-label="What's new" data-i18n-aria="ver.pop"></div>
+      </div>
+    </div>
     <p class="home-tagline" data-i18n-html="home.tagline">The internet <span class="dotmark">never forgets.</span></p>
     <p class="home-sub" data-i18n-html="home.sub">OSINT tool for researchers and professionals. Reveal what a domain has exposed over time (emails, subdomains, tech, leaks) from the <a href="https://web.archive.org" target="_blank" rel="noopener">Wayback Machine</a> archive.</p>
     <form class="home-search" onsubmit="event.preventDefault(); document.getElementById('domain-input').value = this.querySelector('.home-search-input').value.trim(); if (document.getElementById('domain-input').value) startAdvancedScan();">
-      <input class="home-search-input" type="text" placeholder="example.com" spellcheck="false" autocomplete="off" autocapitalize="off" autofocus>
+      <input class="home-search-input" type="text" placeholder="example.com" spellcheck="false" autocomplete="off" autocapitalize="off" autofocus
+             aria-describedby="home-guide" oninput="homeGuideClear()">
       <button class="home-search-btn" type="submit" data-i18n="home.scan">Scan</button>
     </form>
+    <!-- Written by homeGuide when the input is not a website: an email address,
+         a username, or a platform shared by millions. Stays empty otherwise. -->
+    <p class="home-guide" id="home-guide" role="status" aria-live="polite" hidden></p>
     <p class="home-hint" data-i18n-html="home.hint">
       Press <kbd>Enter</kbd> to choose subdomains, dates and density before launching.
     </p>
   </div>
+
 
   <!-- One line where there used to be seven. The status box, the Wayback
        credit, the caption, the version line and two provenance sentences all
@@ -121,6 +136,7 @@
     <span class="sep" aria-hidden="true">·</span><a href="#/legal" data-i18n="home.foot.legal">Legal</a>
     <span class="sep" aria-hidden="true">·</span><a href="https://github.com/thomashousset/WayTrace" target="_blank" rel="noopener" data-i18n="home.foot.source">Source</a>
     <span class="sep" aria-hidden="true">·</span><a href="#/themes" data-i18n="home.foot.themes">Themes</a>
+    <span class="sep" aria-hidden="true">·</span><a href="#/changelog" data-i18n="home.foot.changelog">Changelog</a>
     <span class="sep" aria-hidden="true">·</span><span id="home-version"></span>
   </p>
 
@@ -145,8 +161,18 @@
 <div id="view-scope" class="view">
   <div class="scope-page">
     <div id="error-scope" class="error-msg"></div>
+    <div class="scope-wait" id="scope-wait" role="status" aria-live="polite" hidden>
+      <div class="scope-wait-row">
+        <span class="scope-wait-dot" aria-hidden="true"></span>
+        <b class="scope-wait-h">archive.org asked us to slow down.</b>
+        <span class="scope-wait-t mono">0:00</span>
+      </div>
+      <p data-i18n="wait.p">Your scan will start by itself when the countdown ends, with every choice on this page. Keep this tab open.</p>
+      <div class="scope-wait-bar" aria-hidden="true"><i></i></div>
+      <button type="button" class="btn btn-ghost" onclick="scopeWaitStop()" data-i18n="Cancel">Cancel</button>
+    </div>
     <div class="scope-domain" id="scope-domain"></div>
-    <div class="scope-sub" id="scope-sub" data-i18n="Tune the scan before launching it.">Tune the scan before launching it.</div>
+    <div class="scope-sub" id="scope-sub"></div>
     <!-- Shown only when the preflight could not read the index: offers a retry
          before the launch, since a scan started now repeats the same failed
          request. Populated by showFallbackScopeUI. -->
@@ -168,6 +194,10 @@
         <span data-i18n-html="scope.intro">WayTrace reads only what the <b>Wayback Machine</b> already archived for
         this domain. A bigger selection means a longer scan.</span>
       </div>
+      <!-- Every choice below already holds a recommended value when the page
+           opens (all subdomains, all dates, the densest selection that fits),
+           so a first scan is one click. The cards stay one click away. -->
+      <div class="scope-custom" id="scope-custom" hidden>
       <!-- Subdomains -->
       <section class="scope-card" id="scope-card-subs">
         <div class="scope-card-head">
@@ -235,6 +265,7 @@
         <div class="scope-excl-presets" id="scope-excl-presets"></div>
       </section>
 
+      </div>
       <!-- Output -->
       <section class="scope-card scope-output">
       <div class="scope-estimate" id="scope-estimate" aria-live="polite"></div>
@@ -242,7 +273,8 @@
       <!-- The one option that belongs to the launch itself sits on the launch
            bar, not in a card of its own above the count. -->
       <div class="scope-launchbar">
-        <button class="btn-primary scope-launch" id="scope-launch-btn" onclick="launchScopedScan()" data-i18n="Launch scan">Launch scan</button>
+        <button type="button" class="scope-custom-toggle" id="scope-custom-toggle" aria-expanded="false" aria-controls="scope-custom" onclick="toggleScopeCustom()">Customise</button>
+        <button class="btn-primary scope-launch" id="scope-launch-btn" onclick="launchScopedScan()">Scan with recommended settings</button>
       </div>
       <!-- Notice, not a checkbox: the legal page already states that using
            WayTrace is acceptance, so a tick box here would add friction to
@@ -370,12 +402,20 @@
   </div>
 </div>
 
+<div id="view-changelog" class="view">
+  <div class="cl-page">
+    <h1 class="cl-h" data-i18n="ver.page_h">What changed</h1>
+    <p class="cl-sub" data-i18n="ver.page_sub">What changed in each version, newest first.</p>
+    <div id="changelog-list"></div>
+  </div>
+</div>
+
 <div id="view-legal" class="view">
   <div class="legal-page">
     <div class="legal-head">
       <div>
         <h1 data-i18n="legal.title">Legal, licence & acceptable use</h1>
-        <p class="legal-updated" data-i18n="legal.updated">Last updated 2026-09 · WayTrace</p>
+        <p class="legal-updated" data-i18n="legal.updated">Last updated 2026-10 · WayTrace</p>
       </div>
       <div class="legal-head-acts">
         <button class="btn" type="button" onclick="window.print()" data-i18n="legal.print">Print</button>
@@ -576,6 +616,9 @@
         <div class="r2-main" id="r2-main"></div>
       </div>
     </div>
+    <!-- A star is the one thanks an open-source project can count; asked
+         once, under a finished report, never in a popup. -->
+    <p class="gh-star" data-i18n-html="star.ask">Enjoying WayTrace? <a href="https://github.com/thomashousset/WayTrace" target="_blank" rel="noopener">★ Star it on GitHub</a></p>
   </div>
 </div>
 
@@ -590,7 +633,7 @@
 </div>
 </main>
 
-<aside id="export-drawer" class="exp-drawer" aria-hidden="true" aria-label="Export findings">
+<aside id="export-drawer" class="exp-drawer" aria-hidden="true" inert aria-label="Export findings">
   <header class="exp-header">
     <h2 class="exp-title" data-i18n="Export">Export</h2>
     <button class="tl-btn tl-close-btn" onclick="closeExportDrawer()" aria-label="Close export">×</button>
@@ -621,9 +664,9 @@
 
 <div class="fd-backdrop" id="fd-backdrop" aria-hidden="true" onclick="closeFindingDrawer()"></div>
 
-<aside id="finding-drawer" class="fd-drawer" aria-hidden="true" aria-label="Finding details">
+<aside id="finding-drawer" class="fd-drawer" aria-hidden="true" inert aria-label="Finding details">
   <header class="fd-header">
-    <h2 class="fd-title">Finding</h2>
+    <h2 class="fd-title" data-i18n="fd.title">Finding</h2>
     <button class="tl-btn tl-close-btn" onclick="closeFindingDrawer()" aria-label="Close details">×</button>
   </header>
   <div class="fd-body" id="fd-body"></div>

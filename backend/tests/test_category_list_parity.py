@@ -73,3 +73,20 @@ def test_every_category_has_an_explicit_label():
         "no CAT_LABELS entry, so the label is guessed from the key and never "
         f"translated: {sorted(missing)}"
     )
+
+
+def test_report_reads_every_category_value_the_server_reads():
+    """The report renders a row's value through _v2ItemValue, the exports
+    through item_value(). A category item_value() knows how to read but the
+    report does not falls to the report's default branch, which looks for a
+    `value` key, and five categories (support_chat and the other SaaS tenant
+    ids) rendered as rows with an occurrence count and no value at all.
+    Only categories whose items really keep their value under `value` may be
+    left to the default."""
+    py = (Path(__file__).resolve().parents[1] / "services" / "extractor" / "item_values.py").read_text(encoding="utf-8")
+    server = set(re.findall(r'category == "([a-z_]+)"', py))
+    src = APP_JS.read_text(encoding="utf-8")
+    start = src.index("function _v2ItemValue")
+    report = set(re.findall(r"case '([a-z_]+)'", src[start:src.index("\n}\n", start)]))
+    plain_value = {"addresses", "api_keys", "connection_strings"}
+    assert server - plain_value <= report, sorted(server - plain_value - report)

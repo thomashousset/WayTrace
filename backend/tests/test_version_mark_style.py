@@ -1,11 +1,11 @@
-"""The version on the wordmark is set in the site's sans, not in monospace.
+"""The version on the wordmark: a title-screen splash, still in the site's sans.
 
-A small green number in a fixed-width face, parked next to a logo, is the
-house style of every generated landing page on the internet. The rest of
-WayTrace is one sans family throughout, and the mark reads as part of the
-wordmark only if it is set in that same family. The "v" carries the meaning
-of "version" on its own, so the colour no longer has to: the mark sits in the
-faint text tone and never competes with the accent the logo is painted in.
+Since v2.4 the version is the way into what changed: tilted, breathing
+slowly, and a hover or a tap opens the notes of that version. What still holds
+from the earlier rule is the face: a fixed-width number next to a logo is the
+terminal cliche the mark was moved away from. The colour is the theme's accent
+token, never a literal, so the splash follows whichever palette the reader
+picked instead of clashing with it.
 
 None of that is visible to a test that renders the page, because the rule is
 what it is at rest. So this reads the declaration.
@@ -26,32 +26,30 @@ def _rule(selector: str) -> str:
 
 
 def test_version_mark_uses_the_site_sans() -> None:
-    body = _rule(".home-title .home-ver {")
-    assert "var(--font)" in body, "the mark must be set in the site's sans"
+    body = _rule(".home-ver-btn {")
+    assert "font: inherit" in body, "the mark must be set in the site's sans"
     assert "var(--mono)" not in body, (
         "monospace is the terminal cliche the mark was moved away from"
     )
 
 
-def test_version_mark_is_not_painted_green_or_accent() -> None:
-    body = _rule(".home-title .home-ver {")
+def test_version_mark_follows_the_theme_accent() -> None:
+    body = _rule(".home-ver-btn {")
     colour = re.search(r"(?<!-)\bcolor:\s*([^;]+);", body)
-    assert colour, "the mark must state its own colour, it inherits accent otherwise"
-    assert colour.group(1).strip() == "var(--text-faint)", (
-        "the v already says 'version', so the colour must stay out of the way"
+    assert colour, "the mark must state its own colour"
+    assert colour.group(1).strip() == "var(--accent)", (
+        "the splash takes the theme's accent token, so it follows the palette"
     )
 
 
-def test_the_v_prefix_is_drawn_by_the_stylesheet() -> None:
-    """The JS writes only the number, so the prefix has to come from CSS.
+def test_the_splash_stands_still_for_reduced_motion() -> None:
+    assert re.search(
+        r"prefers-reduced-motion: reduce\)\s*\{\s*\.home-ver-btn\s*\{\s*animation:\s*none",
+        _CSS,
+    ), "the breathing splash must stop for anyone who asked for less motion"
 
-    showVersionMark assigns textContent, which is what keeps a value from the
-    API out of the HTML parser. The prefix is presentation, and the element is
-    aria-hidden, so generated content is the right place for it.
-    """
-    body = _rule(".home-title .home-ver::before {")
-    assert re.search(r"content:\s*['\"]v['\"]", body), "the prefix must be a v"
 
+def test_the_version_string_is_never_parsed_as_html() -> None:
     app = (Path(__file__).resolve().parents[2] / "frontend" / "app.js").read_text(
         encoding="utf-8"
     )
