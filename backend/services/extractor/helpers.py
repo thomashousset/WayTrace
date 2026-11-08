@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+from contextvars import ContextVar
 
 from .patterns import EMAIL_EXCLUDE, EMAIL_EXCLUDE_ANYWHERE, EMAIL_EXCLUDE_WHOLE, EMAIL_PLACEHOLDER_DOMAINS, IMAGE_EXTENSIONS, ASSET_EXTENSIONS, EMAIL_SEMVER_DOMAIN_RE, WAYBACK_TOOLBAR_RE, WAYBACK_SCRIPT_RE, WAYBACK_DIV_RE
 
@@ -10,9 +11,17 @@ def ts_to_month(timestamp: str) -> str:
     return f"{timestamp[:4]}-{timestamp[4:6]}"
 
 
+# The entries the page being extracted touched. process_page sets it around
+# one page so it can record which archived address carried each value, which
+# is what later lets a report say a value was removed rather than merely
+# "not seen again" (finalize.resolve_presence). None outside a page.
+TOUCHED: ContextVar[list | None] = ContextVar("wt_touched", default=None)
+
+
 def update_entity(
     store: dict, key: str, month: str, extra: dict | None = None
 ) -> None:
+    touched = TOUCHED.get()
     if key in store:
         entry = store[key]
         entry["occurrences"] += 1
@@ -29,6 +38,13 @@ def update_entity(
         if extra:
             entry.update(extra)
         store[key] = entry
+    if touched is not None:
+        touched.append(entry)
+    else:
+        # Touched outside a page (subdomains mined from the capture index, a
+        # merge): its dates no longer come from pages alone, so no removal is
+        # claimed for it.
+        entry["_untracked"] = True
 
 
 _GIT_HOSTS = {"github.com", "gitlab.com", "bitbucket.org", "ssh.dev.azure.com",

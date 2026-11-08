@@ -10,7 +10,7 @@ from .extract import extract_page
 from .highlights import compute_highlights
 from .jwt_extract import extract_jwts
 from .dirlist_extract import detect_directory_listing
-from .helpers import ts_to_month, update_entity
+from .helpers import TOUCHED, ts_to_month, update_entity
 from .patterns import SOCIAL_PATTERNS
 
 ALL_CATEGORIES = [
@@ -103,12 +103,49 @@ def _reconcile_social_outgoing(accum: dict) -> None:
         outgoing.pop(k, None)
 
 
+def _page_address(url: str) -> str:
+    """The archived address a capture belongs to: host without www, path and
+    query. Two captures of the same address are the same page at two dates."""
+    try:
+        u = urlparse(url)
+    except ValueError:
+        return url
+    host = (u.hostname or "").lower()
+    if host.startswith("www."):
+        host = host[4:]
+    return f"{host}{u.path or '/'}{('?' + u.query) if u.query else ''}"
+
+
+def resolve_presence(accum: dict) -> None:
+    """Mark the values that were removed, as opposed to merely not seen again.
+
+    A value's last_seen alone cannot tell the two apart: a page that was simply
+    never archived again looks the same as a page that dropped the value. The
+    report used to call everything that stopped before the scan's last month
+    "disappeared", which on a real scan was most of it. A value is "removed"
+    only when every page that carried it was captured again later, and that
+    later capture was read without the value. Anything else carries no claim.
+    """
+    last_capture = accum.get("_captures") or {}
+    for cat in ALL_CATEGORIES:
+        for entry in (accum.get(cat) or {}).values():
+            if not isinstance(entry, dict):
+                continue
+            seen = entry.pop("_seen_on", None)
+            untracked = entry.pop("_untracked", False)
+            if not seen or untracked:
+                continue
+            if all(last_capture.get(addr, "") > ts for addr, ts in seen.items()):
+                entry["presence"] = "removed"
+
+
 def finalize_accum(accum: dict, categories: list[str] | None = None) -> dict:
     """Convert accumulator dicts to sorted result lists.
 
     If *categories* is provided, only included categories are populated;
     excluded categories return empty lists.
     """
+    resolve_presence(accum)
     _reconcile_social_outgoing(accum)
 
     def _sort_list(items: list[dict]) -> list[dict]:
@@ -589,6 +626,9 @@ def merge_analytics_ids(result: dict) -> None:
                 existing["first_seen"] = fs
             if ls and (not existing.get("last_seen") or ls > existing["last_seen"]):
                 existing["last_seen"] = ls
+            # Two readings of one id: removed only if both say so.
+            if a.get("presence") != "removed":
+                existing.pop("presence", None)
             existing["occurrences"] = max(
                 existing.get("occurrences", 1), a.get("occurrences", 1)
             )
@@ -596,7 +636,7 @@ def merge_analytics_ids(result: dict) -> None:
             item = {"type": a.get("platform", ""), "id": a.get("id_value", ""),
                     "pivot_url": a.get("pivot_url", "")}
             for kk in ("first_seen", "last_seen", "occurrences",
-                       "source_url", "source_page_id", "platform"):
+                       "source_url", "source_page_id", "platform", "presence"):
                 if kk in a:
                     item[kk] = a[kk]
             by_id[nid] = item
@@ -675,41 +715,60 @@ def process_page(page: dict, domain: str, accum: dict, cat_set: set | None,
     if page["html"] is None:
         return False
     counts_before = {cat: len(accum[cat]) for cat in ALL_CATEGORIES}
-    processed = extract_page_safe(
-        page["html"], page["url"], page["timestamp"], domain, accum,
-        categories=cat_set,
-        response_headers=page.get("response_headers"),
-    )
+    touched: list = []
+    ctx = TOUCHED.set(touched)
+    try:
+        processed = extract_page_safe(
+            page["html"], page["url"], page["timestamp"], domain, accum,
+            categories=cat_set,
+            response_headers=page.get("response_headers"),
+        )
 
-    # JWT extraction (searches both URL and HTML)
-    if cat_set is None or "jwt_tokens" in cat_set:
-        for jwt_info in extract_jwts(page["html"], page["url"], page["timestamp"]):
-            token = jwt_info["token"]
-            month = ts_to_month(page["timestamp"])
-            update_entity(
-                accum["jwt_tokens"], token, month,
-                {
-                    "token": token[:50] + "..." if len(token) > 50 else token,
-                    "alg": jwt_info["alg"],
-                    "claims": jwt_info["claims"],
-                    "sensitive_claims": list(jwt_info["sensitive_claims"].keys()),
-                    "source": jwt_info["source"],
-                },
-            )
+        # JWT extraction (searches both URL and HTML)
+        if cat_set is None or "jwt_tokens" in cat_set:
+            for jwt_info in extract_jwts(page["html"], page["url"], page["timestamp"]):
+                token = jwt_info["token"]
+                month = ts_to_month(page["timestamp"])
+                update_entity(
+                    accum["jwt_tokens"], token, month,
+                    {
+                        "token": token[:50] + "..." if len(token) > 50 else token,
+                        "alg": jwt_info["alg"],
+                        "claims": jwt_info["claims"],
+                        "sensitive_claims": list(jwt_info["sensitive_claims"].keys()),
+                        "source": jwt_info["source"],
+                    },
+                )
 
-    # Directory listing detection
-    if cat_set is None or "directory_listings" in cat_set:
-        dirlist = detect_directory_listing(page["html"], page["url"], page["timestamp"])
-        if dirlist:
-            month = ts_to_month(page["timestamp"])
-            update_entity(
-                accum["directory_listings"], dirlist["path"], month,
-                {
-                    "path": dirlist["path"],
-                    "server_type": dirlist["server_type"],
-                    "url": dirlist["url"],
-                },
-            )
+        # Directory listing detection
+        if cat_set is None or "directory_listings" in cat_set:
+            dirlist = detect_directory_listing(page["html"], page["url"], page["timestamp"])
+            if dirlist:
+                month = ts_to_month(page["timestamp"])
+                update_entity(
+                    accum["directory_listings"], dirlist["path"], month,
+                    {
+                        "path": dirlist["path"],
+                        "server_type": dirlist["server_type"],
+                        "url": dirlist["url"],
+                    },
+                )
+    finally:
+        TOUCHED.reset(ctx)
+
+    # Which address carried each value, and when this address was last read.
+    # A page whose extraction failed proves nothing about what it lacked, so
+    # it does not count as a capture.
+    if processed:
+        addr = _page_address(page["url"])
+        ts = page["timestamp"]
+        caps = accum.setdefault("_captures", {})
+        if ts > caps.get(addr, ""):
+            caps[addr] = ts
+        for entry in touched:
+            on = entry.setdefault("_seen_on", {})
+            if ts > on.get(addr, ""):
+                on[addr] = ts
 
     # Stamp the page provenance onto the keys this page introduced.
     src_url = page.get("source_url") or (
